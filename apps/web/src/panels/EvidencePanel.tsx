@@ -1,15 +1,19 @@
-import type { Observation, ReadinessReport, RecordVersion, Value } from "@eqore/contract";
+import type { MapFeature, Observation, ReadinessReport, RecordVersion, Value } from "@eqore/contract";
 import type { EngineerApi } from "../api";
-import { isEquipmentPoint } from "../map/layers";
-import { formatCurrent, formatValue, locationWords, METHOD_WORDS, observationWord } from "../app/format";
+import { centerOf, isEquipmentPoint, zoneTier, ZONE_WORDS } from "../map/layers";
+import { CHECK_WORDS, formatCurrent, formatValue, locationWords, METHOD_WORDS, observationWord } from "../app/format";
+import { googleEarthUrl, streetViewUrl } from "../app/siteLinks";
 import { GradeTag, ProvenanceTag, StateBadge } from "../ui/marks";
 import { ResolveControls } from "./ResolveControls";
 
 export interface EvidencePanelProps {
   api: EngineerApi;
   record: RecordVersion;
-  report: ReadinessReport;
+  // Null when the evidence check couldn't be read. Only the "not required" note depends on it.
+  report: ReadinessReport | null;
   fields: string[];
+  // The one map item selected, when the selection came from the map.
+  featureId?: string | null;
   actorName: string;
   onActorName: (name: string) => void;
   onRecord: (record: RecordVersion) => void;
@@ -52,10 +56,52 @@ function positionWords(record: RecordVersion, field: string): string | null {
   return point.placedByHand ? "Position: placed by hand" : "Position: phone GPS";
 }
 
+const UNIT_SUFFIX = /_(ft|m)$/;
+
+const attributeWords = (name: string) => {
+  const words = name.replace(UNIT_SUFFIX, "").replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+function FeatureFacts({ feature }: { feature: MapFeature }) {
+  const [longitude, latitude] = centerOf(feature);
+  const position: [number, number] = [longitude, latitude];
+  const attributes = Object.entries(feature.attributes ?? {});
+  return (
+    <section className="feature-facts" aria-label="Selected item">
+      {feature.label ? <h3>{feature.label}</h3> : null}
+      {feature.kind === "candidate_area" ? (
+        <>
+          <p>{ZONE_WORDS[zoneTier(feature)]}</p>
+          <p className="flag">Eligibility screen from public data, not code approval. Local amendments go to a person.</p>
+        </>
+      ) : null}
+      {attributes.length > 0 ? (
+        <dl className="attributes">
+          {attributes.map(([name, attribute]) => (
+            <div key={name}>
+              <dt>{attributeWords(name)}</dt>
+              <dd className="mono">{formatValue(attribute)}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      <p className="links">
+        <a href={googleEarthUrl(position)} target="_blank" rel="noopener noreferrer">
+          Open in Google Earth
+        </a>
+        <a href={streetViewUrl(position)} target="_blank" rel="noopener noreferrer">
+          Street View
+        </a>
+      </p>
+    </section>
+  );
+}
+
 function ValueEvidence(props: EvidencePanelProps & { value: Value }) {
   const { api, record, report, value, actorName, onActorName, onRecord } = props;
   const onMap = record.features.some((f) => f.field === value.field);
-  const required = report.items.some((item) => item.fields.includes(value.field));
+  const required = report ? report.items.some((item) => item.fields.includes(value.field)) : true;
   const position = positionWords(record, value.field);
   const fromAFile = record.observations.some((o) => o.field === value.field && o.locator.evidenceFileId);
   return (
@@ -76,6 +122,16 @@ function ValueEvidence(props: EvidencePanelProps & { value: Value }) {
           Flag: {flag}
         </p>
       ))}
+      {value.crossChecks && value.crossChecks.length > 0 ? (
+        <ul className="cross-checks" aria-label="Cross-checks">
+          {value.crossChecks.map((check) => (
+            <li key={check.label} className={`check-${check.result}`}>
+              <strong className="check-word">{CHECK_WORDS[check.result]}:</strong> {check.label}
+              {check.detail ? `. ${check.detail}` : ""}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {position ? <p className="note">{position}</p> : null}
       {!onMap ? <p className="note">Not a map item.</p> : null}
       {!required ? <p className="note">Not required by this form. Shown for context.</p> : null}
@@ -112,11 +168,13 @@ export function EvidencePanel(props: EvidencePanelProps) {
   const values = props.fields
     .map((field) => props.record.values.find((v) => v.field === field))
     .filter((value): value is Value => Boolean(value));
+  const feature = props.featureId ? props.record.features.find((f) => f.id === props.featureId) : undefined;
   return (
     <aside className="dock" aria-label="Evidence">
       <button type="button" className="dock-close" onClick={props.onClose}>
         Close
       </button>
+      {feature ? <FeatureFacts feature={feature} /> : null}
       {values.length === 0 ? <p>No value yet.</p> : null}
       {values.map((value) => (
         <ValueEvidence key={value.field} {...props} value={value} />

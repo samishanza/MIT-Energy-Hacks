@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { sampleRecord } from "../test/fixtures";
+import type { RecordVersion } from "@eqore/contract";
+import { sampleRecord, worcesterRecord } from "../test/fixtures";
 
 // WebGL isn't available here. These tests cover what's sent to the map and the
 // marks around it. The browser walk covers what it actually draws.
@@ -48,9 +49,20 @@ const fake = vi.hoisted(() => {
     }
     setPadding() {}
     eased = 0;
-    easeTo() {
+    pitch = 0;
+    easeTo(options: { pitch?: number } = {}) {
       this.eased += 1;
+      if (options.pitch !== undefined) this.pitch = options.pitch;
     }
+    fitted: unknown[] = [];
+    fitBounds(bounds: unknown) {
+      this.fitted.push(bounds);
+    }
+    layout: Record<string, string> = {};
+    setLayoutProperty(layer: string, _name: string, value: string) {
+      this.layout[layer] = value;
+    }
+    setMaxPitch() {}
     getCanvas() {
       return document.createElement("canvas");
     }
@@ -84,7 +96,7 @@ vi.mock("./maplibre", () => ({
   ScaleControl: fake.FakeControl,
 }));
 
-import { SiteMap } from "./SiteMap";
+import { SiteMap, type SiteMapProps } from "./SiteMap";
 
 beforeEach(() => {
   fake.state.maps.length = 0;
@@ -96,12 +108,28 @@ afterEach(() => {
 
 const lastMap = () => fake.state.maps.at(-1)!;
 
-function setup(props: Partial<Parameters<typeof SiteMap>[0]> = {}) {
+const fromRecord = (record: RecordVersion) => ({
+  site: record.site,
+  baseMap: record.baseMap,
+  features: record.features,
+  values: record.values,
+});
+
+function setup(props: Partial<SiteMapProps> & { record?: RecordVersion } = {}) {
   const onSelect = vi.fn();
-  const utils = render(<SiteMap record={sampleRecord()} selectedFields={[]} onSelect={onSelect} {...props} />);
+  const { record = sampleRecord(), ...rest } = props;
+  const all: SiteMapProps = { ...fromRecord(record), selectedFields: [], onSelect, ...rest };
+  const utils = render(<SiteMap {...all} />);
   act(() => lastMap().fire("load"));
-  return { onSelect, ...utils };
+  const rerender = (next: Partial<SiteMapProps> & { record?: RecordVersion }) => {
+    const { record: nextRecord = record, ...nextRest } = next;
+    utils.rerender(<SiteMap {...fromRecord(nextRecord)} selectedFields={[]} onSelect={onSelect} {...nextRest} />);
+  };
+  return { onSelect, ...utils, rerender };
 }
+
+const drawn = () =>
+  (lastMap().sources.features!.data as { features: { properties: { id: string; layer: string } }[] }).features;
 
 describe("site map", () => {
   it("creates one map and removes it on unmount", () => {
@@ -111,44 +139,131 @@ describe("site map", () => {
     expect(lastMap().removed).toBe(true);
   });
 
-  it("keeps the concept-grade note on the map", () => {
-    setup();
-    expect(screen.getByText(/Concept-grade/).textContent).toMatch(/Not surveyed\. Not a construction document/);
-  });
-
   it("highlights the selected field's features and clears the last selection", () => {
-    const { rerender, onSelect } = setup({ selectedFields: ["feeder"] });
+    const { rerender } = setup({ selectedFields: ["feeder"] });
     expect(lastMap().featureState).toContainEqual({ id: "f-feeder", selected: true });
-    rerender(<SiteMap record={sampleRecord()} selectedFields={["property_line"]} onSelect={onSelect} />);
+    rerender({ selectedFields: ["property_line"] });
     expect(lastMap().featureState).toContainEqual({ id: "f-feeder", selected: false });
     expect(lastMap().featureState).toContainEqual({ id: "f-property", selected: true });
   });
 
+  it("highlights only the one item picked on the map, not every item of its field", () => {
+    const record = worcesterRecord();
+    const [first, second] = record.features.filter((f) => f.kind === "building_outline");
+    setup({ record, selectedFields: ["building_outline"], selectedFeatureId: first!.id });
+    expect(lastMap().featureState).toContainEqual({ id: first!.id, selected: true });
+    expect(lastMap().featureState).not.toContainEqual({ id: second!.id, selected: true });
+  });
+
   it("reapplies the selection after new source data", () => {
-    const { rerender, onSelect } = setup({ selectedFields: ["feeder"] });
+    const { rerender } = setup({ selectedFields: ["feeder"] });
     lastMap().featureState.length = 0;
     const next = sampleRecord();
     next.version = 3;
-    rerender(<SiteMap record={next} selectedFields={["feeder"]} onSelect={onSelect} />);
+    rerender({ record: next, selectedFields: ["feeder"] });
     expect(lastMap().featureState).toContainEqual({ id: "f-feeder", selected: true });
   });
 
-  it("selects what a map click hits", () => {
+  it("selects the item a map click hits, by field and item", () => {
     const { onSelect } = setup();
-    lastMap().queryRenderedFeatures.result = [{ properties: { field: "feeder" } }];
+    lastMap().queryRenderedFeatures.result = [{ properties: { field: "feeder", id: "f-feeder" } }];
     lastMap().fire("click", { point: { x: 1, y: 2 }, lngLat: { lng: 0, lat: 0 } });
-    expect(onSelect).toHaveBeenCalledWith("feeder");
+    expect(onSelect).toHaveBeenCalledWith("feeder", "f-feeder");
   });
 
-  it("picks a utility line over the parcel beneath it", () => {
+  it("picks a dimension line over the building and the parcel beneath it", () => {
     const { onSelect } = setup();
     lastMap().queryRenderedFeatures.byLayer = {
-      "property-fill": [{ properties: { field: "property_line" } }],
-      "utility-line": [{ properties: { field: "feeder" } }],
+      "property-fill": [{ properties: { field: "property_line", id: "p" } }],
+      "building-fill": [{ properties: { field: "building_outline", id: "b" } }],
+      "dimension-line": [{ properties: { field: "lot_width_ft", id: "d" } }],
     };
     lastMap().fire("click", { point: { x: 1, y: 2 }, lngLat: { lng: 0, lat: 0 } });
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith("feeder");
+    expect(onSelect).toHaveBeenCalledWith("lot_width_ft", "d");
+  });
+
+  it("fits the view to the parcel once, not again on each new version", () => {
+    const record = worcesterRecord();
+    const { rerender } = setup({ record });
+    expect(lastMap().fitted).toHaveLength(1);
+    const [[west, south], [east, north]] = lastMap().fitted[0] as [[number, number], [number, number]];
+    expect(west).toBeCloseTo(-71.77324, 4);
+    expect(east).toBeCloseTo(-71.76742, 4);
+    expect(south).toBeLessThan(north);
+    rerender({ record: { ...record, version: record.version + 1 } });
+    expect(lastMap().fitted).toHaveLength(1);
+  });
+
+  it("draws every collected kind on Worcester and lists each in the legend", () => {
+    setup({ record: worcesterRecord() });
+    const legend = within(screen.getByRole("list", { name: "Map layers" }));
+    for (const name of ["Dimension lines", "Buildings", "Lot, not surveyed", "Utility lines", "Fire stations", "Wetlands"]) {
+      expect(legend.getByRole("checkbox", { name: new RegExp(name) })).toBeTruthy();
+    }
+    expect(new Set(drawn().map((f) => f.properties.layer))).toEqual(new Set(["lot", "buildings", "utility", "dimensions", "wetlands"]));
+    expect(screen.getAllByRole("button", { name: /FIRE DEPARTMENT/ })).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "1,571 ft (fitted)" })).toBeTruthy();
+  });
+
+  it("says which kinds this run didn't collect", () => {
+    setup({ record: worcesterRecord() });
+    expect(screen.getByText(/Not collected for this site: roads, substations, eligibility zones\./)).toBeTruthy();
+  });
+
+  it("toggles a layer off and back on from the legend", () => {
+    setup({ record: worcesterRecord() });
+    const wetlands = screen.getByRole("checkbox", { name: /Wetlands/ });
+    fireEvent.click(wetlands);
+    expect(drawn().some((f) => f.properties.layer === "wetlands")).toBe(false);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Fire stations/ }));
+    expect(screen.queryAllByRole("button", { name: /FIRE DEPARTMENT/ })).toHaveLength(0);
+    fireEvent.click(wetlands);
+    expect(drawn().some((f) => f.properties.layer === "wetlands")).toBe(true);
+  });
+
+  it("draws eligibility zones by tier, with a legend entry for each tier present", () => {
+    const record = worcesterRecord();
+    const ring: [number, number][] = [
+      [-71.77, 42.277],
+      [-71.769, 42.277],
+      [-71.769, 42.2776],
+      [-71.77, 42.277],
+    ];
+    for (const tier of ["remote", "near_exposure"]) {
+      record.features.push({
+        id: `zone-${tier}`,
+        kind: "candidate_area",
+        field: "lot_size_acres",
+        geometry: { type: "Polygon", coordinates: [ring] },
+        attributes: { tier: { type: "text", value: tier } },
+      });
+    }
+    setup({ record });
+    expect(screen.getByRole("checkbox", { name: /Zone: remote/ })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: /Zone: near exposures/ })).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /Zone: excluded/ })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Zone: remote/ }));
+    expect(drawn().map((f) => f.properties.id)).toContain("zone-near_exposure");
+    expect(drawn().map((f) => f.properties.id)).not.toContain("zone-remote");
+  });
+
+  it("links to Google Earth and Street View at the site's coordinates", () => {
+    setup({ record: worcesterRecord() });
+    expect(screen.getByRole("link", { name: "Open in Google Earth" }).getAttribute("href")).toContain("@42.276141,-71.769444");
+    expect(screen.getByRole("link", { name: "Street View" }).getAttribute("href")).toContain("viewpoint=42.276141,-71.769444");
+  });
+
+  it("raises buildings in 3D on request, and says which stay flat", () => {
+    setup({ record: worcesterRecord() });
+    expect(lastMap().layout["building-3d"]).toBeUndefined();
+    expect(lastMap().eased).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "3D buildings" }));
+    expect(lastMap().layout["building-3d"]).toBe("visible");
+    expect(lastMap().pitch).toBeGreaterThan(0);
+    expect(screen.getByText(/5 buildings have no height on record and stay flat/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "3D buildings" }));
+    expect(lastMap().pitch).toBe(0);
   });
 
   it("offers a way out of placing", () => {
@@ -159,28 +274,18 @@ describe("site map", () => {
   });
 
   it("eases to a focused label once, not again on each new version", () => {
-    const { rerender, onSelect } = setup({ focusField: "main_device_rating" });
+    const { rerender } = setup({ focusField: "main_device_rating" });
     expect(lastMap().eased).toBe(1);
     const next = sampleRecord();
     next.version = 3;
-    rerender(<SiteMap record={next} selectedFields={[]} onSelect={onSelect} focusField="main_device_rating" />);
+    rerender({ record: next, focusField: "main_device_rating" });
     expect(lastMap().eased).toBe(1);
-  });
-
-  it.each([
-    [true, "Based on public data and customer photos."],
-    [false, "Based on public data."],
-  ])("states the note's basis when equipment is shown: %s", (withEquipment, words) => {
-    const record = sampleRecord();
-    if (!withEquipment) record.features = record.features.filter((f) => f.kind !== "existing_equipment");
-    setup({ record });
-    expect(screen.getByText(/Concept-grade/).textContent).toContain(words);
   });
 
   it("shows an existing equipment label that selects its field", () => {
     const { onSelect } = setup();
     fireEvent.click(screen.getByRole("button", { name: /\(E\) MAIN SWITCHBOARD 600 A/ }));
-    expect(onSelect).toHaveBeenCalledWith("main_device_rating");
+    expect(onSelect).toHaveBeenCalledWith("main_device_rating", "f-gear");
   });
 
   it("marks an unconfirmed photo pin without (E)", () => {
@@ -212,17 +317,21 @@ describe("site map", () => {
     expect(lastMap().removed).toBe(false);
   });
 
-  it("says when a record has no aerial", () => {
+  it("says when a record has no aerial, but not while a run is still reading sources", () => {
     const record = sampleRecord();
     record.baseMap = null;
-    setup({ record });
+    const { rerender } = setup({ record, loading: true });
+    expect(screen.queryByText("Aerial unavailable")).toBeNull();
+    expect(screen.queryByText(/Not collected for this site/)).toBeNull();
+    rerender({ record, loading: false });
     expect(screen.getByText("Aerial unavailable")).toBeTruthy();
   });
 
-  it("says when no existing equipment has been placed", () => {
+  it("adds the aerial when it arrives after the first results", () => {
     const record = sampleRecord();
-    record.features = record.features.filter((f) => f.kind !== "existing_equipment");
-    setup({ record });
-    expect(screen.getByText(/No existing equipment placed yet/)).toBeTruthy();
+    const { rerender } = setup({ record, baseMap: null, loading: true });
+    expect(lastMap().sources.base).toBeUndefined();
+    rerender({ record });
+    expect(lastMap().sources.base).toBeTruthy();
   });
 });

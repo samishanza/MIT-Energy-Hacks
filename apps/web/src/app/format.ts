@@ -61,6 +61,8 @@ export const SOURCE_RUN_WORDS: Record<SourceRun["status"], string> = {
   person_only: "Person only",
 };
 
+export const CHECK_WORDS = { agrees: "agrees", disagrees: "disagrees", not_checked: "not checked" } as const;
+
 export function observationWord(observation: Observation): string {
   switch (observation.kind) {
     case "verification":

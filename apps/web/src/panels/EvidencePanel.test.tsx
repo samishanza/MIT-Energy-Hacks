@@ -3,7 +3,7 @@ import type { RecordVersion } from "@eqore/contract";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiRequestError, type EngineerApi } from "../api";
-import { sampleRecord, sampleReport } from "../test/fixtures";
+import { sampleRecord, sampleReport, worcesterRecord } from "../test/fixtures";
 import { EvidencePanel } from "./EvidencePanel";
 
 afterEach(cleanup);
@@ -24,6 +24,56 @@ function setup(field: string, api: Partial<EngineerApi> = {}, record: RecordVers
   );
   return { onRecord };
 }
+
+describe("an item picked on the map", () => {
+  function pick(featureId: string, record = worcesterRecord()) {
+    const feature = record.features.find((f) => f.id === featureId)!;
+    render(
+      <EvidencePanel
+        api={{ evidenceUrl: (id: string) => `/files/${id}` } as EngineerApi}
+        record={record}
+        report={null}
+        fields={[feature.field]}
+        featureId={featureId}
+        actorName=""
+        onActorName={vi.fn()}
+        onRecord={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    return within(screen.getByRole("region", { name: "Selected item" }));
+  }
+
+  it("shows the one item's own facts, then the value it belongs to", () => {
+    const item = pick(worcesterRecord().features.find((f) => f.field === "wetlands_nearby")!.id);
+    expect(item.getByText("WOODED SWAMP DECIDUOUS", { selector: "h3" })).toBeTruthy();
+    expect(item.getByText("Distance").nextElementSibling!.textContent).toBe("880 ft");
+    expect(screen.getByRole("heading", { name: "Wetlands nearby" })).toBeTruthy();
+  });
+
+  it("links to Google Earth and Street View at the item", () => {
+    const station = worcesterRecord().features.find((f) => f.field === "fire_stations_nearby")!;
+    const [longitude, latitude] = station.geometry.coordinates as [number, number];
+    const item = pick(station.id);
+    expect(item.getByRole("link", { name: "Open in Google Earth" }).getAttribute("href")).toContain(`@${latitude.toFixed(6)},${longitude.toFixed(6)}`);
+    expect(item.getByRole("link", { name: "Street View" }).getAttribute("href")).toContain(`viewpoint=${latitude.toFixed(6)},${longitude.toFixed(6)}`);
+  });
+
+  it("explains a zone's tier and never calls it approved", () => {
+    const record = worcesterRecord();
+    record.features.push({
+      id: "zone-1",
+      kind: "candidate_area",
+      field: "lot_size_acres",
+      geometry: { type: "Polygon", coordinates: [[[-71.77, 42.277], [-71.769, 42.277], [-71.769, 42.2776], [-71.77, 42.277]]] },
+      attributes: { tier: { type: "text", value: "remote" }, rules: { type: "text", value: "IFC 1207.8.1" } },
+    });
+    const item = pick("zone-1", record);
+    expect(item.getByText(/^Remote: more than 100 ft/)).toBeTruthy();
+    expect(item.getByText(/not code approval/)).toBeTruthy();
+    expect(item.getByText("IFC 1207.8.1")).toBeTruthy();
+  });
+});
 
 describe("source evidence", () => {
   it("shows a value's source, dates, method, location, and grade", () => {
