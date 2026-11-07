@@ -74,7 +74,7 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
     if (!candidates.some((existing) => existing.id === candidate.id)) candidates.push(candidate);
   };
   const conflictKindFor = (): Value["conflictKind"] =>
-    definition.comparison?.kind === "candidates" ? "feeder_candidates" : "source_disagreement";
+    definition.comparison?.kind !== "candidates" ? "source_disagreement" : definition.field === "feeder" ? "feeder_candidates" : "listed_candidates";
 
   for (const observation of observations) {
     const identity = identityKey(observation);

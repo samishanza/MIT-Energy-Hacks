@@ -32,6 +32,7 @@ function Glyph({ state }: { state: ValueState }) {
 const CONFLICT_WORDS = {
   source_disagreement: "Sources disagree",
   feeder_candidates: "Feeder candidates",
+  listed_candidates: "Candidates, not settled",
 } as const;
 
 export function StateBadge({ value }: { value: Value }) {

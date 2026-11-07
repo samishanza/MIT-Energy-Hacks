@@ -27,7 +27,7 @@ const value = {
 
 describe("the wider record", () => {
   it("is a new contract version", () => {
-    expect(CONTRACT_VERSION).toBe("3");
+    expect(CONTRACT_VERSION).toBe("4");
   });
 
   it("lets a value name its family, its current reading, and how it was cross-checked", () => {
@@ -51,6 +51,29 @@ describe("the wider record", () => {
       const feature = { id: "f", kind, field: "lot_width_ft", geometry: { type: "Point", coordinates: [-71.8, 42.26] } };
       expect(MapFeatureSchema.safeParse(feature).success).toBe(true);
     }
+  });
+
+  it("lets a feature carry facts about one item", () => {
+    const parsed = MapFeatureSchema.parse({
+      id: "area-1",
+      kind: "candidate_area",
+      field: "candidate_areas",
+      geometry: { type: "Point", coordinates: [-71.8, 42.26] },
+      attributes: { area: { type: "quantity", value: 24, unit: "acre" } },
+    });
+    expect(parsed.attributes?.area).toEqual({ type: "quantity", value: 24, unit: "acre" });
+  });
+
+  it("names listed candidates apart from feeders", () => {
+    const candidate = (id: string) => ({ id, value: { type: "text", value: id }, observationId: "obs-1", sourceName: "OpenEI" });
+    const parsed = ValueSchema.parse({
+      ...value,
+      state: "conflicting",
+      current: null,
+      candidates: [candidate("a"), candidate("b")],
+      conflictKind: "listed_candidates",
+    });
+    expect(parsed.conflictKind).toBe("listed_candidates");
   });
 
   it("requires a confirm to name the reading the person saw", () => {

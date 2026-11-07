@@ -27,6 +27,7 @@ export function toSiteMap(record: RecordVersion, generatedAt: string): SiteMapEx
             field: feature.field,
             label: feature.label,
             placedByHand: feature.placedByHand,
+            attributes: feature.attributes,
             state: value.state,
             grade: value.grade,
             owner: value.owner,

@@ -220,7 +220,7 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 - KTD9. **Recorded fixtures for tests, plus a saved snapshot for the demo.** Real responses are stored once, labeled with source and date. Tests never call the network. If a service fails on stage, the demo loads the snapshot and says so. Snapshot mode covers the whole loop: saved aerial tiles for the demo extent, a recorded draft replayed by the hash of each labeled synthetic evidence file, and an engineer-side upload through the same capture API, recorded as uploaded by the engineer with a hand-placed pin. A visible banner labels it.
 - KTD10. **Capture link served over a temporary HTTPS tunnel, exposing only the capture routes behind a per-site, per-field token.** Phones allow browser geolocation only on secure pages. A separate capture listener makes the boundary real: the engineer API has no login, so it binds to loopback and is never tunneled. If GPS fails, the photo is still accepted and the engineer places the pin, marked as placed by hand. If the tunnel fails, the phone can't reach the API, so the engineer uploads the file locally as in KTD9. Opening the tunnel needs the team's approval when it's run.
 - KTD11. **Demo centers on 100 Research Dr, Worcester, a National Grid site, with PG&E in Fremont as the second region.** The parcel was chosen by a rule fixed before screening, recorded in `docs/project/decision.md`. Los Angeles isn't in the brief's service area and is a reference only.
-- KTD30. **The plan-set catalog is the collection target, reached through an adapter.** `packages/catalog` lists what a plan set needs, so it decides what to go looking for. Each record field names the catalog key it fills, and coverage comes from that map. Replacing either model is a larger refactor, so this build only adapts between them. `toRecordVersion` in `packages/drc` already turns unanswered catalog fields into `missing` values with their owner, so coverage builds on it. (session-settled: user-directed, chosen over collecting to the application form: the form set too narrow a target for the drawing agent.)
+- KTD30. **The plan-set catalog is the collection target, reached through an adapter.** `packages/catalog` lists what a plan set needs, so it decides what to go looking for. Each record field names the catalog key it fills, and coverage comes from that map. Replacing either model is a larger refactor, so this build only adapts between them. (session-settled: user-directed, chosen over collecting to the application form: the form set too narrow a target for the drawing agent.)
 - KTD31. **The map is the product's first screen, and details wait for selection.** The screen shows the map and one line. Everything else opens from a selected feature or the summary line. The first UI was built before most of this data existed, so it lists rows where the new design draws features. (session-settled: user-directed, chosen over the report-first screen: it showed every source and feature up front.)
 - KTD32. **Confirm names what the person saw.** `ConfirmValueRequest` requires `expectedObservationId`, which is the value's `currentObservationId`, and a mismatch returns `stale_value` with status 409. Measurements change when their inputs change, and a retake or new source can do the same while a value is open. An identical re-run changes nothing, so it refuses nothing.
 - KTD33. **Evidence is checked by its bytes and served inert.** Only JPEG, PNG, and PDF are accepted, by file signature and not the declared type. Originals are served with their checked type and `X-Content-Type-Options: nosniff`, because a token holder chooses the contents and they open on the no-login engineer origin.
@@ -244,7 +244,7 @@ This is the collection scope. **Tested** means a live query on 2026-11-07 return
 | Physical | MassDEP wetlands | Mapped wetlands near the site | Tested. None within 500 m of the point tried, which reads as none mapped there, not none |
 | Physical | USGS point elevation | Ground elevation at 1 m resolution, no key | Tested: 545.3 ft |
 | Physical | USGS 3DEP and NAIP image services | Terrain and imagery anywhere in the US | Read |
-| Physical | MassGIS lidar elevation | Slope across the parcel, in `packages/agents/src/sources/slope.ts` | Tested by the agent layer: 8.02% at Holliston. Its `robots.txt` returned 502, so check again before relying on it |
+| Physical | MassGIS lidar elevation | Slope across the parcel, in `packages/agents/src/sources/slope.ts` | Tested by the agent layer: 8.02% at Holliston. Its `robots.txt` returned 502. Read it and the terms before relying on it, and use Earth Engine slope if they bar it |
 | Physical | Earth Engine | Land cover, imperviousness, and slope and imagery outside Massachusetts | Credential works |
 | Physical | Esri USA flood hazard layer | Flood zones. FEMA's own services are barred by `robots.txt` | Reachable, terms unread. Returned none at Worcester, and a reduced set can't prove absence |
 | Utility | National Grid substations | Name, address, type, configuration | Tested |
@@ -322,7 +322,7 @@ fixtures/             recorded responses, synthetic evidence
 
 ### Sequencing
 
-U1 through U9 and U12 are on `main`, and this update builds on them. Each worktree runs `git merge main` before starting. Integration order: U13, U14, U16, U29, U11, U17, U15, U19, U10's snapshot, U20, U18, then the rest of U10.
+U1 through U9 and U12 are on `main`, and this update builds on them. Each worktree runs `git merge main` before starting. Integration order: U13, U14, U16, U29, U11, U15, U17, U19, U10's snapshot, U20, U18, then the rest of U10.
 
 **Protected path, data first:** U13, U14, U16's National Grid part, U29, U11, and U15, so an address produces the wide, cross-checked record. Then U19 and U10's seed and snapshot, so the map shows it and survives a failed service. U20 follows, and much of it already exists.
 
@@ -574,13 +574,13 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 - **Requirements:** R1, R3, R54, R57
 - **Dependencies:** U2, U3, U14
 - **Files:** `packages/sources/src/earthengine.ts`, `packages/sources/src/earthengine.test.ts`, `packages/sources/config/`, `fixtures/earthengine/`
-- **Approach:** Use `@google/earthengine` with the service account named in `.env`, following KTD3. The credential works, using project `mit-energy-hacks`, and `USGS/3DEP/10m` answered a test call. Confirm the other dataset IDs at implementation. Massachusetts keeps MassGIS imagery and lidar slope. Never print or record the key file's contents.
+- **Approach:** Use `@google/earthengine` with the service account named in `.env`, following KTD3. Export one function that takes a polygon and returns land cover with its source and date, for U15. The credential works, using project `mit-energy-hacks`, and `USGS/3DEP/10m` answered a test call. Confirm the other dataset IDs at implementation. Massachusetts keeps MassGIS imagery and lidar slope. Never print or record the key file's contents.
 - **Test scenarios:**
   - Recorded responses yield land cover, slope, and imagery values with source, retrieval date, and method.
   - In Massachusetts, a recorded lidar slope wins, and Earth Engine slope is stored as a second observation and raises no conflict.
   - A configured MassGIS base takes priority over Earth Engine imagery in Massachusetts.
   - Missing credentials yield missing with the reason, and the Massachusetts path still completes.
-- **Verification:** Worcester's candidate areas gain a surface from recorded data, and a Fremont address shows imagery and slope. If this unit is cut, it's listed as not built with the reason.
+- **Verification:** The land cover function answers for a Worcester polygon from recorded data, and a Fremont address shows imagery and slope. If this unit is cut, it's listed as not built with the reason.
 
 ### U12. Contract for the wider record
 
@@ -588,7 +588,7 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 - **Requirements:** R8, R14, R51, R52, R53, R54, R57
 - **Dependencies:** U1, U5
 - **Files:** `packages/contract/src/schemas.ts`, `packages/contract/src/routes.ts`, `packages/contract/src/wider-record.test.ts`, `packages/sources/src/derive.ts`, `apps/api/src/run.ts`, `apps/web/src/api.ts`
-- **Approach:** Contract version 3 adds feature kinds for candidate areas, substations, roads, and mapped constraints, and optional `family`, `currentObservationId`, and `crossChecks` on values. It adds optional `coverage`, a run progress route, and a required `expectedObservationId` with a `stale_value` error (KTD32). Relative imports in the agent packages gain `.ts`, so the API can load them under Node.
+- **Approach:** Contract version 4 adds feature kinds for candidate areas, substations, roads, and mapped constraints, with `attributes` for facts about one item, and optional `family`, `currentObservationId`, and `crossChecks` on values. It adds a `json_api` source kind, a `listed_candidates` conflict kind, optional `coverage`, a run progress route, and a required `expectedObservationId` with a `stale_value` error (KTD32). Multi-item context, like substations, fire stations, wetlands, and candidate areas, stores one summary reading and one feature per item, as `building_outline` does, so it never reads as a conflict. Rates and overlapping territories use `candidates`. Relative imports in the agent packages gain `.ts`, so the API can load them under Node.
 - **Test scenarios:**
   - Covers AE23. A confirm naming an older observation returns 409 `stale_value` and appends nothing.
   - A confirm naming the current observation verifies the value.
@@ -602,11 +602,13 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 - **Requirements:** R53
 - **Dependencies:** U12
 - **Files:** `packages/sources/src/catalog-map.ts`, `packages/sources/src/catalog-map.test.ts`, `packages/sources/src/fields.ts`
-- **Approach:** Map each record field to its catalog key, reusing `toContractFieldKey` and the owner logic in `packages/drc/src/contract.ts`. Report catalog fields with no source or person route, starting with the ones that list a public source and have none here: code editions, design criteria, bylaw setbacks, screening, and hydrant distance. Set `family` on every value and `coverage` on the record. The catalog has 78 entries today, and the map follows it rather than a fixed count.
+- **Approach:** Make `catalog-map.ts` an explicit table from each catalog key to its record field, owner, and reason, importing only `@eqore/catalog`. Take the owner from the record's field definition, or set it by hand, and never call a field `public_data` without a configured source. `OWNER_OF` in `packages/drc` isn't reusable here: it gives `public_data` for fields like bus rating, which R6 routes to a qualified person. Add a named transform that reads printed service voltage as line-to-line volts, and keep the printed text when it can't parse. Report catalog fields with no source or person route, starting with the ones that list a public source and have none here: code editions, design criteria, bylaw setbacks, screening, and hydrant distance. Set `family` on every value and `coverage` on the record. The catalog has 78 entries today, and the map follows it rather than a fixed count.
 - **Test scenarios:**
   - Every catalog key appears in the map, or the test fails naming it.
   - Coverage for a recorded Worcester run counts filled fields and lists the rest by owner.
   - A catalog field with no route fails the test, so a new field can't be dropped silently.
+  - Bus rating is owned by a qualified person, and no field without a configured source is owned by public data.
+  - `480Y/277 V` reads as 480 V, and unparseable text stays as printed.
 - **Verification:** The Worcester coverage report matches a hand count.
 
 ### U14. Wider physical collection
@@ -617,7 +619,7 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 - **Files:** `packages/sources/config/`, `packages/sources/src/registry.ts`, `packages/sources/src/collect.ts`, `packages/sources/src/resolve-site.ts`, `packages/sources/src/fields.ts`, `packages/sources/src/json-api.ts`, `packages/sources/src/json-api.test.ts`, `packages/sources/src/checks/physical.ts`, `packages/sources/src/checks/physical.test.ts`, `packages/agents/src/sources/live.ts`, `apps/api/src/run.ts`, `fixtures/`
 - **Approach:**
   1. Make the registry general first. `RegionConfig` matches by city and state, with the most specific winning, holds a general list of layers that `collectSite` runs, and `REGIONS` moves to config. Today regions match on state alone and sources sit in fixed slots, so nothing else here is configuration-only until this is done.
-  2. Run sources in parallel, save results per source, and set a deadline for the whole run, after which unanswered sources are stored as missing with that reason. Serve `readRunProgress`, with the parcel first.
+  2. Run sources in parallel and save results per source. Resolve the parcel first, outside any deadline, because the site depends on it. Give the remaining sources 90 seconds, because cold MassGIS queries took up to 55 seconds, and store anything unanswered as missing with that reason. Serve `readRunProgress`, with the parcel first.
   3. Accept any common address spelling: if the text doesn't parse, send it to the Census one-line geocoder, use the matched address, and accept state names.
   4. Add the L3 zoning, stories, and use fields, MassDOT roads, wetlands, and the flood layer, then municipalities, fire stations, USGS point elevation through a small JSON adapter, lidar slope from `slope.ts`, and height as stories times an assumed floor height, with method `assumed`.
   5. Pass zoning and road side through `live.ts`, which today says L3 has no zoning and hard-codes the road side to south.
@@ -639,16 +641,18 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 
 - **Goal:** Show open areas that could hold batteries.
 - **Requirements:** R54
-- **Dependencies:** U12, U14
+- **Dependencies:** U12, U14, U11
 - **Files:** `packages/drc/src/polygon.ts`, `packages/drc/src/polygon.test.ts`, `packages/sheets/src/geometry.ts`, `apps/api/src/run.ts`
-- **Approach:** Follow KTD35. Pass every roofprint, plus mapped constraints and road surfaces, into `derivePadCandidates`, buffering roads by their mapped width, or by a stated assumed width recorded with method `assumed` where none is mapped. Store up to the five largest areas as `inferred` with method `computed`, each with its size, basis, and distances to the nearest building, lot line, and mapped line. Each records which constraint layers it was cleared against, and which failed or aren't configured. Surface comes from U11.
+- **Approach:** Follow KTD35. Pass every roofprint, plus mapped constraints and road surfaces, into `derivePadCandidates`, buffering roads by their mapped width, or by a stated assumed width recorded with method `assumed` where none is mapped. Store one summary reading, plus up to the five largest areas as features with `attributes`, `inferred` with method `computed`. Each gives its size and basis, and measures from its inscribed rectangle, using `rectToPolygonDistance`, because the polygon's own edges only restate the buffers. Slope comes from `measureSlope` over that rectangle, then Earth Engine, then missing with the reason. Surface comes from U11's land cover function. Each records which constraint layers it was cleared against, and which failed or aren't configured.
 - **Test scenarios:**
   - Covers AE21. No candidate overlaps a roofprint or mapped wetland.
   - A failed wetlands query labels each candidate as not checked against wetlands.
   - A road with no mapped width is still cut out, using the assumed width on record.
   - A parcel fully covered by a building yields no candidates, stated as such.
   - An area below the minimum is dropped, and the minimum is on the record.
-- **Verification:** On Worcester, a person compares the candidate areas with the aerial, and the areas exclude buildings and roads and fall inside the parcel.
+  - Distances are measured from the inscribed rectangle, and don't just restate the buffer.
+  - Missing slope or surface stays missing with its reason, and keeps the area.
+- **Verification:** On Worcester, a person compares the candidate areas with the aerial, and the areas exclude buildings and roads, fall inside the parcel, and state a surface.
 
 ### U16. Deeper utility data
 
@@ -724,21 +728,23 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 - **Goal:** Make the concept sheet reflect the collected and corrected record.
 - **Requirements:** R15, R19, R22, R52, R55
 - **Dependencies:** U12, U13, U14, U15, U19
-- **Files:** `packages/sheets/src/SitePlanSheet.tsx`, `packages/sheets/src/geometry.ts`, `packages/sheets/src/sheets.test.ts`, `packages/drc/src/export.ts`, `packages/agents/src/sources/live.ts`, `apps/web/src/panels/`
+- **Files:** `packages/sheets/src/SitePlanSheet.tsx`, `packages/sheets/src/geometry.ts`, `packages/sheets/src/sheets.test.ts`, `packages/drc/src/export.ts`, `packages/drc/src/polygon.ts`, `packages/agents/src/sources/live.ts`, `packages/catalog/src/catalog.ts`, `packages/gatekeeper/src/validate.ts`, `apps/web/src/panels/`
 - **Approach:**
   1. Follow KTD36. `@eqore/sheets` stays the renderer, and draws from each new record version.
-  2. List gaps through `exportToSetback`, taking the state from the record instead of its fixed `MA`, and adding verified values as `engineer` proposals so a correction clears its gap. Let `makeLiveSources` take an existing collection instead of fetching twice.
+  2. List gaps through `exportToSetback`, taking the state from the record instead of its fixed `MA`. Report `pad_zone` gaps only when an array is requested, and add gaps for empty openings and a missing road side. Add verified values as `engineer` proposals, so a correction clears its gap. The gatekeeper refuses those today, so let it accept `engineer` on any catalog key and turn non-standard values and cross-field failures into flags for those proposals. Let `makeLiveSources` take an existing collection instead of fetching twice.
   3. Offer the sheet only when lot and building values exist, and otherwise say which are missing.
-  4. Add the array only after an engineer enters a pack and count, labeled illustrative.
+  4. Add the array only after an engineer picks a count and a known spec, held in the panel and not written to the record, labeled illustrative. Set `pad_zone` from the selected candidate's inscribed rectangle, because without it `compile` places units about 757 ft off the Worcester parcel.
   5. Print the concept-grade note on every record, the version ID, each gap, and each synthetic value's label. Drop anything reading as a stamped sheet, such as a revision.
 - **Test scenarios:**
   - A recorded Worcester record draws all 6 roofprints and the real parcel polygon, with no array and no invented electrical value.
-  - Any pad candidate lies inside the parcel polygon and outside every roofprint, measured on the polygons.
+  - Any pad candidate and every placed unit lie inside the parcel polygon and outside every roofprint, measured on the polygons.
+  - Worcester's gap list matches an exact expected list.
+  - An engineer's 810 A clears its gap and keeps a non-standard flag.
   - Confirming a value removes its gap on the next version's sheet.
   - A real record with a synthetic rating labels that rating as synthetic.
   - The sheet carries no check, status, or electrical advice, and always has the concept-grade note.
   - A Fremont record with no parcel offers no sheet and names what's missing.
-- **Verification:** Worcester's sheet builds with no further input and opens with one selection. A person checks its dimensions against the map.
+- **Verification:** Worcester's sheet builds with no further input and opens with one selection. A person checks its dimensions against the map, using one shared feet-per-degree value so the two agree.
 
 ### U29. Cross-check the sources
 

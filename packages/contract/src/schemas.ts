@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Bumped by the contract owner whenever a shape changes, so both worktrees can check they match.
-export const CONTRACT_VERSION = "3";
+export const CONTRACT_VERSION = "4";
 
 export const VALUE_STATES = ["missing", "conflicting", "unreadable", "inferred", "verified"] as const;
 export const ValueStateSchema = z.enum(VALUE_STATES);
@@ -28,7 +28,7 @@ export const METHODS = [
 export const MethodSchema = z.enum(METHODS);
 export type Method = z.infer<typeof MethodSchema>;
 
-export const SOURCE_KINDS = ["arcgis_rest", "earth_engine", "geocoder", "human_evidence"] as const;
+export const SOURCE_KINDS = ["arcgis_rest", "json_api", "earth_engine", "geocoder", "human_evidence"] as const;
 export const SourceKindSchema = z.enum(SOURCE_KINDS);
 
 const nonBlank = z.string().trim().min(1);
@@ -173,7 +173,7 @@ export const ValueSchema = z
     method: MethodSchema.optional(),
     candidates: z.array(CandidateSchema),
     // Reported apart: sources disagreeing is a finding, nearby feeders aren't.
-    conflictKind: z.enum(["source_disagreement", "feeder_candidates"]).optional(),
+    conflictKind: z.enum(["source_disagreement", "feeder_candidates", "listed_candidates"]).optional(),
     observationIds: z.array(nonBlank),
     verification: VerificationSchema.optional(),
     reason: z.string().optional(),
@@ -231,6 +231,8 @@ export const MapFeatureSchema = z.object({
   geometry: GeometrySchema,
   label: z.string().optional(),
   placedByHand: z.boolean().optional(),
+  // Facts about this one item, such as a candidate area's size or a substation's name and distance.
+  attributes: z.record(z.string(), ObservedValueSchema).optional(),
 });
 export type MapFeature = z.infer<typeof MapFeatureSchema>;
 
@@ -490,6 +492,7 @@ export const SiteMapExportSchema = z.object({
           field: fieldKey,
           label: z.string().optional(),
           placedByHand: z.boolean().optional(),
+          attributes: z.record(z.string(), ObservedValueSchema).optional(),
           state: ValueStateSchema,
           grade: FitnessGradeSchema.nullable(),
           owner: OwnerSchema,
