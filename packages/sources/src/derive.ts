@@ -118,6 +118,9 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
             method = observation.method;
             grade = observation.grade ?? grade;
             currentReading = observation;
+            // The flags described the reading this one replaces.
+            flags.clear();
+            if (observation.reason) flags.add(observation.reason);
             break;
           }
           state = "conflicting";

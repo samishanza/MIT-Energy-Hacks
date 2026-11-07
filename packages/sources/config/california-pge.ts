@@ -1,4 +1,5 @@
 import type { RegionConfig } from "../src/registry.ts";
+import { censusLocalRoads } from "./census-roads.ts";
 
 export const californiaPge: RegionConfig = {
   id: "california-pge",
@@ -33,6 +34,7 @@ export const californiaPge: RegionConfig = {
       },
     },
   ],
+  roads: censusLocalRoads,
   unavailable: [
     {
       sourceId: "earth-engine",

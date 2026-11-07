@@ -42,6 +42,26 @@ export const FIELDS: FieldDefinition[] = [
   { field: "building_area_sqft", label: "Building area", owner: "customer", grade: "reference" },
   { field: "building_outline", label: "Building outline", owner: "public_data", grade: "reference" },
   { field: "aerial_image", label: "Aerial image", owner: "public_data", grade: "reference" },
+  ...[
+    ["lot_width_ft", "Lot width (fitted east-west extent)"],
+    ["lot_depth_ft", "Lot depth (fitted north-south extent)"],
+    ["building_x_ft", "Main building, west side from the lot's west side"],
+    ["building_y_ft", "Main building, north side from the lot's north side"],
+    ["building_width_ft", "Main building width (fitted east-west extent)"],
+    ["building_depth_ft", "Main building depth (fitted north-south extent)"],
+    ["building_footprint_sqft", "Main building footprint"],
+    ["roofprint_coverage_pct", "Roofprint coverage of the parcel"],
+    ["building_to_lot_line_ft", "Main building to the parcel line"],
+    ["distance_to_nearest_line_ft", "Main building to the nearest mapped line"],
+    ["road_side", "Side of the lot facing the road"],
+  ].map(([field, label]): FieldDefinition => ({
+    field: field!,
+    label: label!,
+    owner: "public_data",
+    grade: "reference",
+    comparison: { kind: "latest" },
+    missingReason: "Needs a parcel polygon and the outlines or lines it's measured from, and this site has none yet.",
+  })),
   { field: "elevation_m", label: "Ground elevation", owner: "public_data", grade: "reference" },
 
   // Utility-published context. The Pre-Application Report is the authoritative version.

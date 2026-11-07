@@ -76,6 +76,7 @@ describe("the engineer API", () => {
       ["massgis-imagery-2025", "done"],
       ["national-grid-hosting-capacity", "done"],
       ["national-grid-feeder-lines", "done"],
+      ["census-tiger-local-roads", "done"],
       ["earth-engine", "missing"],
     ]);
     expect(deps.store.observations(SITE).length).toBe(record.observations.length);

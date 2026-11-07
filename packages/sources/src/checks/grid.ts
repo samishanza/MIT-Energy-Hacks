@@ -1,5 +1,5 @@
 import type { MapFeature, Observation, SourceRun } from "@eqore/contract";
-import { observe, queryArcgis, toObservations, type CollectContext, type PolygonGeometry, type SpatialQuery } from "../arcgis.ts";
+import { observe, queryArcgis, toObservations, type ArcgisFeature, type ArcgisResult, type CollectContext, type PolygonGeometry, type SpatialQuery } from "../arcgis.ts";
 import type { ArcgisEntry, RegionConfig } from "../registry.ts";
 
 export type GridAnchor = { parcel: PolygonGeometry } | { longitude: number; latitude: number };
@@ -8,6 +8,8 @@ export type GridCollection = {
   observations: Observation[];
   features: MapFeature[];
   runs: SourceRun[];
+  // The drawn lines, for measuring distances to them.
+  lines: { result: ArcgisResult; features: ArcgisFeature[]; label: (feature: ArcgisFeature) => string }[];
 };
 
 function queryFor(entry: ArcgisEntry, anchor: GridAnchor): SpatialQuery {
@@ -23,6 +25,7 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
   const observations: Observation[] = [];
   const features: MapFeature[] = [];
   const runs: SourceRun[] = [];
+  const measuredLines: GridCollection["lines"] = [];
   let servingUtilityFound = false;
   const results = await Promise.all(
     region.grid.map(async (source) => {
@@ -42,9 +45,11 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
     // Only draw lines the record has a feeder for. The line layer also holds transmission lines.
     const feederIds = new Set(result.features.map((feature) => feature.objectId));
     const drawn = lines ? lines.features.filter((feature) => feederIds.has(feature.objectId)) : result.features;
+    const nameOf = (feature: ArcgisFeature) => String((feederAttribute ? feature.attributes[feederAttribute] : undefined) ?? feature.objectId);
+    measuredLines.push({ result: lines ?? result, features: drawn, label: nameOf });
     drawn.forEach((feature, index) => {
       if (feature.geometry) {
-        const name = feederAttribute ? (feature.attributes[feederAttribute] ?? feature.objectId) : feature.objectId;
+        const name = nameOf(feature);
         features.push({
           id: `${source.entry.id}-${index + 1}`,
           kind: "utility_line",
@@ -81,5 +86,5 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
       );
     }
   }
-  return { observations, features, runs };
+  return { observations, features, runs, lines: measuredLines };
 }

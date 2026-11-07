@@ -2,6 +2,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { ENGINEER_PORT, WEB_PORT, routes } from "@eqore/contract";
 import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps } from "./capture.ts";
 import { checkReadiness } from "./readiness.ts";
+import { toSiteMap } from "./site-map.ts";
 import { ApiFailure, confirmValue, correctValue, movePin, resolveConflict, runSite } from "./run.ts";
 
 async function jsonBody(request: Request): Promise<unknown> {
@@ -56,6 +57,8 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
 
   app.get(routes.readVersion.path, (c) => c.json(requestedVersion(c.req.param("siteId")!, c.req.param("version")!)));
   app.get(routes.readReadiness.path, (c) => c.json(checkReadiness(requestedVersion(c.req.param("siteId")!, c.req.param("version")!))));
+
+  app.get(routes.readSiteMap.path, (c) => c.json(toSiteMap(requestedVersion(c.req.param("siteId")!, c.req.param("version")!), deps.now())));
 
   app.post(routes.confirmValue.path, async (c) =>
     c.json(confirmValue(deps, c.req.param("siteId")!, c.req.param("field")!, await jsonBody(c.req.raw))),

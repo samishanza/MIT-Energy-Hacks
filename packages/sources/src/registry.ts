@@ -55,6 +55,11 @@ export type BuildingOutlines = {
   sourceDateAttribute: string;
 };
 
+export type RoadSource = {
+  entry: ArcgisEntry;
+  nameAttribute: string;
+};
+
 export type GridSource = {
   entry: ArcgisEntry;
   utilityName: string;
@@ -89,6 +94,7 @@ export type RegionConfig = {
   parcels?: ParcelLookup;
   buildings?: BuildingOutlines;
   grid: GridSource[];
+  roads?: RoadSource;
   imagery?: ImageryConfig;
   // Sources with no working adapter yet. They report missing with the reason.
   unavailable: NamedRoute[];
