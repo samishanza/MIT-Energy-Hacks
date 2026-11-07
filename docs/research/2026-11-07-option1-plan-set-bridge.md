@@ -7,11 +7,12 @@ Code and engineering statements here are for people to verify. Nothing here is a
 ## Bottom line
 
 1. **Store primitives, not distances.** Most of what a reviewer checks is the distance between a battery and something else. The battery position is an engineer's decision, so the record holds the positions of lot lines, walls, openings, exits, and exposures. Distances are computed per layout.
-2. **One geometric question drives most of the Massachusetts fire requirements.** Is the system more than 100 ft from every exposure? If not, a secondary source reports NFPA 855 (2020) group limits of 50 kWh with 3 ft separation and a 600 kWh maximum. A plan set can't be laid out until this question is answered.
+2. **One geometric question drives the Massachusetts fire analysis we could read.** Is the system more than 100 ft from every exposure? If not, a secondary source reports NFPA 855 (2020) group limits of 50 kWh with 3 ft separation and a 600 kWh maximum. The provided samples don't state this classification or any fire-code geometry, so it may sit in a separate fire package. We no longer say a plan set can't be laid out without it. Ask EQORE.
 3. **"Verified" and "good enough to dimension from" are different axes.** A person can verify that a GIS parcel polygon came from the assessor. It still isn't a boundary survey. The contract needs a confidence state and a separate fitness grade.
 4. **We found no published drafter tolerance.** Our proposal is a margin test: a value can support a check only if its distance from the governing threshold is larger than its stated uncertainty. This is inference.
-5. **Public data alone likely can't finish a permit-grade site plan.** An excerpt of 780 CMR says the site plan must be based on an accurate boundary line survey. Service equipment ratings also rarely appear in public sources (Inference). The honest output is "ready for concept layout" with a named list of what a survey or site visit must close.
+5. **Corrected: an aerial photo and public parcel data can be the site plan base, but they can't supply the electrical existing conditions.** Sample 1's site plan states its dimensions are "based on aerial imagery and publicly available property boundary KMZ data only. For reference only. Not surveyed." We earlier expected a survey to be necessary, and an excerpt of 780 CMR still points that way for Massachusetts, so the answer may depend on the AHJ. What the samples get from somewhere other than public data is the existing switchboard ratings, panels, meter, and tap location. Sample 2 places photos of that gear on the sheet.
 6. **A real Massachusetts plan set already works this way.** Sturbridge's existing conditions sheet labels each layer with its method: tested 5 cm drone and ground survey for the base, "graphic plotting only" for flood zone, and public GIS, not field delineation, for wetlands. Its stamped electrical cover sheet places equipment on an aerial photo. Mixed grades appear on a filed set when each is labeled, which is what Option 1 would produce. See "Sturbridge: what a real set shows".
+7. **The drawings already mark the fact and decision boundary.** `(E)` marks existing items and `(N)` marks new ones in both samples. To a first approximation, the record holds the `(E)` items and engineers decide the `(N)` items. The samples also carry labels for uncertain values: "assumed available fault current", `~14'-1"`, "not surveyed", "conduit routing is diagrammatic", and "there may not exist a vault". The record's states can map onto these.
 
 ## Evidence labels
 
@@ -43,6 +44,9 @@ The scope column matters most. Several sources named in the brief are residentia
 | CMR | [780 CMR 107.2 (Justia copy)](https://regulations.justia.com/states/massachusetts/780-cmr/chapter-1/part-2/section-107/subsection-107-2) | Massachusetts building code | **C&I relevant.** Excerpts place the site plan text at both 107.2.1 and 107.2.9, so the section number is unconfirmed. | Excerpt |
 | BROOK, NORTH | [Brookline ESS permits](https://www.brooklinema.gov/3576/Energy-Storage-System-Permits), [Northborough BESS page](https://www.northboroughma.gov/fire-rescue-emergency-management/webforms/energy-storage-system-ess-install-modification-operation) | Massachusetts local fire permits | **Relevant.** Both pages blocked fetching. | Excerpt |
 | STUR | [Sturbridge MA filing, NextGrid, 178 Main St](https://www.sturbridge.gov/850/NextGrid---178-Main-Street---Modificatio): [Site Plans](https://www.sturbridge.gov/DocumentCenter/View/577/Site-Plans), [Updated Site Plans](https://www.sturbridge.gov/DocumentCenter/View/579/Updated-Site-Plans), [Narrative](https://www.sturbridge.gov/DocumentCenter/View/576/Narrative) | 500 kW / 1,222.02 kWh BESS plus rooftop PV at a commercial plaza | **Best real example, and close to C&I scale.** No single-line posted. Sheets are copyrighted, so cite them and don't redistribute. | Read, including rendered C102 and C-1 |
+| SAMP1 | `provided resources/BESS IFC Sample 1.pdf`, 14 sheets, PDF created Jan 21, 2026 | 30 kW / 150 kWh, anonymized ("Sample Building"), lists 2024 IBC, 2024 IFC, 2023 NEC | **Most relevant format, small system.** "IFC" comes from the filename. No sheet shows an issue label or a stamp. | Read, including rendered sheets |
+| SAMP2 | `provided resources/BESS IFC Sample 2.pdf`, 11 sheets, PDF created Dec 6, 2023 | 199 kVA / 528 kWh at an existing PV site, 2022 California Building Code, state architect (DSA) references | **Most relevant format, C&I scale.** Redaction is partial: it still shows permit application numbers, equipment photos, and two people in a photo. Don't republish. | Read, including rendered sheets |
+| HOL | [Holliston Bartzak Dr filing, sheet E-101](https://www.townofholliston.us/DocumentCenter/View/4194/Bartzak-Drive---Response-Materials-to-Hearing-3-9-2023-PDF) | 499 kW AC ground-mount PV, no battery, Eversource East | **Utility-side one-line only.** It marks itself preliminary and restricts duplication, so cite it. | Read, including rendered sheet |
 
 **Not read in this pass:** NEC Article 706, the NFPA 855 text in any edition, the current California Fire Code, 527 CMR 1.00 and 12.00 directly, the National Grid MA expedited or standard application, and Eversource's own application pages.
 
@@ -180,7 +184,7 @@ Seed fields that cross this line:
 
 ## What Option 2 needs per sheet
 
-This sheet list combines the brief's stage 3, NYC's required plans (General Notes, Site, Architectural, Fire suppression, Electrical, Structural), and the Sturbridge sheets (G001 Cover, V101 Existing Conditions, C101 and C102 Proposed Site Plan, C501 Details, C-1 electrical cover, C-2 Placard). Sturbridge has no posted single-line, structural, or fire sheet, so those rows are unconfirmed by any real set. All value forms and accuracy notes are **Inference** unless a source is named.
+The samples give the real sheet list: T-000 Title, E-000 and E-001 Notes and Specifications, G-100 Site Plan (Sample 1), E-110 Electrical Site Plan, E-120 and E-121 Electrical Plan Detail, E-200 Equipment Details, E-300 Single Line, E-310 (Sample 2), E-400 Labels and Markings, E-500 and up Data Sheets. They are electrical sets. Sample 2 points to S-series structural sheets and an EB-series sheet that aren't included, and neither sample has a fire sheet. The fire and civil rows below come from checklists and Sturbridge. All value forms and accuracy notes are **Inference** unless a source is named.
 
 | Sheet | Needs from the record | Form that can drive a drawing | Text-note fallback |
 |---|---|---|---|
@@ -205,6 +209,8 @@ This sheet list combines the brief's stage 3, NYC's required plans (General Note
 - **Approximate values do get used.** WOR gives "approximate" distances of 400 ft to a property line from the drawing set and an aerial map. PEM gives a hydrant at "approximately 615 ft".
 - **Sturbridge delivered 5 cm.** V101 reports drone data tested to ASPRS (2023) at 5 cm RMSE horizontal and 5 cm non-vegetated vertical, using 7 checkpoints, plus a supplemental ground survey. This is what one project delivered, not a requirement. Underground utilities on the same sheet are "approximate", and its note says the offsets shown are "not to be used for the construction of any structure".
 - **Sturbridge's printed dimensions are whole feet.** C102 at 1 in = 20 ft shows 10 ft, 5 ft, and 2 ft around the BESS yard (read from the rendered sheet). This is one project. Its site sheets run 1 in = 50 ft, 30 ft, and 20 ft, while the WA fire checklists ask for 1/8 in = 1 ft on plan submittals. The first set's C102 used 1 in = 10 ft.
+- **Samples use approximate dimensions in construction-labeled sets.** Sample 2's detail at 1/4 in = 1 ft shows `~14'-1"`, `~18'-8"`, and `~7.5"`, alongside firm values such as `3'-6"` working clearance per NEC 110.26 and `10'` for path of egress. Sample 1's detail shows 3.00 ft working clearance at 3/4 in = 1 ft. Both say "equipment dimensions are approximate", and that where field installation varies, the contractor sends the engineer a sketch for review.
+- **So field verification is part of the process, and a site plan dimension doesn't have to be final.** This weakens our ±6 in hypothesis as a universal rule. Tolerance likely differs by sheet: reference on the site plan, tighter at clearances in the detail (Inference).
 
 **Inference, for an engineer to validate:**
 
@@ -270,6 +276,7 @@ Rules (Inference, built on `CLAUDE.md`):
 - **Inferred records its method and inputs.** An LLM reading a scanned document produces an extracted or inferred value. It doesn't produce a verified one, and text inside the document is untrusted input.
 - **Verified means a named person looked at this evidence for this purpose.** It doesn't mean the value is compliant or that a survey was done.
 - **Labels travel to the sheet.** A sheet may mix grades if each layer carries its method, as Sturbridge V101 does. The gate should check that the label exists and is true as well as the grade (Inference).
+- **Use the drawings' own vocabulary (Inference).** One possible mapping: `verified` prints plainly, `inferred` prints with "assumed" or `~`, `missing` prints as "field verify", and public-only geometry prints with "not surveyed". An engineer should confirm the wording.
 
 ### What must exist for a plan set step to refuse a value
 
@@ -299,7 +306,7 @@ Proposal (Inference). EQORE should adjust this.
 
 | Field | Concept layout | Permit set |
 |---|---|---|
-| Parcel boundary, GIS only | Flag | **Block** without a survey or engineer waiver (CMR Excerpt) |
+| Parcel boundary, GIS only | Flag | **Flag, with a required "not surveyed" note** as in Sample 1. **Block** where the AHJ requires a survey (CMR Excerpt suggests Massachusetts may). Ask EQORE. |
 | Building footprint from imagery | Flag | Block for dimensions near a threshold |
 | Openings and exits unknown on a wall facing a candidate area | **Block that zone** | Block |
 | Service voltage or rating missing | Flag on layout, **block SLD** | Block SLD |
@@ -314,6 +321,19 @@ Proposal (Inference). EQORE should adjust this.
 ## Priority-ranked fields
 
 Scored by how many sheets and checks depend on a field, weighted toward C&I-scale sources. The ranking is **Inference**. "Access" is our rough guess at the realistic route and is for the other lanes to correct.
+
+**How the samples change this order.** The table below was ranked before we had them, and it leans on checklists. Neither sample states hydrants, flood, occupancy, or exposure distances. If EQORE's set looks like the samples, the top of the list for the **electrical set** is:
+
+1. Existing main switchboard ratings, sections, and photos (bus, voltage, phase, main breaker, kAIC)
+2. Location of the switchboard, electrical room, meter or CT cabinet, and utility transformer
+3. Existing panels and loads near the tap
+4. Existing DER, with each inverter on the single-line
+5. Parcel line, building outline, and aerial base image
+6. Space and working clearance around the candidate area, including overhangs, trees, curbs, and egress paths
+7. Existing conduits and underground lines
+8. Applicable code editions and available fault current
+
+Fire and planning review still need the fire and zoning fields below (Monroe, Pembroke, and Worthington), perhaps in another package.
 
 ### Tier 1: can't do a credible layout without these
 
@@ -353,6 +373,10 @@ Scored by how many sheets and checks depend on a field, weighted toward C&I-scal
 | 27 | **Design snow, wind, and climate data** | New | Sturbridge C-1 lists 35 psf ground snow, 124 mph wind, and ASHRAE temperatures from a named airport. Public sources may cover these. Use on the BESS part isn't stated. |
 | 28 | **Utility case number, POI pole number** | New | Sturbridge title block and C-1 show both |
 | 29 | **Registry book and page, recorded plans** | New | Sturbridge G001 and V101 cite these. Public, and useful evidence for the boundary. |
+| 30 | **Photos of existing electrical gear, with equipment IDs** | New | Sample 2 places them on E-120 and marks the proposed tap. They are also the evidence for ranks 4 to 6. |
+| 31 | **Available fault current, with basis** | New | Sample 2 prints "assumed available fault current: 65,000 AIC". Sample 1's E-400 has an available fault current label. |
+| 32 | **Existing conduits, spares, vaults** | New | Sample 2 shows them, with a note that a vault may not exist. Sample 1 says to field verify. |
+| 33 | **Utility circuit ID, primary voltage, overhead or underground** | New | HOL E-101 shows all three. Whether a behind-the-meter set needs them is unconfirmed. |
 
 ### Tier 3: doesn't drive a sheet
 
@@ -370,6 +394,48 @@ Scored by how many sheets and checks depend on a field, weighted toward C&I-scal
 
 Candidate pad location, tie-in point, conduit run path, distance to lot line, distance to openings or exits, interconnection track. See the boundary table above.
 
+## The provided IFC samples
+
+`provided resources/` appeared during this session with two PDFs and an empty `Sample Input Images` folder. It's untracked in git. We don't know who supplied it or whether these are the sets the brief describes. We didn't try to recover redacted text. Neither is the Century Tywood set by name.
+
+**Where each value on the sheets could come from.** The source column is **Inference**, for EQORE to correct.
+
+| Value on the sheet | Sample | Likely source | Reachable without a visit? |
+|---|---|---|---|
+| Aerial base, building outline, roads | Both | Imagery | Yes |
+| Property line | Sample 1 from public KMZ (stated), Sample 2 unstated | Parcel data | Yes, as reference |
+| Setback line, overhangs, curbs, trees | Sample 2 | Zoning, imagery, plans, site | Partly |
+| Utility transformer location | Both | Imagery, street view | Often |
+| Meter and CT cabinet location | Both | Street view, customer | Sometimes |
+| Electrical room and entrance | Sample 1 | Customer, old plans | Sometimes |
+| Main switchboard: 800 A 208 V, or 3000 A 480Y/277 V 65 kAIC | Both | Nameplate, old single-line | Rarely from public data |
+| Sections of the switchboard and tap location | Sample 2, from photos | Site or customer photos | Only with photos |
+| Existing panels: 400 A x4, 225 A x2 | Sample 1 | Site or customer photos | Only with photos |
+| Existing PV inverters, by circuit | Sample 2 | Prior permit set | If records exist |
+| Spare conduits and vault | Sample 2 | Prior permit set, then field verify | Partly |
+| Temperatures from a named weather site | Sample 2 | ASHRAE data | Yes |
+| Code list | Both | AHJ | Yes |
+
+**Implications (Inference):**
+
+- A useful Option 1 demo doesn't need to replace the visit entirely. Public sources can draft G-100 and the top of T-000. Customer photos can close most of E-120 and the existing side of E-300. The record's job is to show which is which.
+- `Sample Input Images` suggests photos are an expected input, but the folder is empty. Ask for its contents.
+
+**Conduit routes confirm the boundary.** Both samples say "conduit routing is diagrammatic, contractor shall determine best conduit route". The tie-in and pad are engineer decisions, and the route is resolved in the field.
+
+**Real inconsistencies inside Sample 1.** We can't tell if these are original or introduced when it was anonymized.
+
+| Value | One sheet | Another sheet |
+|---|---|---|
+| BESS model voltage | 480 V (T-000, G-100 callout, E-110, E-121, E-300) | 208 V (G-100 details, E-120) |
+| Transformer | Inside BESS enclosure (G-100, E-300) | Pad mounted (E-120) |
+| Metering box | EMS metering box (G-100, E-300) | DAS enclosure (E-110, E-120) |
+| Project type in notes | BESS project | "This PV system" in boilerplate (E-000) |
+
+These are Option 2's problem more than Option 1's. They do show why the design values need one source of truth.
+
+**Fire scale check.** Sample 2 places three 176 kWh cabinets together on one pad, marked UL 9540 and UL 9540A listed, under California code. That doesn't fit a simple reading of the reported 50 kWh grouping, and we don't know the basis. It may rest on test results, a different code, or review not shown here. Don't apply our Massachusetts reading to it, and ask EQORE.
+
 ## Real examples
 
 | Item | What we could learn | Limit |
@@ -379,7 +445,7 @@ Candidate pad location, tie-in point, conduit run path, distance to lot line, di
 | STUR, Sturbridge sets | Real sheets, see below | No single-line, structural, or fire sheets posted. Public-records found the working URLs after the old paths returned 404. |
 | Haverhill MA, National Grid expedited application | Might show a real completed form | Link returned 404 |
 
-**Not found:** a complete C&I plan set that includes a single-line. We did not invent contents for Century Tywood or any other set. Per lane public-records (not rechecked here): the Pembroke set wasn't found in 1 search, the Holliston portal's robots.txt disallows crawling, and Holliston's blank forms ask for service amps, volts, overhead or underground, meter count, use group, construction type, height, area, and sprinkler. No filled form was seen. Details are in `docs/research/2026-11-07-option1-public-records.md`.
+**Plan set availability now:** the samples are the only complete sets with a BESS single-line. HOL E-101 is a public PV one-line, with revisions for pole number, meter CT, relay settings, a recloser, utility comments, and an inverter change. Its revision log says 13.2 kV while the drawing says 13.8 kV. Per lane public-records (not rechecked here): the Pembroke set wasn't found in 1 search, the Holliston portal's robots.txt disallows crawling, and Holliston's blank forms ask for service amps, volts, overhead or underground, meter count, use group, construction type, height, area, and sprinkler. No filled form was seen. Details are in `docs/research/2026-11-07-option1-public-records.md`. We did not invent contents for Century Tywood or any other set.
 
 ### Sturbridge: what a real set shows
 
@@ -434,14 +500,16 @@ C-1, dated 01-10-2022, kept its own revision series while the civil sheets start
 | Address | 194 Main St (first set, C-1, CAD file paths) | 178 Main St (narrative, rev 3) |
 | Parcel area | 14.435 acres (G001, V101) | 14.6 acres (narrative) |
 | Lot | Lot U1, 2.239 acres | Lot 196, 14.435 acres (both in V101) |
-| Parcel ID | 415-03417-000 (G001) | 415-03417-U1 (decision) |
-| Property owner | SEA Sturbridge Plaza LLC (G001, both sets) | Dragonfly Ibis Sturbridge, LLC (decision, typed "Dragonly" on page 1) |
+| Parcel ID | 415-03417-000 (G001) | 415-03417-U1 (decision, assessor card, which lists retail condo use and a lot size of 0 acres) |
+| Property owner | SEA Sturbridge Plaza LLC (G001, both sets) | Dragonfly Ibis Sturbridge, LLC (decision, typed "Dragonly" on page 1). [Assessor card](https://gis.vgsi.com/sturbridgema/Parcel.aspx?pid=102518) shows it as owner from 07/30/2018, so the plan cover looks out of date. |
 | Plan revision reviewed | Rev 3, 04/01/2025 (posted set, before the meeting) | "Revised through 03/24/2025" (decision) |
 | Battery energy | 1,222.02 kWh (C-1, C-2) | "1MWh" (narrative) |
 | Modules | 1,105 (C-1) | "approximately 1,100" (narrative) |
 | Code edition | 9th edition 780 CMR, IBC 2015, NEC 2020 (C-1) | The brief names the 10th edition, based on the 2021 IBC |
 
 Some may have ordinary explanations, such as two lots, rounding, a change of owner, or a design that began under an earlier code. The record should show them as conflicting and let a person decide. Three of these concern which parcel the project is on, and that decides which lot lines the clearances are measured from (Inference). The revision row shows why a decision needs to cite a version ID. This matters for D4, because real public conflicts answer the risk noted in `decision.md` that planted conflicts look rigged. Real documents name real parties, so check with the team before showing them.
+
+**Assessor cards reach some Tier 1 fields.** The same card lists exterior walls (concrete or cinder, and brick or masonry), flat tar and gravel roof, a wet sprinkler entry, and year built 1972. It also lists "Occupancy: 4". That looks like a count, not a code occupancy class, so an automated extractor shouldn't treat it as one (Inference).
 
 ## Questions for EQORE
 
@@ -474,3 +542,10 @@ Some may have ordinary explanations, such as two lots, rounding, a change of own
 16. Does Sturbridge's structure match your sets: separate civil and electrical packages, with an aerial-based electrical cover sheet? Would your engineers stamp that sheet?
 17. When a design starts under one code edition and files under a later one, which edition goes on the sheet?
 18. Does your survey sheet use public GIS for wetlands and flood the way Sturbridge's does? When do you pay for field delineation?
+
+**Provided samples**
+19. Are `BESS IFC Sample 1` and `2` from EQORE, and do they represent your sets? Can we use them in a public demo?
+20. Were these sets also what went to the AHJ, or is the permit set different? Where are the fire, structural, and civil packages?
+21. Sample 1's site plan is "not surveyed". When is that acceptable to you and to AHJs, and when do you survey?
+22. What was meant to go in `Sample Input Images`? Who takes the switchboard photos today, and how often do they need a second visit?
+23. How was Sample 2's "assumed" 65,000 AIC decided, and when does the utility give an actual value?
