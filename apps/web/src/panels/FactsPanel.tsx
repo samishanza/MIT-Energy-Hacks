@@ -8,7 +8,8 @@ export interface FactsPanelProps {
   record: RecordVersion;
   selectedFields: string[];
   onSelect: (field: string) => void;
-  onOpenReport: () => void;
+  /** Opens the evidence check. Without it, the not-public line only explains. */
+  onOpenReport?: () => void;
 }
 
 function FactRow({ record, value, selected, onSelect }: { record: RecordVersion; value: Value; selected: boolean; onSelect: () => void }) {
@@ -51,9 +52,10 @@ export function FactsPanel({ record, selectedFields, onSelect, onOpenReport }: F
         const missing = values.filter((value) => !isFound(value));
         return (
           <section key={family} className="family" aria-label={`${FAMILY_WORDS[family]} facts`}>
-            <h3>
+            <details>
+            <summary>
               {FAMILY_WORDS[family]} <span className="note">{found.length} found</span>
-            </h3>
+            </summary>
             <ul className="fact-list">
               {found.map((value) => (
                 <FactRow
@@ -80,6 +82,7 @@ export function FactsPanel({ record, selectedFields, onSelect, onOpenReport }: F
                 </ul>
               </details>
             ) : null}
+            </details>
           </section>
         );
       })}
@@ -95,9 +98,11 @@ export function FactsPanel({ record, selectedFields, onSelect, onOpenReport }: F
               number, or where equipment sits. They come from a bill, photos, old drawings, or a qualified person.
               Engineer decisions, such as system size, are yours to make. None of this is needed to see the map.
             </p>
-            <button type="button" onClick={onOpenReport}>
-              Open the evidence check and requests
-            </button>
+            {onOpenReport ? (
+              <button type="button" onClick={onOpenReport}>
+                Open the evidence check and requests
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
