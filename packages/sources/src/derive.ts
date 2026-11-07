@@ -53,6 +53,27 @@ function candidateAttributes(reading: Observation, related: Observation[]): Cand
   return attributes;
 }
 
+// A source that now says it has no value for an object takes back what it read for that object before,
+// as when a placeholder such as a zoning code of 0 is recognized after earlier runs read it. The older
+// readings stay in the evidence. A failure names no object, so an outage never takes back a reading.
+function withoutSuperseded(observations: Observation[]): Observation[] {
+  const superseded = new Set<Observation>();
+  observations.forEach((later, index) => {
+    if (later.kind !== "no_value" || !later.locator.objectId) return;
+    for (const earlier of observations.slice(0, index)) {
+      if (
+        earlier.kind === "reading" &&
+        earlier.source.id === later.source.id &&
+        earlier.locator.attribute === later.locator.attribute &&
+        earlier.locator.objectId === later.locator.objectId
+      ) {
+        superseded.add(earlier);
+      }
+    }
+  });
+  return superseded.size ? observations.filter((observation) => !superseded.has(observation)) : observations;
+}
+
 // Folds one field's observations, oldest first, into its current value.
 export function deriveValue(definition: FieldDefinition, observations: Observation[], related: Observation[] = []): Value {
   let state: Value["state"] = "missing";
@@ -75,7 +96,7 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
   const conflictKindFor = (): Value["conflictKind"] =>
     definition.comparison?.kind !== "candidates" ? "source_disagreement" : definition.field === "feeder" ? "feeder_candidates" : "listed_candidates";
 
-  for (const observation of observations) {
+  for (const observation of withoutSuperseded(observations)) {
     const identity = identityKey(observation);
     const repeat = seen.has(identity);
     seen.add(identity);
