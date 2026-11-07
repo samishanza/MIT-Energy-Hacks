@@ -90,6 +90,8 @@ Research and live tests on 2026-11-07 show the facts split in three. Physical fa
 - R54. The tool shows where batteries could go: open areas inside the parcel, clear of buildings and mapped constraints, with size, surface, slope, and measured distances. They're labeled as candidates, never as a layout or a code result.
 - R55. The record exports to the drawing agent with everything it reads. A value the agent needs and the record lacks is reported as a gap, and any drawing stays labeled concept-grade.
 - R59. No input beyond the address is required, and the first view never asks for customer documents, engineer decisions, or approvals. Facts that aren't public are summarized in one line, saying why they aren't public, and open only on request.
+- R61. The tool shows where a battery is eligible to go under researched fire-code rules, as zones with the rule behind each one, and never picks a location. It shows which zones fit EQORE's chosen standard configuration.
+- R62. The user can see the real site, not only geometry: one click opens it in Google Earth and in Street View, and the map shows buildings in 3D from their estimated height.
 - R60. Every measurement a site visit would otherwise take (lot and building dimensions, distances to lot lines, lines, roads, and constraints, elevation, and slope) shows how it was measured, its source date, and that it's from public data and not a survey. One line says how many grid connection request items public data covers, and that the rest wait on the engineer's decisions or customer documents.
 - R58. The tool works for any Massachusetts address. Every address gets the physical record, and grid data wherever a public source covers it. Where none does, it names the utility, says grid data isn't available, and names who to ask. An address never dead-ends.
 - R57. Every value shows how good it is: its source date or age, and its resolution or grade. Where a second independent source exists, the tool checks one against the other and records whether they agree, disagree, or couldn't be checked. It flags a disagreement and never settles it silently.
@@ -233,6 +235,19 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 - KTD34. **The engineer API refuses any foreign Origin or Host.** Loopback binding doesn't stop a web page in the engineer's browser from posting to it, including a multipart upload. The middleware and tests exist for this, and it applies to every engineer route.
 - KTD35. **Candidate areas reuse `derivePadCandidates` in `packages/drc`.** It takes the lot polygon, less a buffer around every building and a strip inside the lot line, and inscribes the largest rectangles, on real polygons rather than the fitted box. U15 extends it with mapped constraints and road surfaces. It claims open ground and nothing about surface. Its strip is a drawing margin, never a required setback. The pad itself remains an engineer decision, so a sheet may place units on the largest area only when it says that's an assumption.
 - KTD36. **The sheet draws real polygons, through the agent layer's code.** `@eqore/sheets` already draws the lot, every structure, and pad candidates from the record, because Setback's `Site` holds only one lot box and one building, and it placed units off the Worcester parcel in testing. Use `exportToSetback` only for the list of gaps. Call `compile` only after an engineer enters a pack and count, and show only its placement, labeled illustrative. Its checks, status, and electrical advice never reach a sheet, because on placeholder values they'd read as code results. (Chosen by the lead at the team's request to use best judgment: no array by default, over an assumed pack.)
+- KTD40. **Placement is an eligibility screen, not a choice.** Zones come from rules already researched in `docs/research/2026-11-07-option1-plan-set-bridge.md`, each shown with its citation and whether it was read directly or second-hand. It's a screen from public data, not code approval, and buildings' openings and exits aren't public, so egress distances stay unchecked. (session-settled: user-directed, chosen over drafting one pad location: the team wants eligibility from existing rules.)
+
+  | Rule | Value | Used for |
+  |---|---|---|
+  | IFC 1207.8.1 and NFPA 855 §4.4.3.1 | More than 100 ft from buildings, lot lines that can be built on, and public ways is remote outdoor | Remote zone |
+  | IFC 1207.8.3 and NFPA 855 §4.4.3.3 | 10 ft from exposures | Near-exposure zone |
+  | IFC 1207.8.3 exceptions | 3 ft with a 1-hour barrier, a 2-hour wall without openings, or a tested enclosure | Zone eligible only with an exception |
+  | NFPA 855 §4.8 | 600 kWh most near exposures | A configuration over 600 kWh, such as the Edge760, fits only remote zones or with an exception |
+  | NFPA 855 §4.4.3.6 | 10 ft cleared of vegetation | Flag from land cover |
+  | NFPA 1 §18.2.3, as amended by 527 CMR | Fire access within 150 ft, 20 ft wide | Flag from road width and distance |
+  | Local amendments | Such as Pembroke's 20 ft buffer | Person route, named on each zone |
+
+- KTD41. **The site view links out, and draws 3D from our own data.** "Open in Google Earth" and "Street View" are plain links to Google's own pages at the site's coordinates, so they need no key and nothing is copied into the app. 3D buildings come from MapLibre extrusion, using outlines and the estimated height. Embedding Google's 3D tiles in the app would need a Maps Platform key and billing, so it's deferred.
 - KTD39. **The product is the public-record map and site plan.** The team decided the visualization of traced public facts is the product, and an end-to-end application workflow isn't. Customer capture, draft extraction, and the readiness report stay in the code but leave the first view and the protected path, and get no new work. (session-settled: user-directed, chosen over the closed loop with customer evidence: the team wants least friction and decisions made easier from public data alone.)
 - KTD38. **Quality is the product's novelty.** Public data is available to anyone. What's new is one configurable pipeline that aims at what a plan set needs, says how old and how coarse every value is, and tests independent sources against each other. A flat list of values wouldn't show that, so cross-checks are stored on the value and shown on selection.
 - KTD37. **The agent layer wins where it overlaps this plan.** Battery areas, slope, polygon geometry, record conversion, the sheet, and the drawing route use the teammate's code, and this plan adds to it instead of rebuilding it. `packages/sources` stays the only data puller, and `packages/contract` stays the record's schema, so `packages/agents/src/sources/slope.ts` is the one direct query outside it. (session-settled: user-directed, chosen over new code in `packages/sources`: the team said her agent layer overrides the overlaps.)
@@ -666,20 +681,23 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 
 ### U15. Where batteries could go
 
-- **Goal:** Show open areas that could hold batteries.
-- **Requirements:** R54
+- **Goal:** Show where a battery is eligible to go under researched rules, and which zones fit EQORE's chosen configuration.
+- **Requirements:** R54, R61
 - **Dependencies:** U12, U14, U11
-- **Files:** `packages/drc/src/polygon.ts`, `packages/drc/src/polygon.test.ts`, `packages/sheets/src/geometry.ts`, `apps/api/src/run.ts`
-- **Approach:** Follow KTD35. Pass every roofprint, plus mapped constraints and road surfaces, into `derivePadCandidates`, buffering roads by their mapped width, or by a stated assumed width recorded with method `assumed` where none is mapped. Store one summary reading, plus up to the five largest areas as features with `attributes`, `inferred` with method `computed`. Each gives its size and basis, and measures from its inscribed rectangle, using `rectToPolygonDistance`, because the polygon's own edges only restate the buffers. Slope comes from `measureSlope` over that rectangle, then Earth Engine, then missing with the reason. Surface comes from U11's land cover function. Each records which constraint layers it was cleared against, and which failed or aren't configured.
+- **Files:** `packages/drc/src/polygon.ts`, `packages/drc/src/eligibility.ts`, `packages/drc/src/eligibility.test.ts`, `packages/drc/src/rules.ts`, `packages/sheets/src/geometry.ts`, `apps/api/src/run.ts`
+- **Approach:**
+  1. Start from open ground: the lot, less every roofprint, road surface, and mapped constraint, buffering roads by their mapped width or a stated assumed one.
+  2. Split it into zones by KTD40's rules, measured from buildings, lot lines, and public ways: remote, near-exposure, eligible only with an exception, and excluded. Store each zone as a `candidate_area` feature whose attributes give its tier, area, the rules and citations behind it, and each rule's status in our research.
+  3. Take EQORE's chosen configuration, defaulting to `EQORE_EDGE760` and its roughly 11.5 by 14 ft pad, and mark each zone that fits that pad with its clearances. Apply the 600 kWh limit near exposures.
+  4. Add flags, not exclusions, for vegetation within 10 ft (from land cover), fire access beyond 150 ft or on a road under 20 ft, and slope. Record which layers each zone was checked against, and which failed or aren't configured.
+  5. Never choose a pad, and never call a zone compliant. Label every zone "eligibility screen from public data, not code approval", with local amendments as a person route.
 - **Test scenarios:**
-  - Covers AE21. No candidate overlaps a roofprint or mapped wetland.
-  - A failed wetlands query labels each candidate as not checked against wetlands.
-  - A road with no mapped width is still cut out, using the assumed width on record.
-  - A parcel fully covered by a building yields no candidates, stated as such.
-  - An area below the minimum is dropped, and the minimum is on the record.
-  - Distances are measured from the inscribed rectangle, and don't just restate the buffer.
-  - Missing slope or surface stays missing with its reason, and keeps the area.
-- **Verification:** On Worcester, a person compares the candidate areas with the aerial, and the areas exclude buildings and roads, fall inside the parcel, and state a surface.
+  - Covers AE21. No zone overlaps a roofprint, road, or mapped wetland.
+  - A point 50 ft from a building and 200 ft from the lot line is near-exposure, and one more than 100 ft from all exposures is remote.
+  - The Edge760, at 760 kWh, fits no near-exposure zone without an exception.
+  - A failed wetlands query labels each zone as not checked against wetlands.
+  - Egress is reported as unchecked on every zone, because openings aren't public.
+- **Verification:** On Worcester, a person compares the zones with the aerial, and each tier matches its rule.
 
 ### U16. Deeper utility data
 
@@ -726,7 +744,7 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 ### U19. Map-first screen
 
 - **Goal:** Make the map the product: every public fact drawn and traced, with nothing asked of the user beyond the address.
-- **Requirements:** R14, R15, R22, R50, R51, R52, R57, R58, R59, R60
+- **Requirements:** R14, R15, R22, R50, R51, R52, R57, R58, R59, R60, R61, R62
 - **Dependencies:** U12, then U13 through U16 at integration
 - **Files:** `apps/web/src/App.tsx`, `apps/web/src/map/SiteMap.tsx`, `apps/web/src/map/layers.ts`, `apps/web/src/panels/`, `apps/web/src/**/*.test.tsx`
 - **Approach:**
@@ -735,7 +753,9 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
   3. One status strip, in a fixed order: the concept-grade note, data labels, an unverified signal, and a summary such as "52 public facts found, 15 of 78 plan-set fields, 2 conflicts". A second line reads like "Grid connection request: 9 of 21 items from public data. The rest wait on your decisions or customer documents" (R60). During a run it reads like "Reading sources, 9 of 14 answered".
   4. A facts panel lists only public facts, grouped by family (physical, utility, energy), each with its source, date, and cross-checks. Selecting a fact highlights its feature, and selecting a feature opens its fact. Every row is keyboard-focusable.
   5. Facts that aren't public collapse into one closed line, "Not in public records: 36 customer facts and 41 engineer decisions", which opens a short explanation of why. The readiness report, capture links, and requests leave the first view and open only from that line.
-  6. Keep the site plan tab. Keep confirm and correct one click from a selected fact, sending `expectedObservationId`, but never prompt for it.
+  6. Draw the eligibility zones by tier, each opening its rules and citations, and highlight those that fit the chosen configuration. A small configuration picker defaults to the Edge760.
+  7. Add "Open in Google Earth" and "Street View" links at the site's coordinates, and at any selected point. Add a 3D toggle that extrudes buildings from their estimated height (KTD41).
+  8. Keep the site plan tab. Keep confirm and correct one click from a selected fact, sending `expectedObservationId`, but never prompt for it.
 - **Patterns to follow:** The UI plan's design system. This unit overrides its report-first layout and its emphasis on capture.
 - **Test scenarios:**
   - Covers AE20. After submitting an address, the map renders with no further click, no request list, and no source list visible.
@@ -744,6 +764,8 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
   - Selecting a dimension line opens its fact, and its row is reachable by keyboard.
   - Mid-run, the strip shows sources answered, and the parcel is drawn.
   - A failed source appears in the details and doesn't block the map.
+  - Eligibility zones draw by tier, and selecting one shows its rules, citations, and whether the Edge760 fits.
+  - The Google Earth and Street View links carry the site's coordinates, and the 3D toggle extrudes buildings with a known height.
 - **Verification:** In a browser at desktop and phone widths, a person enters a Worcester address and reaches a map that shows all the collected public data, with no further input and no console errors.
 
 ### U20. Hand off to the drawing agent
