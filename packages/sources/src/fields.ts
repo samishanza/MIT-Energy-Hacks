@@ -59,6 +59,7 @@ export const FIELDS: FieldDefinition[] = [
     ["wetlands_nearby", "Wetlands nearby"],
     ["fire_stations_nearby", "Fire stations nearby"],
     ["substations_nearby", "Substations nearby"],
+    ["land_cover", "Land cover across the site"],
     ["transmission_nearby", "Transmission lines nearby"],
     ["ground_elevation_ft", "Ground elevation"],
     ["site_slope_pct", "Ground slope across the parcel"],

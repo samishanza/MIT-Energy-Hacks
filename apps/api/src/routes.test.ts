@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ApiErrorSchema, RecordVersionSchema, RunProgressSchema, RunSiteResponseSchema, routes } from "@eqore/contract";
 import type { Observation, ObservedValue, RecordVersion, Value } from "@eqore/contract";
-import { fixtureFetch } from "@eqore/sources";
+import { fixtureFetch, recordedEarthEngine } from "@eqore/sources";
 import type { CaptureDeps } from "./capture.ts";
 import { createEngineerApp } from "./routes.ts";
 import { checkReadiness } from "./readiness.ts";
@@ -26,6 +26,7 @@ const testDeps = (snapshot = false): CaptureDeps => ({
   uploadDir: join(tmpdir(), "engineer-api-test-uploads"),
   capturePublicUrl: "https://tunnel.invalid",
   extractor: async () => ({ kind: "failed", reason: "No model call in this test" }),
+  earthEngine: recordedEarthEngine(dir("earthengine")),
 });
 
 function setup() {
@@ -93,8 +94,9 @@ describe("the engineer API", () => {
       ["massgis-fire-stations", "done"],
       ["usgs-epqs", "done"],
       ["hifld-retail-territories", "done"],
+      ["earth-engine-worldcover", "done"],
+      ["earth-engine-3dep", "done"],
       ["massgis-lidar-dem", "done"],
-      ["earth-engine", "missing"],
       ["fema-flood-map", "person_only"],
     ]);
     expect(deps.store.observations(SITE).length).toBe(record.observations.length);

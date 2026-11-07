@@ -75,14 +75,8 @@ export const californiaPge: RegionConfig = {
   ],
   jsonSources: [usgsPointElevation],
   territories: { ...hifldTerritories, withoutMap: {} },
-  unavailable: [
-    {
-      sourceId: "earth-engine",
-      name: "Google Earth Engine imagery and land cover",
-      fields: ["aerial_image", "land_cover"],
-      reason: "The Earth Engine adapter isn't built yet, so imagery and land cover are missing.",
-    },
-  ],
+  earthEngine: { landCover: true, terrain: true, imagery: true },
+  unavailable: [],
   personRoutes: [
     {
       sourceId: "alameda-county-assessor",

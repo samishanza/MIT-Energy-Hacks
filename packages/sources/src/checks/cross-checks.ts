@@ -75,10 +75,24 @@ function buildingArea({ observations, features }: Input): Found {
   };
 }
 
+// A point within the range a 10 m grid finds across the site, give or take this much.
+export const ELEVATION_TOLERANCE_FT = 5;
+
 function elevation({ observations }: Input): Found {
-  const label = "Ground elevation against a second source";
-  const usgs = quantity(latest(observations, "ground_elevation_ft"));
-  return notChecked("ground_elevation_ft", label, `${usgs === null ? "USGS has no elevation here, and" : "Only USGS gives an elevation here:"} the lidar service gives slope only, and Earth Engine isn't connected yet.`);
+  const label = "USGS point elevation against the 3DEP range across the site";
+  const point = quantity(latest(observations, "ground_elevation_ft", (observation) => observation.source.kind === "json_api"));
+  const low = quantity(latest(observations, "site_elevation_min_ft"));
+  const high = quantity(latest(observations, "site_elevation_max_ft"));
+  if (point === null || low === null || high === null) return notChecked("ground_elevation_ft", label, `${point === null ? "The USGS point elevation" : "The 3DEP range across the site"} is missing.`);
+  const within = point >= low - ELEVATION_TOLERANCE_FT && point <= high + ELEVATION_TOLERANCE_FT;
+  return {
+    field: "ground_elevation_ft",
+    check: {
+      label,
+      result: within ? "agrees" : "disagrees",
+      detail: `The point reads ${shown(point, 1)} ft, and the 10 m grid ranges ${shown(low, 1)} to ${shown(high, 1)} ft across the site, with ${ELEVATION_TOLERANCE_FT} ft of tolerance. Both come from USGS 3DEP, at different resolutions, so this catches a misplaced point more than an error in the data.`,
+    },
+  };
 }
 
 function servingUtility({ observations }: Input): Found[] {

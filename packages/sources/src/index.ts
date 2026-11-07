@@ -2,6 +2,7 @@ export { REGIONS, californiaPge, massachusetts } from "../config/index.ts";
 export * from "./catalog-map.ts";
 export * from "./checks/cross-checks.ts";
 export * from "./geometry.ts";
+export * from "./earthengine.ts";
 export * from "./json-api.ts";
 export * from "./layers.ts";
 export * from "./arcgis.ts";

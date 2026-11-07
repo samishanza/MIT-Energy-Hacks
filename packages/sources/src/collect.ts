@@ -6,6 +6,7 @@ import { padCandidates, type CandidateResult } from "./checks/candidates.ts";
 import { measureSite, type Measurements } from "./checks/measure.ts";
 import { anchorPhysical, collectOutlines } from "./checks/physical.ts";
 import { boxOf, verticesOf } from "./geometry.ts";
+import { collectEarthEngine, earthEngineMissing, IMAGERY_SOURCE, LAND_COVER_SOURCE, TERRAIN_SOURCE } from "./earthengine.ts";
 import { collectJson } from "./json-api.ts";
 import { collectLayer } from "./layers.ts";
 import { sourceOf, type NamedRoute, type RegionConfig } from "./registry.ts";
@@ -75,6 +76,26 @@ function routeObservations(route: NamedRoute, kind: "earth_engine" | "human_evid
   return route.fields.map((field) => observe(origin, ctx, { field, kind: "no_value", value: null, reason: route.reason }));
 }
 
+// A small square around a point, for a site with no parcel polygon.
+function squareAround([longitude, latitude]: [number, number], meters: number): PolygonGeometry {
+  const dLat = meters / 111_320;
+  const dLon = meters / (111_320 * Math.cos((latitude * Math.PI) / 180));
+  const ring: [number, number][] = [
+    [longitude - dLon, latitude - dLat],
+    [longitude + dLon, latitude - dLat],
+    [longitude + dLon, latitude + dLat],
+    [longitude - dLon, latitude + dLat],
+    [longitude - dLon, latitude - dLat],
+  ];
+  return { type: "Polygon", coordinates: [ring] };
+}
+
+async function collectRaster(region: RegionConfig, area: PolygonGeometry, ctx: CollectContext) {
+  if (!region.earthEngine) return null;
+  if (!ctx.earthEngine || "missing" in ctx.earthEngine) return earthEngineMissing(region.earthEngine, ctx.earthEngine?.missing ?? "Earth Engine isn't connected for this run.", ctx);
+  return collectEarthEngine(region.earthEngine, area, ctx.earthEngine, ctx);
+}
+
 // Measured by the agent layer's sampler, which the caller passes in, because it can't be imported from here.
 async function collectSlope(region: RegionConfig, parcel: PolygonGeometry | null, ctx: CollectContext) {
   const config = region.lidarSlope;
@@ -141,6 +162,10 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   for (const layer of region.layers ?? []) pending(layer.entry.id, layer.entry.name);
   for (const json of region.jsonSources ?? []) pending(json.id, json.name);
   if (region.territories) pending(region.territories.entry.id, region.territories.entry.name);
+  if (region.earthEngine) {
+    const { landCover, terrain, imagery } = region.earthEngine;
+    for (const [wanted, entry] of [[landCover, LAND_COVER_SOURCE], [terrain, TERRAIN_SOURCE], [imagery, IMAGERY_SOURCE]] as const) if (wanted) pending(entry.id, entry.name);
+  }
   if (region.lidarSlope && ctx.measureSlope && physical.parcelGeometry) pending(region.lidarSlope.source.id, region.lidarSlope.source.name);
 
   const liveFeatures: MapFeature[] = [...physical.features];
@@ -156,7 +181,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   const layerAnchor = { parcel: physical.parcelGeometry, location: physical.location };
   const request = { location: physical.location, address };
 
-  const [outlines, grid, roads, layers, json, slope, territories] = await Promise.all([
+  const [outlines, grid, roads, layers, json, slope, territories, earth] = await Promise.all([
     region.buildings && physical.parcelGeometry ? collectOutlines(region.buildings, physical.parcelGeometry, parcel?.yearBuilt ?? null, ctx).then(landed) : null,
     collectGrid(region, physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] }, ctx).then(landed),
     region.roads && parcel
@@ -174,6 +199,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
           return result;
         })
       : null,
+    collectRaster(region, physical.parcelGeometry ?? squareAround(physical.location, 50), ctx).then((part) => (part ? landed(part) : null)),
   ]);
 
   const collected = [...physical.observations, ...(outlines?.observations ?? []), ...grid.observations];
@@ -223,6 +249,8 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...collected,
       ...measurements.observations,
       ...candidates.observations,
+      // A better local value, such as lidar slope or a 1 m point elevation, is read after Earth Engine's, so it stays current.
+      ...(earth?.observations ?? []),
       ...layers.flatMap((layer) => layer.observations),
       ...json.flatMap((source) => source.observations),
       ...(slope?.observations ?? []),
