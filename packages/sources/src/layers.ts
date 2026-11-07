@@ -2,7 +2,7 @@ import type { Geometry, MapFeature, Observation, ObservedValue, SourceRun } from
 import { observe, queryArcgis, readMapping, sourceDateOf, toObservations, type ArcgisFeature, type ArcgisResult, type CollectContext, type PolygonGeometry, type SpatialQuery } from "./arcgis.ts";
 import { feetBetween } from "./geometry.ts";
 import type { LayerSource } from "./registry.ts";
-import { normalizeStreet, parseAddress } from "./resolve-site.ts";
+import { normalizeStreet, streetNameOf } from "./resolve-site.ts";
 
 export type LayerAnchor = { parcel: PolygonGeometry | null; location: [number, number] };
 
@@ -29,7 +29,7 @@ function closestTo(anchor: Geometry, features: ArcgisFeature[]): { feature: Arcg
 function pickOne(source: Extract<LayerSource["mode"], { kind: "one" }>, features: ArcgisFeature[], anchor: Geometry, address: string): { feature: ArcgisFeature | null; note?: string } {
   const nearest = closestTo(anchor, features);
   if (source.pick === "first") return { feature: nearest[0]?.feature ?? features[0] ?? null };
-  const street = parseAddress(address)?.street.replace(/^\S+\s+/, "");
+  const street = streetNameOf(address);
   const attribute = source.streetAttribute!;
   const onStreet = nearest.find(({ feature }) => normalizeStreet(String(feature.attributes[attribute] ?? "")) === street);
   if (onStreet) return { feature: onStreet.feature };
@@ -43,23 +43,8 @@ function collectOne(source: LayerSource, mode: Extract<LayerSource["mode"], { ki
       observe(result, ctx, { field: mapping.field, kind: "no_value", value: null, attribute: mapping.attribute, reason: result.failure ?? mode.emptyReason ?? `The source returned nothing for ${result.query}` }),
     );
   }
-  // Areas that overlap the site, such as flood zones, keep every distinct answer in one reading.
-  if (mode.pick === "all_distinct") {
-    return source.entry.fields.map((mapping) => {
-      const read = result.features.flatMap((feature) => {
-        const value = readMapping(mapping, feature);
-        return "value" in value && value.value.type === "text" ? [value.value.value] : [];
-      });
-      const distinct = [...new Set(read)].sort();
-      if (distinct.length === 0) return observe(result, ctx, { field: mapping.field, kind: "no_value", value: null, attribute: mapping.attribute, reason: `${mapping.attribute} is blank in the source` });
-      return observe(result, ctx, { field: mapping.field, kind: "reading", value: { type: "text", value: distinct.join(", ") }, attribute: mapping.attribute, grade: mapping.grade, sourceDate: sourceDateOf(source.entry, result.features[0]!.attributes) });
-    });
-  }
   const { feature, note } = pickOne(mode, result.features, anchorGeometry(anchor), address);
-  if (!feature) return toObservations(result, ctx, []);
-  return toObservations(result, ctx, [feature]).map((observation) =>
-    note && observation.kind === "reading" ? observe(result, ctx, { field: observation.field, kind: "reading", value: observation.value, attribute: observation.locator.attribute, objectId: observation.locator.objectId, sourceDate: observation.sourceDate, grade: observation.grade, reason: note }) : observation,
-  );
+  return toObservations(result, ctx, feature ? [feature] : [], { note });
 }
 
 function collectItems(source: LayerSource, mode: Extract<LayerSource["mode"], { kind: "items" }>, result: ArcgisResult, anchor: LayerAnchor, ctx: CollectContext): { observations: Observation[]; features: MapFeature[] } {

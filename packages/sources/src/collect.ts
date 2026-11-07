@@ -29,13 +29,21 @@ class RunDeadlineError extends Error {
 
 // Past the deadline every unanswered request fails, and each source reports that through its usual path.
 function withRunDeadline(fetchImpl: FetchLike, milliseconds: number) {
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new RunDeadlineError(`No answer before the run's ${Math.round(milliseconds / 1000)}-second deadline`)), milliseconds);
+    timer = setTimeout(() => {
+      const error = new RunDeadlineError(`No answer before the run's ${Math.round(milliseconds / 1000)}-second deadline`);
+      controller.abort(error);
+      reject(error);
+    }, milliseconds);
     timer.unref?.();
   });
   deadline.catch(() => {});
-  const limited: FetchLike = (url, init) => Promise.race([fetchImpl(url, init), deadline]);
+  const limited: FetchLike = (url, init) => {
+    const signal = init?.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
+    return Promise.race([fetchImpl(url, { ...init, signal }), deadline]);
+  };
   return { limited, cancel: () => clearTimeout(timer) };
 }
 
@@ -93,7 +101,14 @@ async function collectSlope(region: RegionConfig, parcel: PolygonGeometry | null
 // Runs every source configured for the region at once. A failed or late source reports its reason, and the rest still run.
 export async function collectSite(address: string, region: RegionConfig, anchor: SiteAnchor, baseCtx: CollectContext, onProgress?: (progress: CollectProgress) => void): Promise<SiteCollection> {
   const { limited, cancel } = withRunDeadline(baseCtx.fetch, baseCtx.runDeadlineMs ?? RUN_DEADLINE_MS);
-  const ctx: CollectContext = { ...baseCtx, fetch: limited };
+  try {
+    return await collectWithin(address, region, anchor, { ...baseCtx, fetch: limited }, onProgress);
+  } finally {
+    cancel();
+  }
+}
+
+async function collectWithin(address: string, region: RegionConfig, anchor: SiteAnchor, ctx: CollectContext, onProgress?: (progress: CollectProgress) => void): Promise<SiteCollection> {
 
   const physical = anchorPhysical(region, anchor, ctx);
   const site: Site = { id: ctx.siteId, address, region: region.id, location: physical.location, locationMethod: physical.locationMethod };
@@ -147,7 +162,6 @@ export async function collectSite(address: string, region: RegionConfig, anchor:
         })
       : null,
   ]);
-  cancel();
 
   const collected = [...physical.observations, ...(outlines?.observations ?? []), ...grid.observations];
   let measurements: Measurements = { observations: [], features: [] };

@@ -57,7 +57,6 @@ describe('live Massachusetts sources, against recorded real responses', () => {
     const parcel = await sources.parcel(site);
     expect(parcel!.owner).toBeUndefined();
     expect(parcel!.zoningDistrict).toBe('I');
-    // West, from the mapped road. It was once fixed at south whatever the site.
     expect(parcel!.roadSide).toBe('west');
   });
 

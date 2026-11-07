@@ -131,7 +131,6 @@ const HAND_FAMILY: Record<string, Family> = {
   peak_demand_kw: "energy",
 };
 
-// Every catalog field has a value, so what nobody answered still shows with its owner and why.
 for (const route of CATALOG_ROUTES) {
   if (!FIELDS.some((definition) => definition.field === route.field)) {
     FIELDS.push({ field: route.field, label: route.label ?? route.key, owner: route.owner, grade: "reference", family: route.family, missingReason: route.why });

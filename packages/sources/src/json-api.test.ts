@@ -63,7 +63,6 @@ describe("the JSON adapter", () => {
     };
     const keys = { TEST_KEY: { host: "rates.example.invalid", param: "api_key", value: SECRET } };
     const directory = mkdtempSync(join(tmpdir(), "json-recording-"));
-    // The recorder sits outside the keyed fetch, as it does in a recording run.
     const recording = recordingFetch(directory, "keys", withApiKeys(network, keys), () => "2026-11-07T20:00:00.000Z");
     const result = await collectJson(keyed, request, context(recording, { availableKeys: withApiKeys(network, keys).available }));
 

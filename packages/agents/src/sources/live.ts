@@ -273,7 +273,6 @@ export async function makeLiveSources(opts: LiveOptions): Promise<LiveSources> {
       : null;
 
   const hostingKw = readNumber(observations, 'hosting_capacity');
-  // Overlapping territories are candidates, and only one name is a utility the agent can use.
   const utilityNames = [...new Set(observations.flatMap((o) => (o.field === 'serving_utility' && o.value?.type === 'text' ? [o.value.value] : [])))];
   const utilityName = utilityNames.length === 1 ? utilityNames[0]! : null;
 
