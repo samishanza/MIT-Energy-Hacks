@@ -34,6 +34,7 @@ const SOURCE_MAP: Record<RecordSourceKind, SetbackSourceKind> = {
   tariff_db: 'bill',
   hosting_map: 'assumed',
   flood_map: 'aerial',
+  gis_footprint: 'aerial',
   lidar_3dep: 'aerial',
   hydrant_gis: 'aerial',
   street_level: 'site-photo',

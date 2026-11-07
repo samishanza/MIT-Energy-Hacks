@@ -29,10 +29,15 @@ export const parcelAgent: Agent = {
       confidence: 0.97,
       rationale: 'Assessor parcel identifier from the matched polygon.',
     });
-    e.propose('zoning.district', parcel.zoningDistrict, parcel, 'parcel', {
-      confidence: 0.85,
-      rationale: 'Zoning district from the municipal zoning layer at the parcel centroid.',
-    });
+    if (parcel.zoningDistrict) {
+      e.propose('zoning.district', parcel.zoningDistrict, parcel, 'parcel', {
+        confidence: 0.85,
+        rationale: 'Zoning district from the municipal zoning layer at the parcel centroid.',
+      });
+    } else {
+      e.miss('zoning.district');
+      e.note('parcel layer carries no zoning district; a use code is not a substitute for one');
+    }
     e.propose('site.road_side', parcel.roadSide, parcel, 'parcel', {
       confidence: 0.8,
       rationale: 'Parcel edge coincident with the public right-of-way.',
@@ -77,30 +82,38 @@ export const parcelAgent: Agent = {
     if (assessor) {
       // Proposed from both sources on purpose. If they disagree, reconciliation raises a
       // conflict with both crops side by side rather than silently picking one.
-      e.propose('site.owner', assessor.owner, assessor, 'assessor', {
-        confidence: 0.9,
-        rationale: 'Owner of record on the assessor card.',
-      });
+      if (assessor.owner) {
+        e.propose('site.owner', assessor.owner, assessor, 'assessor', {
+          confidence: 0.9,
+          rationale: 'Owner of record on the assessor card.',
+        });
+      } else {
+        e.miss('site.owner');
+      }
       e.propose('site.year_built', assessor.yearBuilt, assessor, 'assessor', {
         confidence: 0.8,
         rationale: 'Year built from the assessor card; a proxy for the code edition the service was built to.',
       });
-      if (parcel.owner && parcel.owner !== assessor.owner) {
+      if (parcel.owner && assessor.owner && parcel.owner !== assessor.owner) {
         e.propose('site.owner', parcel.owner, parcel, 'parcel', {
           confidence: 0.7,
           rationale: 'Owner name carried on the parcel layer, which disagrees with the assessor card.',
         });
         e.note(`owner disagrees between parcel ("${parcel.owner}") and assessor ("${assessor.owner}")`);
       }
-      e.note(
-        `assessor building area ${assessor.buildingAreaSqft} sqft — compare against the measured footprint`,
-      );
-    } else {
+      if (assessor.buildingAreaSqft) {
+        e.note(
+          `assessor building area ${assessor.buildingAreaSqft} sqft — compare against the measured footprint`,
+        );
+      }
+    } else if (parcel.owner) {
       e.propose('site.owner', parcel.owner, parcel, 'parcel', {
         confidence: 0.7,
         rationale: 'Owner name from the parcel layer; no assessor card available.',
       });
       e.miss('site.year_built');
+    } else {
+      e.miss('site.owner', 'site.year_built');
     }
 
     return e.result();
