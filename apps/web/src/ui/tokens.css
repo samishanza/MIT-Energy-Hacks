@@ -876,7 +876,7 @@ legend {
 }
 
 /* ---- site plan sheet tab (added alongside the map view) ---- */
-.view-tabs { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line, #d9d2ca); background: var(--surface, #fbf8f4); }
+.view-tabs { position: relative; z-index: 2; display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line, #d9d2ca); background: var(--surface, #fbf8f4); }
 .view-tabs button { border: 1px solid #c9d3da; background: transparent; border-radius: 999px; padding: 4px 14px; font: inherit; font-size: 13px; cursor: pointer; color: #1d2a35; }
 .view-tabs button.on { background: #2f5470; border-color: #2f5470; color: #fff; }
 .sheet { margin: 0; padding: 10px; overflow: auto; background: #f3eee8; height: 100%; }
