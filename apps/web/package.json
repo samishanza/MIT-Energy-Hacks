@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:mock": "vite --mode mock",
+    "build": "vite build"
+  },
   "dependencies": {
     "@eqore/contract": "^0.1.0",
     "maplibre-gl": "^6.16.0",
