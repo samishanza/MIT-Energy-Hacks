@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Value } from "@eqore/contract";
 import { REGIONS, massachusetts, californiaPge, type CollectContext, type FetchLike, type RegionConfig } from "../index.ts";
+import { readMapping } from "../arcgis.ts";
 import { collectSite, siteIdFor } from "../collect.ts";
 import { deriveValues } from "../derive.ts";
 import { fixtureFetch } from "../fixtures.ts";
@@ -192,6 +193,31 @@ describe("the wider physical record", () => {
     const { value } = await collect("47200 Bayside Pkwy, Fremont, CA", recorded, {}, californiaPge);
     expect(value("ground_elevation_ft").state).toBe("inferred");
     expect(value("municipality").state).toBe("missing");
+  });
+});
+
+describe("a finished record", () => {
+  it("lists no source as pending, such as a feeder's detail layers when no feeder was found", async () => {
+    const { collection, value } = await collect("11 Bartzak Dr, Holliston, MA");
+    expect(collection.sourceRuns.filter((run) => run.status === "pending")).toEqual([]);
+    expect(collection.sourceRuns.some((run) => run.sourceId === "national-grid-feeder-loading")).toBe(false);
+    expect(value("feeder").state).toBe("missing");
+  });
+
+  it("stores a placeholder zoning code such as 0 as missing, with the reason", () => {
+    const zoning = massachusetts.parcels!.entry.fields.find((mapping) => mapping.field === "zoning_district")!;
+    for (const placeholder of ["0", "n/a", "None"]) {
+      expect(readMapping(zoning, { objectId: "1", attributes: { ZONING: placeholder }, geometry: null })).toEqual({ reason: `ZONING is ${placeholder} in the source, which means it has no value` });
+    }
+    expect(readMapping(zoning, { objectId: "1", attributes: { ZONING: "ML-.5" }, geometry: null })).toEqual({ value: { type: "text", value: "ML-.5" } });
+  });
+
+  it("draws the mapped roads, with the address's street named", async () => {
+    const { collection } = await collect("100 Research Dr, Worcester, MA");
+    const roads = collection.features.filter((feature) => feature.kind === "road");
+    expect(roads.length).toBeGreaterThan(0);
+    expect(roads.some((road) => road.label === "Research Dr, the street in the address (mapped centerline, not surveyed)")).toBe(true);
+    expect(roads.every((road) => road.field === "road_name" && road.attributes?.distance_ft)).toBe(true);
   });
 });
 

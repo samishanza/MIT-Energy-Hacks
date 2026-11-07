@@ -177,6 +177,18 @@ export function measureSite(input: MeasureInputs, ctx: CollectContext): Measurem
       })
       .sort((a, b) => a.gap.feet - b.gap.feet || a.name.localeCompare(b.name));
     const onAddress = roads.find((road) => normalizeStreet(road.name) === street);
+    // Every mapped road nearby is drawn, so the map, site plan, and exports show them, with the address's street named as such.
+    roads.forEach((road, index) => {
+      const fronting = road === onAddress || (onAddress && road.name === onAddress.name);
+      features.push({
+        id: `road-${index + 1}`,
+        kind: "road",
+        field: "road_name",
+        geometry: road.feature.geometry!,
+        label: `${road.name}${fronting ? ", the street in the address" : ""} (mapped centerline, not surveyed)`,
+        attributes: { distance_ft: { type: "quantity", value: Math.round(road.gap.feet), unit: "ft" } },
+      });
+    });
     if (onAddress) {
       const others = [...new Set(roads.filter((road) => road.side !== onAddress.side && road.feature.attributes[nameAttribute]).map((road) => `${road.name} to the ${road.side}`))];
       record(
