@@ -13,7 +13,8 @@ import {
   type LocalFrame,
   type LocalPolygon,
   type PadCandidate,
-} from '@eqore/drc';
+  // The polygon module only, because the package index reaches server-only collection code.
+} from '@eqore/drc/polygon';
 
 export interface SheetGeometry {
   frame: LocalFrame;
