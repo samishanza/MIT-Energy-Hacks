@@ -137,7 +137,10 @@ describe('a parcel with several structures', () => {
   it('sorts roofprints by area, largest first', () => {
     const feat = (w: number, h: number) => ({
       id: `b${w}`, kind: 'building_outline' as const, field: 'building_outline',
-      geometry: { type: 'Polygon' as const, coordinates: [[[-71.5, 42.0], [-71.5 + w, 42.0], [-71.5 + w, 42.0 + h], [-71.5, 42.0 + h], [-71.5, 42.0]]] },
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [[[-71.5, 42.0], [-71.5 + w, 42.0], [-71.5 + w, 42.0 + h], [-71.5, 42.0 + h], [-71.5, 42.0]]] as [number, number][][],
+      },
     });
     const sorted = buildingsByArea([feat(0.0001, 0.0001), feat(0.001, 0.001), feat(0.0005, 0.0005)]);
     expect(sorted).toHaveLength(3);
