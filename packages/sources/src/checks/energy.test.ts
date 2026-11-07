@@ -73,7 +73,6 @@ describe("the feeder search", () => {
     const { value } = await collect("100 Research Dr, Worcester, MA", empty);
     expect(value("feeder").state).toBe("missing");
     expect(value("feeder").reason).toContain("National Grid's map shows no feeder within 150 m of this site.");
-    // With no feeder, the overlapping territories stay candidates.
     expect(value("serving_utility").state).toBe("conflicting");
   });
 });

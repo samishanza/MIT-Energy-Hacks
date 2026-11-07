@@ -59,6 +59,11 @@ export function normalizeStreet(street: string): string {
   return words.join(" ");
 }
 
+// The street without its house number: 100 Research Drive, Worcester becomes RESEARCH DR.
+export function streetNameOf(address: string): string | null {
+  return parseAddress(address)?.street.replace(/^\S+\s+/, "") ?? null;
+}
+
 // Takes a state off the end of the text, as a code or a name, with any ZIP code after it.
 function splitState(text: string): { rest: string; state?: string } {
   const withoutZip = text.trim().replace(/[\s,]+\d{5}(?:-\d{4})?$/, "").replace(/[\s,]+(?:USA?|UNITED STATES)$/i, "");

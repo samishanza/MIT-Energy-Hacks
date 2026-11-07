@@ -12,7 +12,7 @@ import {
 import type { EvidenceRef, MapFeature, Observation, ObservedValue, RecordVersion, RunProgress, Value } from "@eqore/contract";
 import { REGIONS, canonicalAddress, catalogCoverage, collectSite, deriveValues, fieldDefinition, resolveSite, selectRegion, sha256, siteIdFor } from "@eqore/sources";
 import { measureSlope } from "@eqore/agents";
-import type { CollectContext, FetchLike } from "@eqore/sources";
+import type { CollectContext, FetchLike, RegionConfig, SiteChoice } from "@eqore/sources";
 import { z } from "zod";
 import type { Store } from "./store.ts";
 
@@ -36,7 +36,6 @@ export type ApiDeps = {
   retryDelayMs?: number;
   availableKeys?: string[];
   runDeadlineMs?: number;
-  // What's known during a run, by the address as typed.
   progress?: Map<string, RunProgress>;
 };
 
@@ -96,6 +95,18 @@ export function runProgressKey(address: string): string {
   return address.trim().toLowerCase();
 }
 
+const KEPT_RUNS = 50;
+
+function setProgress(deps: ApiDeps, key: string, progress: RunProgress) {
+  if (!deps.progress) return;
+  deps.progress.delete(key);
+  deps.progress.set(key, progress);
+  for (const oldest of deps.progress.keys()) {
+    if (deps.progress.size <= KEPT_RUNS) break;
+    deps.progress.delete(oldest);
+  }
+}
+
 export async function runSite(deps: ApiDeps, body: unknown) {
   const { address: asTyped, choice } = parseRequest(RunSiteRequestSchema, body);
   const progressKey = runProgressKey(asTyped);
@@ -107,10 +118,24 @@ export async function runSite(deps: ApiDeps, body: unknown) {
 
   const siteId = siteIdFor(address);
   const ctx: CollectContext = { siteId, fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs, availableKeys: deps.availableKeys, runDeadlineMs: deps.runDeadlineMs, measureSlope };
-  deps.progress?.set(progressKey, { status: "running", sourceRuns: [], features: [] });
+  setProgress(deps, progressKey, { status: "running", sourceRuns: [], features: [] });
+  try {
+    return await collectAndRecord(deps, { address, region, siteId, ctx, choice, progressKey });
+  } catch (error) {
+    setProgress(deps, progressKey, { status: "failed", sourceRuns: [], features: [], reason: (error as Error).message });
+    throw error;
+  }
+}
+
+async function collectAndRecord(
+  deps: ApiDeps,
+  { address, region, siteId, ctx, choice, progressKey }: { address: string; region: RegionConfig; siteId: string; ctx: CollectContext; choice?: SiteChoice; progressKey: string },
+) {
   const resolved = await resolveSite(address, region, ctx, choice);
-  if (resolved.status === "needs_choice") deps.progress?.delete(progressKey);
-  if (resolved.status === "needs_choice") return { status: "needs_choice" as const, candidates: resolved.candidates };
+  if (resolved.status === "needs_choice") {
+    deps.progress?.delete(progressKey);
+    return { status: "needs_choice" as const, candidates: resolved.candidates };
+  }
 
   // During an outage, a street-level point would add conflicting readings to a parcel-anchored site that
   // no later run could clear. The current record stays until the parcel service answers.
@@ -119,11 +144,11 @@ export async function runSite(deps: ApiDeps, body: unknown) {
     if (anchored) throw new ApiFailure("source_failed", 502, `The parcel source failed, so the current record was kept. ${resolved.anchor.parcelLookup.failure}`);
   }
 
-  const collection = await collectSite(address, region, resolved.anchor, ctx, (progress) => deps.progress?.set(progressKey, { status: "running", ...progress }));
+  const collection = await collectSite(address, region, resolved.anchor, ctx, (progress) => setProgress(deps, progressKey, { status: "running", ...progress }));
   deps.store.saveSite(collection.site);
   deps.store.appendObservations(collection.observations);
 
-  deps.progress?.set(progressKey, { status: "done", site: collection.site, sourceRuns: collection.sourceRuns, features: collection.features });
+  setProgress(deps, progressKey, { status: "done", site: collection.site, sourceRuns: collection.sourceRuns, features: collection.features });
   const pins = (deps.store.readVersion(siteId, "latest")?.features ?? []).filter((feature) => feature.kind === "capture_pin" || feature.kind === "existing_equipment");
   const sourceRuns = deps.snapshot
     ? collection.sourceRuns.map((run) => (run.status === "done" ? { ...run, status: "snapshot" as const } : run))

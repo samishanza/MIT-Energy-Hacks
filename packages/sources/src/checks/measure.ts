@@ -1,8 +1,8 @@
 import { area, booleanPointInPolygon } from "@turf/turf";
 import type { MapFeature, Observation } from "@eqore/contract";
 import { observe, sourceDateOf, type ArcgisFeature, type ArcgisResult, type CollectContext, type PolygonGeometry } from "../arcgis.ts";
-import { boxOf, closestGap, frameAround, segmentsOf, verticesOf, type Box, type Point, type Segment, closestPointOn } from "../geometry.ts";
-import { normalizeStreet, parseAddress } from "../resolve-site.ts";
+import { boxOf, closestGap, closestPointOn, frameAround, segmentsOf, verticesOf, type Box, type Point, type Segment } from "../geometry.ts";
+import { normalizeStreet, streetNameOf } from "../resolve-site.ts";
 import { convertUnit } from "../units.ts";
 
 export type MeasureInputs = {
@@ -44,10 +44,6 @@ function sideFacing(road: Segment[], box: Box): "north" | "south" | "east" | "we
   return [...sides].sort((a, b) => toRoad(a[1]) - toRoad(b[1]))[0]![0];
 }
 
-function streetOf(address: string): string | null {
-  // The house number isn't part of a road's name.
-  return parseAddress(address)?.street.replace(/^\S+\s+/, "") ?? null;
-}
 
 // Measures what the collected geometry supports. Every result is a computed reading for a person to
 // trust or check: fitted boxes are labeled as fitted, and nothing here compares a distance with a rule.
@@ -172,7 +168,7 @@ export function measureSite(input: MeasureInputs, ctx: CollectContext): Measurem
 
   if (input.roads) {
     const { result, features: roadFeatures, nameAttribute } = input.roads;
-    const street = streetOf(input.address);
+    const street = streetNameOf(input.address);
     const roads = roadFeatures
       .filter((feature) => feature.geometry)
       .map((feature) => {

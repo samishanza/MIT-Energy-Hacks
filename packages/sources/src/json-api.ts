@@ -12,7 +12,6 @@ export type JsonSource = {
   licenseNote: string;
   robotsChecked: string;
   fields: string[];
-  // Named here, and supplied only by the live fetch, so a key never reaches a URL this code builds.
   keyName?: string;
   params: (request: JsonRequest) => Record<string, string>;
   read: (body: unknown) => JsonReading[];
@@ -67,7 +66,6 @@ export async function collectJson(source: JsonSource, request: JsonRequest, ctx:
       const retrievedAt = response.headers.get(RECORDED_AT_HEADER) ?? ctx.now();
       if (!response.ok) {
         failure = `The service returned HTTP ${response.status}`;
-        // A refused request won't change on retry.
         if (response.status < 500) return missing(failure, retrievedAt);
         continue;
       }

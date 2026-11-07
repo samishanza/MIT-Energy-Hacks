@@ -54,7 +54,7 @@ export function servingUtility(source: TerritorySource, result: ArcgisResult, gr
       value: { type: "text", value: territories.map(described).join("; ") },
       ...shared(territories[0]!),
       objectId: territories.map((territory) => territory.feature.objectId).sort().join(","),
-      reason: "Service territory boundaries are approximate and overlap. The bill names the utility.",
+      reason: "From a coarse national territory map, whose boundaries overlap, so a listed utility may not serve this site. The bill names the utility.",
     }),
   ];
 
@@ -68,7 +68,7 @@ export function servingUtility(source: TerritorySource, result: ArcgisResult, gr
         ? `${described(territory)} territory, and ${territory.utility}'s map returned a feeder here.${others.length ? ` Also mapped here: ${others.join(", ")}.` : ""}`
         : territories.length === 1
           ? `The only service territory mapped here. The bill confirms the utility.`
-          : `One of ${territories.length} overlapping service territories mapped here. The bill names the utility.`;
+          : `One of ${territories.length} overlapping service territories mapped here. The territory map is coarse, so some of these utilities may not serve this site. The bill names the utility.`;
     observations.push(observe(result, ctx, { field: "serving_utility", kind: "reading", value: { type: "text", value: territory.utility }, ...shared(territory), reason }));
   }
 

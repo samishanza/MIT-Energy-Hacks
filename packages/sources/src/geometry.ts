@@ -8,7 +8,7 @@ export type Gap = { feet: number; from: Point; to: Point };
 // Same sphere as Turf, flattened around the site, which is accurate at the size of a site.
 const FEET_PER_DEGREE = (6371008.8 * Math.PI * 3.280839895) / 180;
 
-export function ringsOf(geometry: Geometry): Point[][] {
+function ringsOf(geometry: Geometry): Point[][] {
   switch (geometry.type) {
     case "Polygon":
       return geometry.coordinates as Point[][];
@@ -87,7 +87,3 @@ export function feetBetween(first: Geometry, second: Geometry): number {
   return closestGap(segmentsOf(first, toFeet), segmentsOf(second, toFeet)).feet;
 }
 
-export function centerOf(geometry: Geometry): Point {
-  const points = verticesOf(geometry);
-  return [points.reduce((sum, [x]) => sum + x, 0) / points.length, points.reduce((sum, [, y]) => sum + y, 0) / points.length];
-}

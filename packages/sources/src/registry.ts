@@ -107,14 +107,13 @@ export type NamedRoute = {
   reason: string;
 };
 
-// One layer a region collects, which needs no code to add.
 export type LayerSource = {
   entry: ArcgisEntry;
   mode:
     | {
         // One answer for the site, read through the entry's field table.
         kind: "one";
-        pick: "first" | "address_street" | "all_distinct";
+        pick: "first" | "address_street";
         streetAttribute?: string;
         emptyReason?: string;
       }
