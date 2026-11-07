@@ -87,6 +87,21 @@ export const routes = {
     request: noBody,
     response: RunProgressSchema,
   }),
+  // Site geometry as files a drafter can open: DXF for CAD, KML for Google Earth.
+  exportDxf: route({
+    method: "GET",
+    path: "/api/sites/:siteId/versions/:version/site.dxf",
+    listener: "engineer",
+    request: noBody,
+    response: z.string(),
+  }),
+  exportKml: route({
+    method: "GET",
+    path: "/api/sites/:siteId/versions/:version/site.kml",
+    listener: "engineer",
+    request: noBody,
+    response: z.string(),
+  }),
   readVersion: route({
     method: "GET",
     // :version is a number or "latest"

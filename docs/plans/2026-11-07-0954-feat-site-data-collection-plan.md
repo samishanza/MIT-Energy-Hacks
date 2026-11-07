@@ -90,6 +90,7 @@ Research and live tests on 2026-11-07 show the facts split in three. Physical fa
 - R54. The tool shows where batteries could go: open areas inside the parcel, clear of buildings and mapped constraints, with size, surface, slope, and measured distances. They're labeled as candidates, never as a layout or a code result.
 - R55. The record exports to the drawing agent with everything it reads. A value the agent needs and the record lacks is reported as a gap, and any drawing stays labeled concept-grade.
 - R59. No input beyond the address is required, and the first view never asks for customer documents, engineer decisions, or approvals. Facts that aren't public are summarized in one line, saying why they aren't public, and open only on request.
+- R63. Reviewing the result must take far less time than drawing the site plan or hiring a consultant. The tool asks for attention only where it's needed: conflicts, unchecked layers, and low-grade values. Everything else is shown as collected, with its source one selection away. Its geometry exports to files a drafter can start from, so nothing is redrawn by hand.
 - R61. The tool shows where a battery is eligible to go under researched fire-code rules, as zones with the rule behind each one, and never picks a location. It shows which zones fit EQORE's chosen standard configuration.
 - R62. The user can see the real site, not only geometry: one click opens it in Google Earth and in Street View, and the map shows buildings in 3D from their estimated height.
 - R60. Every measurement a site visit would otherwise take (lot and building dimensions, distances to lot lines, lines, roads, and constraints, elevation, and slope) shows how it was measured, its source date, and that it's from public data and not a survey. One line says how many grid connection request items public data covers, and that the rest wait on the engineer's decisions or customer documents.
@@ -134,6 +135,7 @@ Research and live tests on 2026-11-07 show the facts split in three. Physical fa
 Reported as observed, with no claims about approval or turnaround. Each number names the site it was measured on.
 
 - Time to first map and time to finished run, each cold and warmed, and clicks needed after the address. Target for clicks: zero.
+- Time for a person to review one site's result, timed in the demo, against EQORE's figure for drawing it or commissioning it. Without that figure, say so and claim no saving.
 - Catalog fields filled by public data, and the rest named by owner.
 - Cross-checks run, and how many agreed, disagreed, or couldn't run.
 - Sources that answered, out of those configured.
@@ -235,6 +237,7 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 - KTD34. **The engineer API refuses any foreign Origin or Host.** Loopback binding doesn't stop a web page in the engineer's browser from posting to it, including a multipart upload. The middleware and tests exist for this, and it applies to every engineer route.
 - KTD35. **Candidate areas reuse `derivePadCandidates` in `packages/drc`.** It takes the lot polygon, less a buffer around every building and a strip inside the lot line, and inscribes the largest rectangles, on real polygons rather than the fitted box. U15 extends it with mapped constraints and road surfaces. It claims open ground and nothing about surface. Its strip is a drawing margin, never a required setback. The pad itself remains an engineer decision, so a sheet may place units on the largest area only when it says that's an assumption.
 - KTD36. **The sheet draws real polygons, through the agent layer's code.** `@eqore/sheets` already draws the lot, every structure, and pad candidates from the record, because Setback's `Site` holds only one lot box and one building, and it placed units off the Worcester parcel in testing. Use `exportToSetback` only for the list of gaps. Call `compile` only after an engineer enters a pack and count, and show only its placement, labeled illustrative. Its checks, status, and electrical advice never reach a sheet, because on placeholder values they'd read as code results. (Chosen by the lead at the team's request to use best judgment: no array by default, over an assumed pack.)
+- KTD42. **Review by exception, and hand off files, not just a screen.** Reading 119 values would take as long as drafting, so the first view lists only what needs a person: conflicts, layers that failed or weren't checked, and values below layout grade. Everything else stays drawn and traced, without asking to be read. The lot, buildings, roads, constraints, dimensions, and eligibility zones export as DXF for CAD and KML for Google Earth, in real coordinates, so a drafter starts from them instead of redrawing. A file export isn't a CAD integration.
 - KTD40. **Placement is an eligibility screen, not a choice.** Zones come from rules already researched in `docs/research/2026-11-07-option1-plan-set-bridge.md`, each shown with its citation and whether it was read directly or second-hand. It's a screen from public data, not code approval, and buildings' openings and exits aren't public, so egress distances stay unchecked. (session-settled: user-directed, chosen over drafting one pad location: the team wants eligibility from existing rules.)
 
   | Rule | Value | Used for |
@@ -363,7 +366,7 @@ List anything cut as not built, with the reason.
 | Lane | Branch | Units | Ports |
 |---|---|---|---|
 | Lead and contract owner | `main` | U10, integration | none |
-| Backend | `worktree-backend` | U13, U14, U30, U17, U16, U29, U11, U18 | API 127.0.0.1:8787, capture 127.0.0.1:8788 |
+| Backend | `worktree-backend` | U13, U14, U30, U17, U16, U29, U11, U31, U18 | API 127.0.0.1:8787, capture 127.0.0.1:8788 |
 | UI | `worktree-ui` | U19 | Web 5173 |
 | Agent layer, a teammate | GitHub `main` | U15, U20 | none |
 
@@ -744,18 +747,20 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 ### U19. Map-first screen
 
 - **Goal:** Make the map the product: every public fact drawn and traced, with nothing asked of the user beyond the address.
-- **Requirements:** R14, R15, R22, R50, R51, R52, R57, R58, R59, R60, R61, R62
+- **Requirements:** R14, R15, R22, R50, R51, R52, R57, R58, R59, R60, R61, R62, R63
 - **Dependencies:** U12, then U13 through U16 at integration
 - **Files:** `apps/web/src/App.tsx`, `apps/web/src/map/SiteMap.tsx`, `apps/web/src/map/layers.ts`, `apps/web/src/panels/`, `apps/web/src/**/*.test.tsx`
 - **Approach:**
   1. Submitting an address leads straight to the map, fitted to the parcel. Poll the progress route and draw results as they arrive. The existing address chooser and pin placement carry over.
   2. Draw every collected feature kind: property line, all building outlines, dimension lines, roads, wetlands and other mapped constraints, utility lines, substations, fire stations, open ground, and existing equipment. A compact legend toggles each kind. Draw and select from the top: equipment and dimension lines, outlines, open ground in a tentative style, then constraints and roads.
-  3. One status strip, in a fixed order: the concept-grade note, data labels, an unverified signal, and a summary such as "52 public facts found, 15 of 78 plan-set fields, 2 conflicts". A second line reads like "Grid connection request: 9 of 21 items from public data. The rest wait on your decisions or customer documents" (R60). During a run it reads like "Reading sources, 9 of 14 answered".
-  4. A facts panel lists only public facts, grouped by family (physical, utility, energy), each with its source, date, and cross-checks. Selecting a fact highlights its feature, and selecting a feature opens its fact. Every row is keyboard-focusable.
-  5. Facts that aren't public collapse into one closed line, "Not in public records: 36 customer facts and 41 engineer decisions", which opens a short explanation of why. The readiness report, capture links, and requests leave the first view and open only from that line.
-  6. Draw the eligibility zones by tier, each opening its rules and citations, and highlight those that fit the chosen configuration. A small configuration picker defaults to the Edge760.
-  7. Add "Open in Google Earth" and "Street View" links at the site's coordinates, and at any selected point. Add a 3D toggle that extrudes buildings from their estimated height (KTD41).
-  8. Keep the site plan tab. Keep confirm and correct one click from a selected fact, sending `expectedObservationId`, but never prompt for it.
+  3. A "Needs your attention" list sits first in the panel, holding only conflicts, unchecked or failed layers, and values below layout grade, each with a one-line reason. When it's empty, it says so.
+  4. One status strip, in a fixed order: the concept-grade note, data labels, an unverified signal, and a summary such as "52 public facts found, 15 of 78 plan-set fields, 2 conflicts". A second line reads like "Grid connection request: 9 of 21 items from public data. The rest wait on your decisions or customer documents" (R60). During a run it reads like "Reading sources, 9 of 14 answered".
+  5. A facts panel lists only public facts, grouped by family (physical, utility, energy), each with its source, date, and cross-checks. Selecting a fact highlights its feature, and selecting a feature opens its fact. Every row is keyboard-focusable.
+  6. Facts that aren't public collapse into one closed line, "Not in public records: 36 customer facts and 41 engineer decisions", which opens a short explanation of why. The readiness report, capture links, and requests leave the first view and open only from that line.
+  7. Draw the eligibility zones by tier, each opening its rules and citations, and highlight those that fit the chosen configuration. A small configuration picker defaults to the Edge760.
+  8. Add "Open in Google Earth" and "Street View" links at the site's coordinates, and at any selected point. Add a 3D toggle that extrudes buildings from their estimated height (KTD41).
+  9. Add DXF and KML downloads of the site geometry, served by the API (KTD42).
+  10. Keep the site plan tab. Keep confirm and correct one click from a selected fact, sending `expectedObservationId`, but never prompt for it.
 - **Patterns to follow:** The UI plan's design system. This unit overrides its report-first layout and its emphasis on capture.
 - **Test scenarios:**
   - Covers AE20. After submitting an address, the map renders with no further click, no request list, and no source list visible.
@@ -765,6 +770,8 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
   - Mid-run, the strip shows sources answered, and the parcel is drawn.
   - A failed source appears in the details and doesn't block the map.
   - Eligibility zones draw by tier, and selecting one shows its rules, citations, and whether the Edge760 fits.
+  - On Worcester, the attention list holds the lot-size conflict, the feeder candidates, and any unchecked layer, and nothing that needs no action.
+  - The DXF and KML downloads open with the parcel, buildings, roads, and zones in the right place.
   - The Google Earth and Street View links carry the site's coordinates, and the 3D toggle extrudes buildings with a known height.
 - **Verification:** In a browser at desktop and phone widths, a person enters a Worcester address and reaches a map that shows all the collected public data, with no further input and no console errors.
 
@@ -791,6 +798,19 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
   - The sheet carries no check, status, or electrical advice, and always has the concept-grade note.
   - A Fremont record with no parcel offers no sheet and names what's missing.
 - **Verification:** Worcester's sheet builds with no further input and opens with one selection. A person checks its dimensions against the map, using one shared feet-per-degree value so the two agree.
+
+### U31. Export the site geometry
+
+- **Goal:** Give drafters the geometry as files, so the site plan isn't redrawn by hand.
+- **Requirements:** R63
+- **Dependencies:** U14, U15
+- **Files:** `apps/api/src/export-files.ts`, `apps/api/src/export-files.test.ts`, `apps/api/src/routes.ts`, `packages/contract/src/routes.ts`
+- **Approach:** Write DXF and KML from the record version's features: parcel, buildings, roads, constraints, dimension lines, and eligibility zones, one layer each. DXF uses a local frame in feet from a stated origin, with the origin's coordinates in the file. KML uses longitude and latitude. Each file carries the concept-grade note, the record version, and the date. The lead adds the two routes to the contract.
+- **Test scenarios:**
+  - A recorded Worcester record exports a DXF whose parcel layer measures the same lot dimensions as the record.
+  - The KML places the parcel at the record's coordinates.
+  - Both files carry the concept-grade note and version, and contain no owner names.
+- **Verification:** The DXF opens in a free CAD viewer and the KML opens in Google Earth, both lined up with the map.
 
 ### U29. Cross-check the sources
 
