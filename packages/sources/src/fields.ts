@@ -84,7 +84,8 @@ export const FIELDS: FieldDefinition[] = [
   { field: "elevation_m", label: "Ground elevation", owner: "public_data", grade: "reference" },
 
   // Utility-published context. The Pre-Application Report is the authoritative version.
-  { field: "serving_utility", label: "Serving utility", owner: "utility", grade: "reference" },
+  { field: "serving_utility", label: "Serving utility", owner: "utility", grade: "reference", comparison: { kind: "candidates" } },
+  { field: "utility_territories", label: "Utility territories mapped here", owner: "utility", grade: "reference", comparison: { kind: "latest" }, missingReason: "No service territory source has answered for this site." },
   { field: "feeder", label: "Feeder", owner: "utility", grade: "reference", comparison: { kind: "candidates" } },
 
   // Customer-side facts.

@@ -1,4 +1,33 @@
 import type { JsonSource } from "../src/json-api.ts";
+import type { TerritorySource } from "../src/registry.ts";
+
+export const hifldTerritories: Omit<TerritorySource, "withoutMap"> = {
+  nameAttribute: "NAME",
+  // Only names checked against the companies' own filings: NSTAR Electric does business as Eversource,
+  // Massachusetts Electric and Nantucket Electric as National Grid, Fitchburg Gas and Electric Light as Unitil.
+  commonNames: {
+    "MASSACHUSETTS ELECTRIC CO": "National Grid",
+    "NANTUCKET ELECTRIC CO": "National Grid",
+    "NSTAR ELECTRIC COMPANY": "Eversource",
+    "FITCHBURG GAS & ELEC LIGHT CO": "Unitil",
+    "PACIFIC GAS & ELECTRIC CO": "PG&E",
+  },
+  entry: {
+    kind: "arcgis_rest",
+    id: "hifld-retail-territories",
+    name: "HIFLD electric retail service territories",
+    serviceUrl: "https://services6.arcgis.com/BAJNi3EgCdtQ1BCG/arcgis/rest/services/Electric_Retail_Service_Territories/FeatureServer",
+    layer: 0,
+    searchRadiusMeters: 0,
+    licenseNote: "From the HIFLD Open dataset published in 2025, per the item. Boundaries are approximate and overlap. The ArcGIS Online host answered robots.txt with 403, so no rule was read.",
+    robotsChecked: "2026-11-07",
+    objectIdAttribute: "ID",
+    attributesOnly: true,
+    sourceDate: { attribute: "SOURCEDATE", format: "epoch_ms" },
+    outFields: ["ID", "NAME", "TYPE", "SOURCEDATE"],
+    fields: [],
+  },
+};
 
 const ELEVATION_FIELD = "ground_elevation_ft";
 

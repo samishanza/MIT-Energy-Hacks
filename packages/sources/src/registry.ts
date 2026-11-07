@@ -33,6 +33,8 @@ export type ArcgisEntry = {
   robotsChecked: string;
   // When set, the entry is never queried and appears only as a route for a person.
   barred?: { reason: string; personRoute: string };
+  // Asks for attributes only, for layers whose shapes are too large to keep, such as service territories.
+  attributesOnly?: boolean;
   fields: FieldMapping[];
   outFields: string[];
   // Identifies one feature across reads.
@@ -52,6 +54,8 @@ export type ParcelLookup = {
   lotUnitsAttribute: string;
   yearBuiltAttribute: string;
   storiesAttribute?: string;
+  // How far from a geocoded point to look for the parcel when the address doesn't match as written.
+  nearbyMeters?: number;
 };
 
 export type BuildingOutlines = {
@@ -70,6 +74,17 @@ export type GridSource = {
   utilityName: string;
   // For a service whose capacity layer returns attributes only, the layer that draws the same feeders.
   lineGeometry?: ArcgisEntry;
+  // A wider search when nothing is mapped within the entry's radius, as downtown, where lines are drawn along streets.
+  widenToMeters?: number;
+};
+
+export type TerritorySource = {
+  entry: ArcgisEntry;
+  nameAttribute: string;
+  // Legal names to the names people use, such as MASSACHUSETTS ELECTRIC CO to National Grid.
+  commonNames: Record<string, string>;
+  // Why a utility with no map this tool reads has no feeder, by its common name.
+  withoutMap: Record<string, string>;
 };
 
 export type ImageryConfig = {
@@ -126,6 +141,9 @@ export type RegionConfig = {
   states: string[];
   // A region naming cities wins over one covering its whole state.
   cities?: string[];
+  // Villages that assessors file under their town, such as Hyannis under Barnstable.
+  villages?: Record<string, string>;
+  territories?: TerritorySource;
   parcels?: ParcelLookup;
   buildings?: BuildingOutlines;
   grid: GridSource[];

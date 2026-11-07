@@ -93,6 +93,13 @@ function quoted(text: string): string {
   return `'${text.replace(/'/g, "''")}'`;
 }
 
+// An assessor's address as a street: 367 MAIN STREET (HYANNIS), HYANNIS becomes 367 MAIN ST.
+function streetOf(siteAddress: unknown): string {
+  return normalizeStreet(String(siteAddress ?? "").split(/[(,]/)[0]!);
+}
+
+const NEARBY_METERS = 30;
+
 function distinctParcels(features: ArcgisFeature[], lookup: ParcelLookup): ArcgisFeature[] {
   const byId = new Map<string, ArcgisFeature>();
   for (const feature of features) byId.set(String(feature.attributes[lookup.idAttribute]), feature);
@@ -172,7 +179,41 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
   if (result.failure) return resolveFromGeocoder(address, ctx, undefined, result);
 
   const parcels = distinctParcels(result.features, lookup);
+  if (parcels.length === 0) return resolveNearby(address, parsed, region, lookup, ctx);
   if (parcels.length === 1 && !hasPolygon(parcels[0]!)) return resolveFromGeocoder(address, ctx, undefined, withoutUsableParcel(result));
   if (parcels.length === 1) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: result } };
   return { status: "needs_choice", candidates: parcels.map((parcel) => parcelCandidate(parcel, lookup)) };
+}
+
+// When the address isn't written the way the assessor wrote it: the town for a village, the street
+// spelled out, a number missing. Parcels near the geocoded point and by house number and street are
+// searched. One that matches the address anchors the site, and otherwise each is offered as a choice.
+async function resolveNearby(address: string, parsed: ParsedAddress, region: RegionConfig, lookup: ParcelLookup, ctx: CollectContext): Promise<ResolveResult> {
+  const town = region.villages?.[parsed.city] ?? parsed.city;
+  const [number, firstWord] = parsed.street.split(" ");
+  const plain = (text: string) => text.replace(/[%_'\\[\]]/g, "");
+  const byNumber =
+    number && /^\d/.test(number) && firstWord
+      ? queryArcgis(lookup.entry, { kind: "attribute", where: `${lookup.addressAttribute} LIKE '${plain(number)} ${plain(firstWord)}%' AND ${lookup.cityAttribute}=${quoted(town)}` }, ctx)
+      : null;
+  const geocode = await geocodeAddress(address, ctx);
+  const nearby = geocode.matches
+    .slice(0, 3)
+    .map((match) => queryArcgis(lookup.entry, { kind: "point", longitude: match.longitude, latitude: match.latitude, bufferMeters: lookup.nearbyMeters ?? NEARBY_METERS }, ctx));
+  const results = (await Promise.all([byNumber, ...nearby])).filter((result): result is ArcgisResult => Boolean(result));
+
+  const found = distinctParcels(results.flatMap((result) => result.features), lookup);
+  const matching = found.filter((parcel) => hasPolygon(parcel) && streetOf(parcel.attributes[lookup.addressAttribute]) === parsed.street);
+  if (matching.length === 1) {
+    const parcel = matching[0]!;
+    const lookupResult = results.find((result) => result.features.some((feature) => feature.objectId === parcel.objectId))!;
+    return { status: "resolved", anchor: { kind: "parcel", parcel, lookup: lookupResult } };
+  }
+  return {
+    status: "needs_choice",
+    candidates: [
+      ...found.map((parcel) => parcelCandidate(parcel, lookup)),
+      ...geocode.matches.map((match) => ({ id: `geocoder:${match.longitude},${match.latitude}`, label: `${match.matchedAddress} (a point on the street, with no parcel)`, source: CENSUS_SOURCE.name })),
+    ],
+  };
 }

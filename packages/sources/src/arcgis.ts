@@ -78,7 +78,7 @@ export function queryParams(entry: ArcgisEntry, query: SpatialQuery): URLSearchP
   const params = new URLSearchParams({
     f: "json",
     outFields: entry.outFields.join(","),
-    returnGeometry: "true",
+    returnGeometry: entry.attributesOnly ? "false" : "true",
     outSR: "4326",
   });
   if (query.kind === "attribute") {
@@ -317,10 +317,11 @@ export function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { va
 }
 
 // Maps features to observations through the entry's field table, with no source-specific code.
-export function toObservations(result: ArcgisResult, ctx: CollectContext, features = result.features): Observation[] {
+// A note goes on every reading, and an empty reason replaces the generic one when the source answered with nothing.
+export function toObservations(result: ArcgisResult, ctx: CollectContext, features = result.features, explain: { note?: string; emptyReason?: string } = {}): Observation[] {
   const { entry } = result;
   if (features.length === 0) {
-    const reason = result.failure ?? `The source returned nothing for ${result.query}`;
+    const reason = result.failure ?? explain.emptyReason ?? `The source returned nothing for ${result.query}`;
     return entry.fields.map((mapping) =>
       observe(result, ctx, { field: mapping.field, kind: "no_value", value: null, attribute: mapping.attribute, reason }),
     );
@@ -335,7 +336,7 @@ export function toObservations(result: ArcgisResult, ctx: CollectContext, featur
       };
       const read = readMapping(mapping, feature);
       return "value" in read
-        ? observe(result, ctx, { ...shared, kind: "reading", value: read.value, grade: mapping.grade })
+        ? observe(result, ctx, { ...shared, kind: "reading", value: read.value, grade: mapping.grade, reason: explain.note })
         : observe(result, ctx, { ...shared, kind: "no_value", value: null, reason: read.reason });
     }),
   );

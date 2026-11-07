@@ -1,6 +1,6 @@
 import type { RegionConfig } from "../src/registry.ts";
 import { censusLocalRoads } from "./census-roads.ts";
-import { usgsPointElevation } from "./national.ts";
+import { hifldTerritories, usgsPointElevation } from "./national.ts";
 
 export const californiaPge: RegionConfig = {
   id: "california-pge",
@@ -37,6 +37,7 @@ export const californiaPge: RegionConfig = {
   ],
   roads: censusLocalRoads,
   jsonSources: [usgsPointElevation],
+  territories: { ...hifldTerritories, withoutMap: {} },
   unavailable: [
     {
       sourceId: "earth-engine",
