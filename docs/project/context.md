@@ -15,16 +15,19 @@ Living context for the EQORE track. **Last updated:** 2026-11-07
 - EQORE evaluates, designs, and installs behind-the-meter batteries for manufacturers and industrial facilities, mainly in Massachusetts and the Bay Area, with tens to hundreds of projects running at once.
 - The four options target pipeline stages 1, 3, 4, and 6.
 - EQORE wants an engineer kept in the loop and asks teams to show how long the task takes today and with the tool.
+- Site data collection is manual today. EQORE wants to avoid doing it this way and is trying to build in-house methods that reduce the cost of site visits. (Relayed by the team on 2026-11-07, not quoted from EQORE.)
 
 **Team view**
 - EQORE mainly wants to automate traditional engineering work, such as site visits and drafting drawings.
 - We are leaning toward Option 1, using software or hardware to speed up data collection. This is not final; see D1 and D9 in [decision.md](decision.md).
+- We have under 24 hours of build time before the demo.
+- The product should both collect the data and aggregate it in our software to create a site map. What the site map must contain is not settled yet.
 
 **Still missing**
-- The Century Tywood plan set and the other plan sets EQORE uploaded. They are not in this repo, and a filename search of this machine's Documents, Downloads, and Desktop folders did not find them.
+- The Century Tywood plan set. It is not in this repo, and a filename search of this machine's Documents, Downloads, and Desktop folders did not find it. Two other sample plan sets are now in `provided resources/`.
 - The Resources links. They did not survive the paste, except the Holliston URL, which loaded on 2026-11-07.
 - How long site data collection takes today. We need this from EQORE for a real before-and-after, and must not invent it.
-- The submission deadline and judging criteria.
+- The exact submission deadline and the judging criteria.
 
 ## How this differs from the earlier brief
 
@@ -41,6 +44,10 @@ Living context for the EQORE track. **Last updated:** 2026-11-07
 
 - 2026-11-07: Added the EQORE Challenge Brief. Recorded the team's lean toward Option 1 and the differences from the earlier brief.
 - 2026-11-07: The team's workflow prompt still names the earlier brief's four areas. Treat the options in the Challenge Brief below as current.
+- 2026-11-07: The team reported under 24 hours of build time before the demo.
+- 2026-11-07: The team relayed that site data collection is manual today and that EQORE is building in-house methods to reduce site visit costs. We still have no time or cost figure for it.
+- 2026-11-07: The team stated that the product collects and aggregates the data to create a site map. Option 1 research lanes reported in `docs/research/`.
+- 2026-11-07: The team added two sample Issued for Construction plan sets to `provided resources/` and asked for novelty in how data is collected. Sample 1's site plan says its dimensions come from aerial imagery and public property boundary KMZ data only, not a survey.
 
 ---
 
