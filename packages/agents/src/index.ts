@@ -96,6 +96,5 @@ export async function runDiscovery(
 export * from "./sources/types.ts";
 export * from "./sources/fixture.ts";
 export * from "./sources/site-photos.ts";
-export * from "./sources/live.ts";
 export * from "./sources/slope.ts";
 export * from "./base.ts";

@@ -16,7 +16,13 @@ import difference from '@turf/difference';
 import buffer from '@turf/buffer';
 import { featureCollection, polygon as turfPolygon } from '@turf/helpers';
 
-import type { Rect } from './types.ts';
+/** Axis-aligned rectangle in local feet. Declared here so this package depends on nothing internal. */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /** A ring of points in local feet. First point is not repeated. */
 export type Ring = { x: number; y: number }[];

@@ -1,3 +1,6 @@
+import type { Rect } from "@eqore/geom";
+export type { Rect };
+
 // Core data model. All distances in feet, power in kW, energy in kWh, current in A.
 
 export type SourceKind =
@@ -31,12 +34,6 @@ export interface Param {
   howToResolve?: string;
 }
 
-export interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
 
 export type Side = 'north' | 'south' | 'east' | 'west';
 

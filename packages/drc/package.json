@@ -12,6 +12,7 @@
     "@eqore/gatekeeper": "^0.1.0",
     "@eqore/agents": "^0.1.0",
     "@turf/turf": "^7.4.0",
-    "@eqore/contract": "^0.1.0"
+    "@eqore/contract": "^0.1.0",
+    "@eqore/geom": "^0.1.0"
   }
 }
