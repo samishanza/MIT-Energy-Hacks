@@ -89,6 +89,7 @@ Research and live tests on 2026-11-07 show the facts split in three. Physical fa
 - R53. The collection target is the plan-set field catalog. Every catalog field is collected, or names who must supply it and why, and coverage is computed deterministically.
 - R54. The tool shows where batteries could go: open areas inside the parcel, clear of buildings and mapped constraints, with size, surface, slope, and measured distances. They're labeled as candidates, never as a layout or a code result.
 - R55. The record exports to the drawing agent with everything it reads. A value the agent needs and the record lacks is reported as a gap, and any drawing stays labeled concept-grade.
+- R58. The tool works for any Massachusetts address. Every address gets the physical record, and grid data wherever a public source covers it. Where none does, it names the utility, says grid data isn't available, and names who to ask. An address never dead-ends.
 - R57. Every value shows how good it is: its source date or age, and its resolution or grade. Where a second independent source exists, the tool checks one against the other and records whether they agree, disagree, or couldn't be checked. It flags a disagreement and never settles it silently.
 - R56. Adding a region takes configuration only, demonstrated by adding a third region in EQORE's service area and timing it. NavigateLA is a reference example only, and the product doesn't query it.
 
@@ -120,6 +121,7 @@ Research and live tests on 2026-11-07 show the facts split in three. Physical fa
 - AE20. **Covers R50.** Given `100 Research Dr, Worcester, MA`, `100 Research Dr, Worcester MA`, `100 Research Dr Worcester MA 01605`, or the state spelled out, the map appears with no click after submitting the address.
 - AE21. **Covers R54.** Given a parcel with roofprints and a mapped wetland, no candidate area overlaps either, and each states its size, surface, slope, and how it was computed.
 - AE22. **Covers R52.** Given a record nobody has reviewed, the export shows lot width as `inferred`, and nothing says verified.
+- AE25. **Covers R58.** Given addresses in Boston, Springfield, Lowell, Fall River, Holliston, Pittsfield, and Hyannis, each reaches a map or offers a map pin, and each names its utility.
 - AE24. **Covers R57.** Given Worcester, stated lot size against polygon area shows a 3.3% disagreement, USGS elevation against Earth Engine elevation shows agreement, and a check whose source failed says it wasn't checked.
 - AE23. **Covers R8.** Given a value that changes while an engineer has it open, their confirm is refused as stale, and the newer value stays unverified until they review it.
 
@@ -134,7 +136,7 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 - Share of required items with evidence, by owner, with form rows and drawing inputs counted separately, before and after one capture.
 - Real source conflicts caught before submission, reported apart from feeder candidates.
 - Whether the drawing agent builds a concept sheet from collected data, and how many placeholders it needed.
-- At the venue capture trial: link-to-verified time, and distance from geotag to true position.
+- Massachusetts coverage: of a fixed list of addresses across the state, how many reach a map, and how many get grid data.
 - Today's time from EQORE. If EQORE gives none, a teammate's timed manual collection of the same public facts, labeled as team-timed and not EQORE's process, with no savings figure.
 
 ### Scope Boundaries
@@ -150,6 +152,7 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 
 - Margin test for clearances, and the drawing engine's own pass-or-fail checks: this build shows neither, because code review is a non-goal.
 - Waiver records: nothing consumes them.
+- A live phone capture at the venue, and its capture-trial record: the team dropped it. The phone page is tested in a phone-sized browser, and the demo closes the loop with a labeled sample file. Geotag accuracy on a real phone isn't measured.
 - Login and user accounts: the demo runs locally with one engineer. The capture link token is the only access control.
 - Live utility authorization (Green Button Connect): it needs registration and utility review, which won't clear in time.
 - Scraping permit portals, including Holliston's: `robots.txt` bars it at the two sampled vendors, so they stay person routes.
@@ -161,7 +164,6 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 
 - Measured building height from lidar. It worked at one site using Entwine, but reading point clouds in Node is a project of its own, so height starts as stories times an assumed floor height, labeled as assumed (U14).
 - Finding equipment candidates from lidar returns.
-- Eversource as a source, after checking its terms and access. Holliston is its territory, so this is the natural next utility.
 - Footprints outside configured regions from Microsoft or Overture, after checking ODbL.
 - Simulated load profiles from NREL ComStock, and customer interval data. They serve sizing, which this build doesn't do.
 - Replacing the agent packages' fields-and-evidence model with the contract's values and observations (D14). This build only adapts between them.
@@ -173,7 +175,7 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 - A new `ANTHROPIC_API_KEY` is needed for draft extraction, and only for that. A person creates it, and it goes in `.env`. The live call hasn't run yet, and the demo can replay a recorded draft without it.
 - A free OpenEI key is available for rate lookups. `DEMO_KEY` worked once in testing and is rate limited.
 - National Grid's Exhibit C in M.D.P.U. No. 1632, effective May 1, 2026, is the form. It's the newest version we've seen, and we haven't checked for a later one.
-- The drawing agent is Setback in `packages/drc`, the team's own layout engine, until the team names another.
+- The drawing agent is the teammate's: `@eqore/sheets` draws, and Setback in `packages/drc` places units. The team confirmed this is good enough.
 - A teammate's agent layer (`packages/catalog`, `gatekeeper`, `agents`, `drc`) is pushed straight to GitHub `main`. Where it overlaps this plan, it wins, by the team's decision (KTD37).
 - Hosting capacity data is context, not a site answer, and was built largely around generation export.
 
@@ -188,7 +190,6 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 
 **Deferred, not blocking**
 
-- Should the export feed another open-source drawing agent as well as Setback? If so, name it, and the export contract may gain fields.
 - May the sample PDFs appear in the demo? They stay in the private repo by the team's decision, and until this is confirmed they're used only to derive requirements.
 - Does EQORE's use need anything beyond the published terms each unit records?
 
@@ -255,6 +256,7 @@ This is the collection scope. **Tested** means a live query on 2026-11-07 return
 | Utility | National Grid group studies | Study name and status | Tested |
 | Utility | PG&E GRIP | Substations with existing and queued generation, transmission lines, pending load, planned investments, climate zone, fire threat districts | Tested in Fremont. Known load timed out, and no fire threat district at the point tried |
 | Energy | HIFLD retail service territories | Serving utility anywhere in the US | Tested. Areas overlap, and Holliston listed a transit authority first, so results are candidates |
+| Energy | Eversource hosting capacity | Grid data for Eversource territory, including Boston, Springfield, and Holliston | Not tried by API. U30 checks its terms and access |
 | Energy | OpenEI rate database | Rate schedules and demand charges by location | Tested with the demo key |
 | Region | Santa Clara County property and buildings | Parcels and footprints for a PG&E site by configuration | Read |
 | Reference | Code tables in `packages/agents` | Code editions, design wind and snow, by jurisdiction | In the agent layer, not yet in the record |
@@ -322,17 +324,17 @@ fixtures/             recorded responses, synthetic evidence
 
 ### Sequencing
 
-U1 through U9 and U12 are on `main`, and this update builds on them. Each worktree runs `git merge main` before starting. Integration order: U13, U14, U16, U29, U11, U15, U17, U19, U10's snapshot, U20, U18, then the rest of U10.
+U1 through U9 and U12 are on `main`, and this update builds on them. Each worktree runs `git merge main` before starting. Integration order: U13, U14, U30, U17, U16, U29, U11, U15, U19, U10's snapshot, U20, U18, then the rest of U10.
 
-**Protected path, data first:** U13, U14, U16's National Grid part, U29, U11, and U15, so an address produces the wide, cross-checked record. Then U19 and U10's seed and snapshot, so the map shows it and survives a failed service. U20 follows, and much of it already exists.
+**Protected path, data first:** U13, U14, U30, U17's serving utility, U16's National Grid part, U29, U11, and U15, so any Massachusetts address produces the wide, cross-checked record. Then U19 and U10's seed and snapshot, so the map shows it and survives a failed service. U20 follows, and much of it already exists.
 
 **Cut order under time pressure:**
 
 1. The PG&E requirements table.
 2. The third region (U18).
-3. U10's capture trial, timed collection, and README.
+3. U10's timed collection and README.
 4. U20's handoff beyond what `@eqore/sheets` already draws.
-5. Rates (U17).
+5. Rates, the second half of U17.
 6. Inside protected units: U19's dimension lines and substations, then U14's fire stations and height.
 
 List anything cut as not built, with the reason.
@@ -340,7 +342,7 @@ List anything cut as not built, with the reason.
 | Lane | Branch | Units | Ports |
 |---|---|---|---|
 | Lead and contract owner | `main` | U10, integration | none |
-| Backend | `worktree-backend` | U13, U14, U16, U29, U11, U17, U18 | API 127.0.0.1:8787, capture 127.0.0.1:8788 |
+| Backend | `worktree-backend` | U13, U14, U30, U17, U16, U29, U11, U18 | API 127.0.0.1:8787, capture 127.0.0.1:8788 |
 | UI | `worktree-ui` | U19 | Web 5173 |
 | Agent layer, a teammate | GitHub `main` | U15, U20 | none |
 
@@ -549,7 +551,7 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
   - Correcting a draft shows the corrected value and keeps the draft in history.
   - Moving a pin records it as placed by hand.
   - With no draft, the engineer can enter a value with their name and evidence.
-- **Verification:** On a real phone over the tunnel, a teammate captures closed outdoor equipment on the venue capture-trial record from U10, and the label appears in the engineer view. Venue photos never go on the Worcester record.
+- **Verification:** In a phone-sized browser against the capture listener, a person submits labeled sample evidence, and the result appears in the engineer view.
 
 ### U10. Seeded demo and measurements
 
@@ -560,13 +562,13 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 - **Approach:**
   1. Seed `100 Research Dr` and hide owner names in the demo view. Confirm the Fremont demo address resolves to one match.
   2. Record a snapshot of both regions, including KTD9's saved tiles and recorded drafts, the candidate areas, and the concept sheet.
-  3. Make labeled synthetic bill and nameplate evidence for Worcester, messy the way real files are, including a scanned look, with pins marked as placed by hand. The demo runs two captures in ranked order, because a bill has no map position: the bill, then the nameplate photo. Seed a separate capture-trial record next to the venue from public data, labeled as a capture test rather than a customer site.
-  4. Record the numbers listed in Success Criteria, each naming the site it was measured on. The geotag distance and link-to-verified time come from the capture trial, with the true position set by a person standing at the equipment. Report the required-item share for form rows and input rows separately, and feeder candidates apart from source conflicts.
+  3. Make labeled synthetic bill and nameplate evidence for Worcester, messy the way real files are, including a scanned look, with pins marked as placed by hand. The demo runs two captures in ranked order, because a bill has no map position: the bill, then the nameplate photo.
+  4. Record the numbers listed in Success Criteria, each naming the site it was measured on. Report the required-item share for form rows and input rows separately, and feeder candidates apart from source conflicts.
   5. If EQORE gives no current time, have a teammate time collecting the same public facts by hand on the demo parcel. Label it "team-timed, public lookups only, not EQORE's process", and state no savings figure.
   6. Document setup, sample data, limits, and the demo path.
 - **Execution note:** This is mostly scripting and packaging, so prefer a full runtime check of the demo path over unit tests.
 - **Test expectation:** none -- covered by the demo path check below.
-- **Verification:** From a clean checkout, the seed command and README steps reproduce F1 and F2 on Worcester with the network off, in snapshot mode. The live phone capture is the one step that needs a network.
+- **Verification:** From a clean checkout, the seed command and README steps reproduce F1 and F2 on Worcester with the network off, in snapshot mode. 
 
 ### U11. Earth Engine adapter
 
@@ -636,6 +638,25 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
   - Owner fields never reach a stored value or a fixture.
   - `live.ts` passes the collector's road side, and not a fixed value.
 - **Verification:** A Worcester run fills the new values from recorded data, each with its source and date, and progress shows the parcel before the run ends.
+
+### U30. Work across Massachusetts
+
+- **Goal:** Make any Massachusetts address reach a useful record, and measure how often that's true.
+- **Requirements:** R50, R58
+- **Dependencies:** U14
+- **Files:** `packages/sources/src/resolve-site.ts`, `packages/sources/src/resolve-site.test.ts`, `packages/sources/config/`, `scripts/massachusetts-coverage.ts`, `fixtures/`
+- **Approach:**
+  1. A live check on 2026-11-07 ran 8 public addresses. 5 reached a map, while Springfield, Fall River, and Hyannis stopped with no candidates to choose from. Only Lowell got grid data. 455 Main St in Worcester returned no feeder within 30 m, though it's in National Grid's territory. Those 8 are a small, unrepresentative sample, so use them as a starting point.
+  2. Find why each of those three addresses failed, and fix it. An address with no match always offers a map pin, and village names such as Hyannis map to their town.
+  3. Find why downtown Worcester returned no feeder, for example the 3-phase-only layer or the search distance. Report the real reason on the value rather than a bare missing.
+  4. Read Eversource's terms and try its hosting capacity map by API. If it permits access, add it through configuration, and if it doesn't, stop and tell the lead. Other utilities, such as municipal ones, name a person route.
+  5. Add a script that runs a fixed list of about 25 addresses across regions and utilities, and reports how many reach a map, get a parcel, name a utility, and get grid data.
+- **Test scenarios:**
+  - Covers AE25. Each recorded address reaches a map or offers a pin, and none returns an empty choice.
+  - A village name resolves to its town's parcels.
+  - An address outside any grid source names its utility and a person route, and shows no readiness percentage if no requirements table applies.
+  - A barred source makes no request.
+- **Verification:** The script's numbers are recorded in `docs/project/status-and-data-flow.md`, and they're what the team quotes for statewide coverage.
 
 ### U15. Where batteries could go
 

@@ -27,6 +27,23 @@ These are REST API calls to public map services, with no web scraping. An addres
 
 **Slope:** the agent layer queries MassGIS lidar directly, and that isn't wired into the app yet.
 
+## Massachusetts coverage
+
+A check on 2026-11-07 ran 8 public addresses through the app. It's a small sample, not a measure of the state.
+
+| Address | Reached a map | Grid data |
+|---|---|---|
+| 455 Main St, Worcester | Yes | No feeder within 30 m |
+| 1 City Hall Sq, Boston | Yes | None configured for its utility |
+| 36 Court St, Springfield | No, stopped with nothing to choose | None |
+| 375 Merrimack St, Lowell | Yes | 6 feeder candidates, National Grid |
+| 1 Government Ctr, Fall River | No, stopped with nothing to choose | None |
+| 11 Bartzak Dr, Holliston | Yes | None configured for its utility |
+| 100 North St, Pittsfield | Yes | None configured for its utility |
+| 367 Main St, Hyannis | No, stopped with nothing to choose | None |
+
+Physical data is statewide, because MassGIS is. Grid data today comes only from National Grid.
+
 ## What happens after collection
 
 Both paths start from the same collector, `packages/sources`.
@@ -62,7 +79,7 @@ The team decided the agent layer wins where it overlaps the plan (KTD37).
 
 ## To do, in order
 
-1. Backend: collect to the plan-set catalog, a general registry, wider physical sources, deeper utility data, cross-checks, Earth Engine, rates and utility anywhere, then a third region.
+1. Backend: collect to the plan-set catalog, a general registry, wider physical sources, coverage across Massachusetts including Eversource, serving utility, deeper utility data, cross-checks, Earth Engine, rates, then a third region.
 2. Agent layer: battery areas, and the sheet and drawing handoff.
 3. UI: map-first screen on the wider record.
 4. Lead: seeded demo and snapshot, merges, combined code review.
@@ -70,6 +87,4 @@ The team decided the agent layer wins where it overlaps the plan (KTD37).
 ## Needed from the team
 
 - Add a new Anthropic API key to `.env` for draft readings.
-- Name any other open-source drawing agent, if Setback isn't the only target.
-- Give the venue address for the phone test.
 - Pass the plan to the teammate running the agent layer.
