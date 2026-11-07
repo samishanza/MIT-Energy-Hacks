@@ -1,0 +1,2 @@
+# Store text with LF so Windows and non-Windows checkouts produce clean diffs.
+* text=auto

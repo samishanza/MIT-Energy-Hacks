@@ -1,0 +1,10 @@
+# Isolated worktrees (git worktree / ce-worktree, and Claude Code)
+.worktrees/
+.claude/worktrees/
+
+# Machine-local settings
+.claude/settings.local.json
+.compound-engineering/*.local.yaml
+
+# Compound Engineering scratch space
+.context/compound-engineering/
