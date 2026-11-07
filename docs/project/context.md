@@ -22,6 +22,9 @@ Living context for the EQORE track. **Last updated:** 2026-11-07
 - We are leaning toward Option 1, using software or hardware to speed up data collection. This is not final; see D1 and D9 in [decision.md](decision.md).
 - We have under 24 hours of build time before the demo.
 - The product should both collect the data and aggregate it in our software to create a site map. What the site map must contain is not settled yet.
+- The biggest problem is the time it takes to connect to the grid. The product is a data collection and aggregation tool that sets inputs and outputs for each site, so approval to connect comes faster and without mistakes. Software can reduce avoidable rework, but it can't guarantee approval or turnaround.
+- The demo will target either Massachusetts or California sites.
+- We want a repeatable, novel way to populate the database for any site. We still need to choose it, and the tech stack.
 
 **Still missing**
 - The Century Tywood plan set. It is not in this repo, and a filename search of this machine's Documents, Downloads, and Desktop folders did not find it. Two other sample plan sets are now in `provided resources/`.
@@ -48,6 +51,7 @@ Living context for the EQORE track. **Last updated:** 2026-11-07
 - 2026-11-07: The team relayed that site data collection is manual today and that EQORE is building in-house methods to reduce site visit costs. We still have no time or cost figure for it.
 - 2026-11-07: The team stated that the product collects and aggregates the data to create a site map. Option 1 research lanes reported in `docs/research/`.
 - 2026-11-07: The team added two sample Issued for Construction plan sets to `provided resources/` and asked for novelty in how data is collected. Sample 1's site plan says its dimensions come from aerial imagery and public property boundary KMZ data only, not a survey.
+- 2026-11-07: The team named time to grid connection as the biggest problem, set the demo in Massachusetts or California, and asked for a repeatable collection method and a tech stack. See D2, D9, and D11 in [decision.md](decision.md).
 
 ---
 

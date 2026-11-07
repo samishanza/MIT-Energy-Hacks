@@ -15,7 +15,9 @@ Open decisions, assumptions, and team choices. EQORE's Challenge Brief and the l
 | D5 | Owner of shared types and schemas | Open | Team |
 | D6 | Writing-task isolation: Compound Engineering workers or named Git worktrees | Open | Lead |
 | D8 | Lead who coordinates implementation | Open | Team |
-| D9 | Data collection approach for Option 1: software, hardware, or both | Open | Team |
+| D9 | Data collection approach for Option 1: software, hardware, or both, and the repeatable method for populating the database | Open, being planned | Team |
+| D11 | Demo state: Massachusetts or California | Open, starting from Massachusetts unless the utility research clearly favors California | Team |
+| D12 | Scope: narrow the target to the interconnection application and the drawings it requires, from signed contract until the application is submitted | Proposed in `/ce-plan`, not yet confirmed | Team |
 
 ## Hackathon facts we still need
 
