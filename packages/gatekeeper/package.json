@@ -8,6 +8,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@eqore/catalog": "^0.1.0"
+    "@eqore/catalog": "^0.1.0",
+    "@eqore/contract": "^0.1.0"
   }
 }

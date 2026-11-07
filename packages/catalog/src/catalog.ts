@@ -24,7 +24,15 @@ export type AgentId =
    * Its permissions are not listed per field: it may write exactly those fields the
    * catalog already says a staff capture can resolve. See isAgentAllowed.
    */
-  | 'capture_result';
+  | 'capture_result'
+  /**
+   * The first-party collection pipeline reading public machine-readable layers.
+   *
+   * It is not any one agent — it reads parcels, footprints, elevation and grid layers in
+   * one pass — so a single agent identity would either refuse half its legitimate output
+   * or have to be given everything. Its permission is derived instead: see isAgentAllowed.
+   */
+  | 'collector';
 
 /** Plan-set sheets. E-xxx ids match the sheets the Setback engine already draws. */
 export const SHEETS = {
@@ -908,6 +916,21 @@ export function specFor(key: string): FieldSpec | undefined {
   return BY_KEY.get(key) ?? BY_KEY.get(normalizeKey(key));
 }
 
+/** Public layers a collector can query directly and parse without a human reading it. */
+export const COLLECTABLE_SOURCES: SourceKind[] = [
+  'parcel',
+  'assessor',
+  'aerial',
+  'gis_footprint',
+  'lidar_3dep',
+  'street_level',
+  'flood_map',
+  'hydrant_gis',
+  'hosting_map',
+  'tariff_db',
+  'code_table',
+];
+
 export function isAgentAllowed(agentId: AgentId, key: string): boolean {
   const spec = specFor(key);
   if (!spec) return false;
@@ -915,6 +938,11 @@ export function isAgentAllowed(agentId: AgentId, key: string): boolean {
   // can resolve — no more. Derived rather than listed, so the two can never drift:
   // if a field's Tier-2 route is removed, the write permission goes with it.
   if (agentId === 'capture_result') return !!spec.fallback?.kind.startsWith('staff_');
+  // A collector may write what a machine-readable public layer can answer, and nothing
+  // else. That still refuses it the fields that actually decide a project — a bus rating
+  // comes off a permit or a nameplate, a CT multiplier off a bill — so the check is not
+  // vacuous just because the code is first-party.
+  if (agentId === 'collector') return COLLECTABLE_SOURCES.includes(spec.cheapestSource.kind);
   return spec.allowedAgents.includes(agentId);
 }
 

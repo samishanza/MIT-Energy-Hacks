@@ -19,6 +19,8 @@ export const DEFAULT_BUDGETS: Record<AgentId, Budget> = {
   intake: { maxToolCalls: 20, maxProposals: 20, maxWallMs: 60_000, maxSpendUsd: 1.0 },
   capture: { maxToolCalls: 6, maxProposals: 0, maxWallMs: 15_000, maxSpendUsd: 0.2 },
   // One vision call per returned photo, with room for a re-shoot.
+  // One collection pass touches many layers, so its budget is the widest.
+  collector: { maxToolCalls: 60, maxProposals: 200, maxWallMs: 180_000, maxSpendUsd: 0.5 },
   capture_result: { maxToolCalls: 8, maxProposals: 15, maxWallMs: 120_000, maxSpendUsd: 1.0 },
 };
 
