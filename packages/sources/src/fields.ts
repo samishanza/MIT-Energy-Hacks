@@ -9,7 +9,9 @@ export type Comparison =
   | { kind: "tolerance"; relative: number }
   | { kind: "exact" }
   // Several values are alternatives to settle, not sources disagreeing.
-  | { kind: "candidates" };
+  | { kind: "candidates" }
+  // A newer reading replaces an unconfirmed one, as when a pin is moved.
+  | { kind: "latest" };
 
 export type FieldDefinition = {
   field: string;
@@ -58,9 +60,9 @@ export const FIELDS: FieldDefinition[] = [
   { field: "main_device_rating", label: "Main device rating", owner: "engineer", grade: "nameplate" },
   { field: "bus_rating", label: "Bus rating", owner: "qualified_person", grade: "nameplate", missingReason: QUALIFIED },
   { field: "kaic_rating", label: "Short-circuit rating (kAIC)", owner: "qualified_person", grade: "nameplate", missingReason: QUALIFIED },
-  { field: "switchboard_location", label: "Main switchboard location", owner: "customer", grade: "layout" },
-  { field: "meter_location", label: "Meter location", owner: "customer", grade: "layout" },
-  { field: "utility_transformer_location", label: "Utility transformer location", owner: "customer", grade: "layout" },
+  { field: "switchboard_location", label: "Main switchboard location", owner: "customer", grade: "layout", comparison: { kind: "latest" } },
+  { field: "meter_location", label: "Meter location", owner: "customer", grade: "layout", comparison: { kind: "latest" } },
+  { field: "utility_transformer_location", label: "Utility transformer location", owner: "customer", grade: "layout", comparison: { kind: "latest" } },
 
   // Engineer decisions and documents.
   { field: "system_capacity_kw", label: "System capacity", owner: "engineer", grade: "reference", missingReason: ENGINEER },

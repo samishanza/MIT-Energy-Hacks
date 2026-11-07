@@ -113,6 +113,13 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
           if (definition.comparison?.kind === "candidates") addCandidate(observation);
         } else if (state === "inferred") {
           if (current && agrees(definition, current, observation.value)) break;
+          if (definition.comparison?.kind === "latest") {
+            current = observation.value;
+            method = observation.method;
+            grade = observation.grade ?? grade;
+            currentReading = observation;
+            break;
+          }
           state = "conflicting";
           conflictKind = conflictKindFor();
           current = null;
