@@ -260,6 +260,8 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
     ],
     features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features)],
     baseMap: physical.baseMap,
-    sourceRuns: [...runs.values()],
+    // A source still pending at the end was never read, such as a feeder's detail layers when no feeder was found.
+    // The value it would have filled says why, so the finished record lists only sources that ran.
+    sourceRuns: [...runs.values()].filter((run) => run.status !== "pending"),
   };
 }

@@ -148,7 +148,8 @@ export const massachusetts: RegionConfig = {
         { field: "use_code", attribute: "USE_CODE", type: "text", grade: "reference" },
         { field: "building_area_sqft", attribute: "BLD_AREA", type: "quantity", unit: "sqft", zeroIsMissing: true, grade: "reference" },
         { field: "year_built", attribute: "YEAR_BUILT", type: "quantity", unit: "year", zeroIsMissing: true, grade: "reference" },
-        { field: "zoning_district", attribute: "ZONING", type: "text", grade: "reference" },
+        // Towns that don't report a district leave a placeholder such as 0.
+        { field: "zoning_district", attribute: "ZONING", type: "text", blankValues: ["0", "00", "-", "N/A", "NA", "NONE", "UNKNOWN", "UNK"], grade: "reference" },
         { field: "building_stories", attribute: "STORIES", type: "quantity", unit: "stories", zeroIsMissing: true, grade: "reference" },
         { field: "use_description", attribute: "USE_DESC", type: "text", grade: "reference" },
       ],

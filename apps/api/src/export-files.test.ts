@@ -60,6 +60,7 @@ describe("site geometry as files", () => {
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(value("lot_depth_ft"), -1);
     expect(dxfText).toContain(`Origin (0,0) is longitude ${record.site.location![0]}, latitude ${record.site.location![1]}`);
     expect(polylineVertices(dxfText, "BUILDINGS").length).toBeGreaterThan(0);
+    expect(polylineVertices(dxfText, "ROADS").length).toBeGreaterThan(0);
   });
 
   it("places the parcel in the KML at the record's coordinates", async () => {

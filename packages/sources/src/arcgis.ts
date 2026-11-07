@@ -317,7 +317,7 @@ export function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { va
     return { value: { type: "quantity", value: convertUnit(number, mapping.sourceUnit ?? unit, unit), unit } };
   }
   const text = String(raw).trim();
-  if (mapping.blankValues?.includes(text)) return { reason: `${attribute} is ${text} in the source, which means it has no value` };
+  if (mapping.blankValues?.includes(text.toUpperCase())) return { reason: `${attribute} is ${text} in the source, which means it has no value` };
   return { value: { type: "text", value: text } };
 }
 
