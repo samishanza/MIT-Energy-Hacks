@@ -120,7 +120,7 @@ describe("browser bundle", () => {
   it("never reaches a Node built-in", () => {
     expect(
       problems,
-      "Browser code reached a Node built-in. Import a Node-free subpath instead, as @eqore/sheets imports @eqore/drc/polygon rather than @eqore/drc.",
+      "Browser code reached a Node built-in. Import a Node-free package instead, as @eqore/sheets imports @eqore/geom rather than @eqore/drc.",
     ).toEqual([]);
   });
 });

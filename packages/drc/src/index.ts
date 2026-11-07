@@ -1,6 +1,6 @@
 export * from "./types.ts";
 export * from "./geometry.ts";
-export * from "./polygon.ts";
+export * from "@eqore/geom";
 export * from "./rules.ts";
 export * from "./compile.ts";
 export * from "./uncertainty.ts";
@@ -11,3 +11,4 @@ export * from "./readiness.ts";
 export * from "./export.ts";
 export * from "./build.ts";
 export * from "./contract.ts";
+export * from "./from-record.ts";

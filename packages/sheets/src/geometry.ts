@@ -8,13 +8,14 @@ import {
   boundingRect,
   derivePadCandidates,
   frameFor,
+  largestInscribedRect,
   polygonAreaSqft,
   toLocalPolygon,
   type LocalFrame,
   type LocalPolygon,
   type PadCandidate,
-  // The polygon module only, because the package index reaches server-only collection code.
-} from '@eqore/drc/polygon';
+  // The geometry leaf package, not @eqore/drc, whose index reaches server-only collection code.
+} from '@eqore/geom';
 
 export interface SheetGeometry {
   frame: LocalFrame;
@@ -26,6 +27,12 @@ export interface SheetGeometry {
   lotAreaSqft: number | null;
   /** Why there is nothing to draw, when that is the case. */
   reason?: string;
+  /**
+   * True when the pad zones came from the record's own candidate_area features rather
+   * than being recomputed here. Shown on the sheet, because a drawing that agrees with
+   * the record and a drawing that merely resembles it are different things.
+   */
+  padsFromRecord: boolean;
 }
 
 export interface PadOptions {
@@ -55,6 +62,7 @@ export function sheetGeometry(record: RecordVersion, opts: PadOptions = {}): She
       extent: { x: 0, y: 0, w: 1, h: 1 },
       lotAreaSqft: null,
       reason: 'This record has no parcel polygon, so there is no lot to draw.',
+      padsFromRecord: false,
     };
   }
 
@@ -68,14 +76,28 @@ export function sheetGeometry(record: RecordVersion, opts: PadOptions = {}): She
   const lot = toLocalPolygon(lotFeature.geometry, frame)[0] ?? null;
   const buildings = polygonsOf(record.features, 'building_outline', frame);
 
-  const pads = lot
-    ? derivePadCandidates(lot, buildings, frame, {
-        buildingBufferFt: opts.buildingBufferFt ?? 10,
-        lotSetbackFt: opts.lotSetbackFt ?? 10,
-        minAreaSqft: opts.minAreaSqft ?? 600,
-        stepFt: opts.stepFt ?? 5,
-      })
-    : [];
+  // Prefer what the pipeline computed. Recomputing here would be a second derivation of
+  // the same thing, and two derivations are how a drawing and a record quietly diverge.
+  const recorded = polygonsOf(record.features, 'candidate_area', frame);
+  const padsFromRecord = recorded.length > 0;
+
+  const pads: PadCandidate[] = padsFromRecord
+    ? recorded
+        .map((polygon) => ({
+          polygon,
+          areaSqft: polygonAreaSqft(polygon),
+          rect: largestInscribedRect(polygon, opts.stepFt ?? 5),
+          basis: 'Candidate area from the site record, derived during collection.',
+        }))
+        .sort((a, b) => b.areaSqft - a.areaSqft)
+    : lot
+      ? derivePadCandidates(lot, buildings, frame, {
+          buildingBufferFt: opts.buildingBufferFt ?? 10,
+          lotSetbackFt: opts.lotSetbackFt ?? 10,
+          minAreaSqft: opts.minAreaSqft ?? 600,
+          stepFt: opts.stepFt ?? 5,
+        })
+      : [];
 
   const extent = lot ? boundingRect(lot) : { x: 0, y: 0, w: 1, h: 1 };
 
@@ -87,6 +109,7 @@ export function sheetGeometry(record: RecordVersion, opts: PadOptions = {}): She
     extent,
     lotAreaSqft: lot ? polygonAreaSqft(lot) : null,
     reason: lot ? undefined : 'The parcel geometry could not be read.',
+    padsFromRecord,
   };
 }
 

@@ -16,7 +16,13 @@ import difference from '@turf/difference';
 import buffer from '@turf/buffer';
 import { featureCollection, polygon as turfPolygon } from '@turf/helpers';
 
-import type { Rect } from './types.ts';
+/** Axis-aligned rectangle in local feet. Declared here so this package depends on nothing internal. */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /** A ring of points in local feet. First point is not repeated. */
 export type Ring = { x: number; y: number }[];
@@ -270,6 +276,26 @@ export function derivePadCandidates(
 }
 
 /**
+ * Cap on grid cells, so a large parcel cannot make this quadratic in wall time.
+ *
+ * The search tests four corners per cell against every edge of the ring, so cost is
+ * cells x ring length. A 59-acre lot at a 5 ft step is ~100,000 cells, which on a real
+ * parcel ring took long enough to time out the collection pass. Capping the cell count
+ * and coarsening the step instead keeps it bounded; the effective step is returned, so
+ * the loss of resolution is stated rather than hidden.
+ */
+const MAX_GRID_CELLS = 16_000;
+
+/** The step this search would actually use for a polygon, after the cell cap. */
+export function effectiveStepFt(poly: LocalPolygon, stepFt: number): number {
+  const bb = boundingRect(poly);
+  if (bb.w <= 0 || bb.h <= 0) return stepFt;
+  const cells = (bb.w / stepFt) * (bb.h / stepFt);
+  if (cells <= MAX_GRID_CELLS) return stepFt;
+  return round2(stepFt * Math.sqrt(cells / MAX_GRID_CELLS));
+}
+
+/**
  * Largest axis-aligned rectangle that fits inside a polygon, found on a grid.
  * Approximate by construction — the step size is the resolution, and it is reported
  * rather than hidden, because a pad placed on a 5 ft grid is a 5 ft claim.
@@ -278,8 +304,9 @@ export function largestInscribedRect(poly: LocalPolygon, stepFt: number): Rect {
   const bb = boundingRect(poly);
   if (bb.w <= 0 || bb.h <= 0) return { x: 0, y: 0, w: 0, h: 0 };
 
-  const cols = Math.max(1, Math.floor(bb.w / stepFt));
-  const rows = Math.max(1, Math.floor(bb.h / stepFt));
+  const step = effectiveStepFt(poly, stepFt);
+  const cols = Math.max(1, Math.floor(bb.w / step));
+  const rows = Math.max(1, Math.floor(bb.h / step));
 
   // A cell counts only when ALL FOUR of its corners are inside — not its centre.
   // Testing the centre lets the winning rectangle overhang the boundary by up to half a
@@ -287,7 +314,7 @@ export function largestInscribedRect(poly: LocalPolygon, stepFt: number): Rect {
   // conservative costs one cell of margin per side and cannot produce a false fit.
   const cellInside = (c: number, r: number) => {
     for (const [dx, dy] of [[0, 0], [1, 0], [1, 1], [0, 1]] as const) {
-      const p = { x: bb.x + (c + dx) * stepFt, y: bb.y + (r + dy) * stepFt };
+      const p = { x: bb.x + (c + dx) * step, y: bb.y + (r + dy) * step };
       if (!pointInRing(poly.outer, p)) return false;
       if ((poly.holes ?? []).some((h) => pointInRing(h, p))) return false;
     }
@@ -322,10 +349,10 @@ export function largestInscribedRect(poly: LocalPolygon, stepFt: number): Rect {
   }
 
   return {
-    x: round2(bb.x + best.c * stepFt),
-    y: round2(bb.y + best.r * stepFt),
-    w: round2(best.w * stepFt),
-    h: round2(best.h * stepFt),
+    x: round2(bb.x + best.c * step),
+    y: round2(bb.y + best.r * step),
+    w: round2(best.w * step),
+    h: round2(best.h * step),
   };
 }
 

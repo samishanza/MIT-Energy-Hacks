@@ -48,6 +48,7 @@ export const FIELDS: FieldDefinition[] = [
   { field: "building_stories", label: "Stories", owner: "public_data", grade: "reference" },
   { field: "use_description", label: "Assessor use", owner: "public_data", grade: "reference" },
   { field: "building_height_ft", label: "Building height (estimate)", owner: "public_data", grade: "reference" },
+  { field: "candidate_areas", label: "Largest candidate pad area", owner: "public_data", grade: "reference" },
   ...[
     ["municipality", "Municipality"],
     ["county", "County"],

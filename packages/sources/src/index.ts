@@ -4,6 +4,7 @@ export * from "./geometry.ts";
 export * from "./json-api.ts";
 export * from "./layers.ts";
 export * from "./arcgis.ts";
+export * from "./checks/candidates.ts";
 export * from "./collect.ts";
 export * from "./derive.ts";
 export * from "./fields.ts";
