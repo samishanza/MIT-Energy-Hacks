@@ -41,9 +41,11 @@ export type CollectContext = {
 export const RECORDED_AT_HEADER = "x-recorded-at";
 
 const SERVICE_ERROR_RETRIES = 3;
+// Longer than the slowest answer measured from MassGIS, so a slow query isn't cut off before it can finish.
+const QUERY_TIMEOUT_MS = 70_000;
 
-export function sha256(text: string): string {
-  return createHash("sha256").update(text).digest("hex");
+export function sha256(content: string | Uint8Array): string {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 function describeQuery(query: SpatialQuery): string {
@@ -181,7 +183,8 @@ export async function queryArcgis(entry: ArcgisEntry, query: SpatialQuery, ctx: 
   let body: QueryBody = {};
   let retrievedAt = base.retrievedAt;
 
-  // MassGIS intermittently answers a valid query with an error body, and the same query then succeeds.
+  // A cold MassGIS parcel query can run about 55 seconds and then answer with an "invalid query"
+  // error body. The same query then succeeds, usually within seconds.
   for (let attempt = 0; attempt <= SERVICE_ERROR_RETRIES; attempt++) {
     if (attempt > 0) await new Promise((done) => setTimeout(done, (ctx.retryDelayMs ?? 1500) * attempt));
     let response: Response;
@@ -190,10 +193,12 @@ export async function queryArcgis(entry: ArcgisEntry, query: SpatialQuery, ctx: 
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: queryParams(entry, query).toString(),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
       });
     } catch (error) {
-      return fail(`The service could not be reached: ${(error as Error).message}`);
+      const timedOut = (error as Error).name === "TimeoutError";
+      if (timedOut && attempt < SERVICE_ERROR_RETRIES) continue;
+      return fail(timedOut ? `The service didn't answer within ${QUERY_TIMEOUT_MS / 1000} seconds` : `The service could not be reached: ${(error as Error).message}`);
     }
     retrievedAt = response.headers.get(RECORDED_AT_HEADER) ?? base.retrievedAt;
     if (!response.ok) return fail(`The service returned HTTP ${response.status}`, retrievedAt);

@@ -14,6 +14,10 @@ export type EvidenceRequest = {
   question?: string;
 };
 
+export function offersCaptureLink(route: Gap["route"]): boolean {
+  return route === "capture_photo" || route === "capture_bill";
+}
+
 export const EVIDENCE_REQUESTS: EvidenceRequest[] = [
   {
     id: "bill",

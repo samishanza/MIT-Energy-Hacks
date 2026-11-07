@@ -1,9 +1,7 @@
-import { CONTRACT_VERSION, ValueSchema } from "@eqore/contract";
+import { ValueSchema } from "@eqore/contract";
 import type { Candidate, Observation, ObservedValue, Value } from "@eqore/contract";
 import { sha256 } from "./arcgis.ts";
 import { FEEDER_ATTRIBUTES, FIELDS, type FieldDefinition } from "./fields.ts";
-
-export { CONTRACT_VERSION };
 
 function agrees(definition: FieldDefinition, a: ObservedValue, b: ObservedValue): boolean {
   if (a.type !== b.type) return false;
@@ -56,8 +54,7 @@ function candidateAttributes(reading: Observation, related: Observation[]): Cand
   return attributes;
 }
 
-// Folds one field's observations, oldest first, into its current value. State moves only along
-// the allowed transitions. Nothing here can reach `verified` except a named person's verification.
+// Folds one field's observations, oldest first, into its current value.
 export function deriveValue(definition: FieldDefinition, observations: Observation[], related: Observation[] = []): Value {
   let state: Value["state"] = "missing";
   let current: ObservedValue | null = null;
@@ -79,8 +76,9 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
     definition.comparison?.kind === "candidates" ? "feeder_candidates" : "source_disagreement";
 
   for (const observation of observations) {
-    const repeat = seen.has(identityKey(observation));
-    seen.add(identityKey(observation));
+    const identity = identityKey(observation);
+    const repeat = seen.has(identity);
+    seen.add(identity);
 
     switch (observation.kind) {
       case "no_value":
@@ -176,11 +174,14 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
 
 // One value per known field, so a field no source has touched still shows as missing with its owner.
 export function deriveValues(observations: Observation[]): Value[] {
+  const byField = new Map<string, Observation[]>();
+  for (const observation of observations) {
+    const group = byField.get(observation.field);
+    if (group) group.push(observation);
+    else byField.set(observation.field, [observation]);
+  }
+  const feederDetails = observations.filter((observation) => observation.field in FEEDER_ATTRIBUTES);
   return FIELDS.map((definition) =>
-    deriveValue(
-      definition,
-      observations.filter((observation) => observation.field === definition.field),
-      definition.field === "feeder" ? observations.filter((observation) => observation.field in FEEDER_ATTRIBUTES) : [],
-    ),
+    deriveValue(definition, byField.get(definition.field) ?? [], definition.field === "feeder" ? feederDetails : []),
   );
 }

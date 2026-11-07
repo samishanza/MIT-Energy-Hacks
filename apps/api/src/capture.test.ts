@@ -62,7 +62,10 @@ describe("capture intake", () => {
   it("stores a valid photo with its hash and creates an inferred draft, with nothing verified", async () => {
     const t = await setup();
     const { link } = await t.createLink();
-    const response = await t.submit(t.tokenOf(link!.url));
+    const token = t.tokenOf(link!.url);
+    // Only a hash of the token is stored, so a copy of the database can't open the link.
+    expect(JSON.stringify(t.deps.store.db.prepare("SELECT * FROM capture_links WHERE id = ?").get(link!.id))).not.toContain(token.slice(0, 20));
+    const response = await t.submit(token);
     const result = CaptureResultSchema.parse(await response.json());
 
     expect(result).toMatchObject({ state: "inferred", positionStatus: "placed" });

@@ -38,7 +38,6 @@ const SCHEMA = `
     token_hash TEXT NOT NULL UNIQUE,
     site_id TEXT NOT NULL,
     field TEXT NOT NULL,
-    url TEXT NOT NULL,
     expires_at TEXT NOT NULL,
     uploads_used INTEGER NOT NULL,
     max_uploads INTEGER NOT NULL
@@ -73,7 +72,6 @@ export type CaptureLinkRow = {
   tokenHash: string;
   siteId: string;
   field: string;
-  url: string;
   expiresAt: string;
   uploadsUsed: number;
   maxUploads: number;
@@ -118,8 +116,11 @@ export class Store {
   }
 
   readVersion(siteId: string, version: number | "latest"): RecordVersion | null {
-    const number = version === "latest" ? this.latestVersionNumber(siteId) : version;
-    const row = this.db.prepare("SELECT json FROM versions WHERE site_id = ? AND version = ?").get(siteId, number) as Row | undefined;
+    const row = (
+      version === "latest"
+        ? this.db.prepare("SELECT json FROM versions WHERE site_id = ? ORDER BY version DESC LIMIT 1").get(siteId)
+        : this.db.prepare("SELECT json FROM versions WHERE site_id = ? AND version = ?").get(siteId, version)
+    ) as Row | undefined;
     return row ? (JSON.parse(String(row.json)) as RecordVersion) : null;
   }
 
@@ -148,8 +149,8 @@ export class Store {
 
   saveCaptureLink(link: CaptureLinkRow): void {
     this.db
-      .prepare("INSERT INTO capture_links (id, token_hash, site_id, field, url, expires_at, uploads_used, max_uploads) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(link.id, link.tokenHash, link.siteId, link.field, link.url, link.expiresAt, link.uploadsUsed, link.maxUploads);
+      .prepare("INSERT INTO capture_links (id, token_hash, site_id, field, expires_at, uploads_used, max_uploads) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(link.id, link.tokenHash, link.siteId, link.field, link.expiresAt, link.uploadsUsed, link.maxUploads);
   }
 
   captureLinkByTokenHash(tokenHash: string): CaptureLinkRow | null {
@@ -160,7 +161,6 @@ export class Store {
       tokenHash: String(row.token_hash),
       siteId: String(row.site_id),
       field: String(row.field),
-      url: String(row.url),
       expiresAt: String(row.expires_at),
       uploadsUsed: Number(row.uploads_used),
       maxUploads: Number(row.max_uploads),

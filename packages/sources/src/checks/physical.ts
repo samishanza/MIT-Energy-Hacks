@@ -199,7 +199,7 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
       location = centroid(parcel.geometry).geometry.coordinates as [number, number];
     } else {
       observations.push(observe(anchor.lookup, ctx, { field: "property_line", kind: "no_value", value: null, objectId: parcel.objectId, reason: "The parcel came back with no polygon" }));
-      location = anchor.pin ? [anchor.pin.longitude, anchor.pin.latitude] : [0, 0];
+      location = [0, 0];
     }
     if (anchor.pin) location = [anchor.pin.longitude, anchor.pin.latitude];
   } else {

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ObservationSchema } from "@eqore/contract";
@@ -13,6 +15,8 @@ const recorded = fixtureFetch(dir("arcgis"), dir("geocoder"));
 const context = (fetch: FetchLike = recorded): CollectContext => ({ siteId: "test-site", fetch, now: () => "2026-11-07T20:00:00.000Z" });
 
 const parcels = massachusetts.parcels!.entry;
+// The stored time of the recording this test replays.
+const recordedAt = JSON.parse(readFileSync(join(dir("arcgis"), "worcester-100-research-dr-71d700b1bd868958.json"), "utf8")).retrievedAt as string;
 const grid = massachusetts.grid[0]!.entry;
 const WORCESTER = "SITE_ADDR='100 RESEARCH DR' AND CITY='WORCESTER'";
 
@@ -31,8 +35,7 @@ describe("the ArcGIS REST adapter", () => {
     expect(parcelId.source.name).toBe("MassGIS L3 property tax parcels");
     expect(parcelId.sourceDate).toBe("FY2026");
     // The recording's own date, not the time of this replay.
-    expect(parcelId.retrievedAt.startsWith("2026-11-07T")).toBe(true);
-    expect(parcelId.retrievedAt).not.toBe("2026-11-07T20:00:00.000Z");
+    expect(parcelId.retrievedAt).toBe(recordedAt);
     expect(result.features[0]!.geometry?.type).toMatch(/Polygon/);
     for (const observation of observations) expect(() => ObservationSchema.parse(observation)).not.toThrow();
   });
@@ -111,6 +114,34 @@ describe("the ArcGIS REST adapter", () => {
     const down: FetchLike = async () => new Response(JSON.stringify({ error: { message: "Invalid query parameters." } }));
     const failed = await queryArcgis(parcels, { kind: "attribute", where: WORCESTER }, { ...context(down), retryDelayMs: 0 });
     expect(failed.run).toMatchObject({ status: "missing", reason: "The service returned an error: Invalid query parameters." });
+  });
+
+  it("retries a timeout, then reports it with the reason if it never clears", async () => {
+    const timeout = () => Object.assign(new Error("The operation timed out"), { name: "TimeoutError" });
+    let calls = 0;
+    const slowOnce: FetchLike = async () => {
+      calls += 1;
+      if (calls === 1) throw timeout();
+      return new Response(JSON.stringify({ features: [{ attributes: { LOC_ID: "P-1" } }] }));
+    };
+    const recovered = await queryArcgis(parcels, { kind: "attribute", where: WORCESTER }, { ...context(slowOnce), retryDelayMs: 0 });
+    expect(recovered.features).toHaveLength(1);
+
+    const alwaysSlow: FetchLike = async () => {
+      throw timeout();
+    };
+    const failed = await queryArcgis(parcels, { kind: "attribute", where: WORCESTER }, { ...context(alwaysSlow), retryDelayMs: 0 });
+    expect(failed.run).toMatchObject({ status: "missing", reason: "The service didn't answer within 70 seconds" });
+
+    // A network failure isn't a slow answer, so it reports at once.
+    let networkCalls = 0;
+    const offline: FetchLike = async () => {
+      networkCalls += 1;
+      throw new Error("getaddrinfo ENOTFOUND");
+    };
+    const unreachable = await queryArcgis(parcels, { kind: "attribute", where: WORCESTER }, { ...context(offline), retryDelayMs: 0 });
+    expect(networkCalls).toBe(1);
+    expect(unreachable.run.reason).toContain("could not be reached");
   });
 
   it("works with a new entry that uses the same adapter, with no code change", async () => {

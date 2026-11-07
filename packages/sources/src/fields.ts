@@ -1,7 +1,6 @@
 import type { FitnessGrade, Owner } from "@eqore/contract";
 
-// Team value for the demo until EQORE gives one. It was set before any candidate parcel was
-// looked at, and it keeps the 5% gap at 11 Bartzak Dr a conflict.
+// Team value for the demo until EQORE gives one.
 export const LOT_SIZE_TOLERANCE = 0.03;
 
 export type Comparison =

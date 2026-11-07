@@ -3,19 +3,17 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { booleanPointInPolygon, pointToPolygonDistance } from "@turf/turf";
 import { CaptureLinkSchema, CaptureMetadataSchema, CaptureRequestSchema, CaptureResultSchema, DOORS_CLOSED_SAFETY_TEXT, ObservationSchema } from "@eqore/contract";
-import type { CaptureLink, CaptureMetadata, CaptureRequest, CaptureResult, MapFeature, Observation, ObservedValue, RecordVersion, Source } from "@eqore/contract";
+import type { CaptureLink, CaptureMetadata, CaptureRequest, CaptureResult, Observation, ObservedValue, RecordVersion, Source } from "@eqore/contract";
 import { fieldDefinition, sha256 } from "@eqore/sources";
 import { EXTRACTION_FIELDS, type DraftReading, type Extraction, type ExtractionField, type ExtractionRequest, type Extractor } from "./extract.ts";
-import { EVIDENCE_REQUESTS, type EvidenceRequest } from "./requests.ts";
-import { ApiFailure, nextVersion, type ApiDeps } from "./run.ts";
+import { EVIDENCE_REQUESTS, offersCaptureLink, type EvidenceRequest } from "./requests.ts";
+import { ApiFailure, latestOrFail, nextVersion, withPin, type ApiDeps } from "./run.ts";
 import type { CaptureLinkRow } from "./store.ts";
 
 export const LINK_LIFETIME_MS = 24 * 60 * 60 * 1000;
 export const MAX_UPLOADS = 5;
 export const MAX_FILE_BYTES = 15 * 1024 * 1024;
 
-// Printed main device ratings commonly fall on these sizes. Off-list readings get a flag for
-// the engineer, and on-list readings are never confirmed by this check.
 const STANDARD_AMPS = new Set([100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1200, 1600, 2000, 2500, 3000, 4000, 5000, 6000]);
 
 export type EvidenceManifestEntry = {
@@ -40,7 +38,7 @@ export function loadEvidenceManifest(path: string): Map<string, EvidenceManifest
 }
 
 function requestFor(field: string): EvidenceRequest | undefined {
-  return EVIDENCE_REQUESTS.find((request) => request.fields.includes(field) && (request.route === "capture_photo" || request.route === "capture_bill"));
+  return EVIDENCE_REQUESTS.find((request) => request.fields.includes(field) && offersCaptureLink(request.route));
 }
 
 function fieldsToExtract(request: EvidenceRequest): ExtractionField[] {
@@ -48,21 +46,21 @@ function fieldsToExtract(request: EvidenceRequest): ExtractionField[] {
   return EXTRACTION_FIELDS.filter((field) => names.includes(field.field));
 }
 
-function latestRecord(deps: ApiDeps, siteId: string): RecordVersion {
-  const latest = deps.store.readVersion(siteId, "latest");
-  if (!latest) throw new ApiFailure("not_found", 404, `No site ${siteId}`);
-  return latest;
+function isVerified(record: RecordVersion, field: string): boolean {
+  return record.values.find((value) => value.field === field)?.state === "verified";
+}
+
+export function fileTooLarge(): ApiFailure {
+  return new ApiFailure("file_too_large", 413, `The file is over the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit.`);
 }
 
 export function createCaptureLink(deps: CaptureDeps, siteId: string, body: unknown): CaptureLink {
-  const latest = latestRecord(deps, siteId);
+  const latest = latestOrFail(deps, siteId);
   const field = (body as { field?: unknown } | null)?.field;
   if (typeof field !== "string" || !fieldDefinition(field)) throw new ApiFailure("not_found", 404, `No field ${String(field)}`);
   // Facts inside equipment are for a qualified person, and are never asked of facility staff.
   if (!requestFor(field)) throw new ApiFailure("illegal_transition", 409, `No capture link can be offered for ${field}. It needs a person or a document instead.`);
-  if (latest.values.find((value) => value.field === field)?.state === "verified") {
-    throw new ApiFailure("illegal_transition", 409, `${field} is already verified.`);
-  }
+  if (isVerified(latest, field)) throw new ApiFailure("illegal_transition", 409, `${field} is already verified.`);
 
   // Only the hash is stored, so a copy of the database can't be used to open the link.
   const token = randomBytes(32).toString("base64url");
@@ -71,7 +69,6 @@ export function createCaptureLink(deps: CaptureDeps, siteId: string, body: unkno
     tokenHash: sha256(token),
     siteId,
     field,
-    url: `${deps.capturePublicUrl.replace(/\/$/, "")}/capture/${token}`,
     expiresAt: new Date(Date.parse(deps.now()) + LINK_LIFETIME_MS).toISOString(),
     uploadsUsed: 0,
     maxUploads: MAX_UPLOADS,
@@ -81,7 +78,7 @@ export function createCaptureLink(deps: CaptureDeps, siteId: string, body: unkno
     id: row.id,
     siteId,
     field,
-    url: row.url,
+    url: `${deps.capturePublicUrl.replace(/\/$/, "")}/capture/${token}`,
     status: "open",
     expiresAt: row.expiresAt,
     uploadsUsed: 0,
@@ -94,10 +91,8 @@ function openLink(deps: CaptureDeps, token: string): { link: CaptureLinkRow; lat
   const link = deps.store.captureLinkByTokenHash(sha256(token));
   if (!link) throw new ApiFailure("invalid_token", 404, "This link isn't active.");
   if (Date.parse(deps.now()) > Date.parse(link.expiresAt)) throw new ApiFailure("token_expired", 410, "This link has expired.");
-  const latest = latestRecord(deps, link.siteId);
-  if (latest.values.find((value) => value.field === link.field)?.state === "verified") {
-    throw new ApiFailure("token_closed", 410, "This request has been answered.");
-  }
+  const latest = latestOrFail(deps, link.siteId);
+  if (isVerified(latest, link.field)) throw new ApiFailure("token_closed", 410, "This request has been answered.");
   if (link.uploadsUsed >= link.maxUploads) throw new ApiFailure("upload_limit", 429, "This link has reached its upload limit.");
   return { link, latest };
 }
@@ -121,7 +116,6 @@ export function readCaptureRequest(deps: CaptureDeps, token: string): CaptureReq
 
 type AcceptedType = { contentType: ExtractionRequest["contentType"]; extension: string };
 
-// From the file's own bytes, because a declared type can say anything.
 function sniffType(bytes: Uint8Array): AcceptedType | null {
   const starts = (...signature: number[]) => signature.every((byte, index) => bytes[index] === byte);
   if (starts(0xff, 0xd8, 0xff)) return { contentType: "image/jpeg", extension: ".jpg" };
@@ -154,7 +148,7 @@ function checkPosition(metadata: CaptureMetadata, latest: RecordVersion): Positi
   if (parcel?.type !== "Polygon" && parcel?.type !== "MultiPolygon") return { status: "placed" };
   const point = [longitude, latitude];
   if (booleanPointInPolygon(point, parcel)) return { status: "placed" };
-  const meters = pointToPolygonDistance(point, parcel.type === "Polygon" ? { type: "Feature", properties: {}, geometry: parcel } : { type: "Feature", properties: {}, geometry: parcel }, { units: "meters" });
+  const meters = pointToPolygonDistance(point, { type: "Feature", properties: {}, geometry: parcel }, { units: "meters" });
   if (meters <= accuracyMeters) return { status: "placed" };
   return {
     status: "outside_parcel",
@@ -239,57 +233,30 @@ function draftObservations(file: EvidenceFile, siteId: string, extraction: Extra
   });
 }
 
-function geotagObservation(file: EvidenceFile, siteId: string, field: string, metadata: CaptureMetadata, now: string): Observation {
-  const text = `${metadata.latitude}, ${metadata.longitude}`;
+function geotagObservation(file: EvidenceFile, siteId: string, field: string, now: string, outcome: { kind: "reading"; text: string; reason: string } | { kind: "unreadable"; reason: string }): Observation {
   const query = `geotag ${file.hash.slice(0, 16)}`;
+  const reading = outcome.kind === "reading";
+  return ObservationSchema.parse({
+    id: randomUUID(),
+    siteId,
+    field,
+    kind: outcome.kind,
+    value: reading ? { type: "text", value: outcome.text } : null,
+    source: { id: "capture-geotag", name: `Phone position from a file uploaded by ${file.uploadedBy}`, kind: "human_evidence", dataOrigin: file.synthetic ? "synthetic" : "real" },
+    retrievedAt: now,
+    sourceDate: null,
+    method: "source_read",
+    locator: { query, evidenceFileId: file.id },
+    identity: { sourceId: "capture-geotag", query, contentHash: sha256(reading ? outcome.text : outcome.reason) },
+    grade: reading ? "layout" : undefined,
+    reason: outcome.reason,
+    synthetic: file.synthetic,
+  });
+}
+
+function positionReading(metadata: CaptureMetadata): { kind: "reading"; text: string; reason: string } {
   const accuracy = metadata.accuracyMeters === undefined ? "with no stated accuracy" : `stated accuracy ${Math.round(metadata.accuracyMeters)} m`;
-  return ObservationSchema.parse({
-    id: randomUUID(),
-    siteId,
-    field,
-    kind: "reading",
-    value: { type: "text", value: text },
-    source: { id: "capture-geotag", name: `Phone position from a file uploaded by ${file.uploadedBy}`, kind: "human_evidence", dataOrigin: file.synthetic ? "synthetic" : "real" },
-    retrievedAt: now,
-    sourceDate: null,
-    method: "source_read",
-    locator: { query, evidenceFileId: file.id },
-    identity: { sourceId: "capture-geotag", query, contentHash: sha256(text) },
-    grade: "layout",
-    reason: `Phone position, ${accuracy}. A person confirms it against the aerial.`,
-    synthetic: file.synthetic,
-  });
-}
-
-function locationUnreadable(file: EvidenceFile, siteId: string, field: string, reason: string, now: string): Observation {
-  const query = `geotag ${file.hash.slice(0, 16)}`;
-  return ObservationSchema.parse({
-    id: randomUUID(),
-    siteId,
-    field,
-    kind: "unreadable",
-    value: null,
-    source: { id: "capture-geotag", name: `Phone position from a file uploaded by ${file.uploadedBy}`, kind: "human_evidence", dataOrigin: file.synthetic ? "synthetic" : "real" },
-    retrievedAt: now,
-    sourceDate: null,
-    method: "source_read",
-    locator: { query, evidenceFileId: file.id },
-    identity: { sourceId: "capture-geotag", query, contentHash: sha256(reason) },
-    reason,
-    synthetic: file.synthetic,
-  });
-}
-
-function withPin(features: MapFeature[], field: string, metadata: CaptureMetadata, placedByHand: boolean): MapFeature[] {
-  const pin: MapFeature = {
-    id: `pin-${field}`,
-    kind: "capture_pin",
-    field,
-    geometry: { type: "Point", coordinates: [metadata.longitude!, metadata.latitude!] },
-    label: fieldDefinition(field)?.label ?? field,
-    placedByHand,
-  };
-  return [...features.filter((feature) => feature.id !== pin.id), pin];
+  return { kind: "reading", text: `${metadata.latitude}, ${metadata.longitude}`, reason: `Phone position, ${accuracy}. A person confirms it against the aerial.` };
 }
 
 type Intake = {
@@ -308,19 +275,18 @@ async function takeEvidence(deps: CaptureDeps, intake: Intake): Promise<CaptureR
   const request = requestFor(field);
   if (!request) throw new ApiFailure("illegal_transition", 409, `No capture is offered for ${field}.`);
   if (!file) throw new ApiFailure("file_type", 415, "Send a JPEG, PNG, or PDF file.");
-  if (file.size > MAX_FILE_BYTES) throw new ApiFailure("file_too_large", 413, `The file is over the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit.`);
+  if (file.size > MAX_FILE_BYTES) throw fileTooLarge();
   const bytes = new Uint8Array(await file.arrayBuffer());
   const type = sniffType(bytes);
   if (!type) throw new ApiFailure("file_type", 415, "Send a JPEG, PNG, or PDF file.");
   if (intake.useUpload && !intake.useUpload()) throw new ApiFailure("upload_limit", 429, "This link has reached its upload limit.");
 
-  const latest = latestRecord(deps, siteId);
+  const latest = latestOrFail(deps, siteId);
   const now = deps.now();
-  const hash = Buffer.from(await crypto.subtle.digest("SHA-256", bytes)).toString("hex");
+  const hash = sha256(bytes);
   const manifest = deps.evidenceManifest?.get(hash);
   const evidence: EvidenceFile = { id: randomUUID(), hash, uploadedBy: intake.uploadedBy, synthetic: manifest?.synthetic ?? false };
 
-  // The original is kept before anything else can fail.
   mkdirSync(deps.uploadDir, { recursive: true });
   const path = join(deps.uploadDir, `${evidence.id}${type.extension}`);
   writeFileSync(path, bytes, { flag: "wx" });
@@ -337,7 +303,7 @@ async function takeEvidence(deps: CaptureDeps, intake: Intake): Promise<CaptureR
     synthetic: evidence.synthetic,
   });
 
-  const position = intake.placedByHand && metadata.latitude !== undefined && metadata.longitude !== undefined ? ({ status: "placed" } as PositionCheck) : checkPosition(metadata, latest);
+  const position: PositionCheck = intake.placedByHand && metadata.latitude !== undefined && metadata.longitude !== undefined ? { status: "placed" } : checkPosition(metadata, latest);
   const fields = fieldsToExtract(request);
   const observations: Observation[] = [];
   let state: CaptureResult["state"] = "inferred";
@@ -355,15 +321,17 @@ async function takeEvidence(deps: CaptureDeps, intake: Intake): Promise<CaptureR
     if (extraction.kind === "failed") state = "extraction_failed";
     else if (primary?.kind !== "reading") state = "unreadable";
   } else if (position.status === "placed") {
-    // A location request is answered by the position itself, for a person to confirm.
-    observations.push(geotagObservation(evidence, siteId, field, metadata, now));
+    observations.push(geotagObservation(evidence, siteId, field, now, positionReading(metadata)));
   } else {
     state = "unreadable";
-    observations.push(locationUnreadable(evidence, siteId, field, position.flag ?? "The photo came with no position. Place the pin by hand, using the photo.", now));
+    observations.push(geotagObservation(evidence, siteId, field, now, { kind: "unreadable", reason: position.flag ?? "The photo came with no position. Place the pin by hand, using the photo." }));
   }
 
   deps.store.appendObservations(observations);
-  const features = position.status === "placed" ? withPin(latest.features, field, metadata, intake.placedByHand) : latest.features;
+  const features =
+    position.status === "placed"
+      ? withPin(latest.features, { field, label: fieldDefinition(field)?.label ?? field, longitude: metadata.longitude!, latitude: metadata.latitude!, placedByHand: intake.placedByHand })
+      : latest.features;
   nextVersion(deps, latest, "capture", features);
   return CaptureResultSchema.parse({ evidenceFileId: evidence.id, state, positionStatus: position.status });
 }

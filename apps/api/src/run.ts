@@ -51,7 +51,6 @@ function labelVerifiedEquipment(features: MapFeature[], values: Value[]): MapFea
   });
 }
 
-// Every run or human action creates a new immutable version, derived from all observations so far.
 export function createVersion(deps: ApiDeps, parts: VersionParts): RecordVersion {
   const { store } = deps;
   const observations = store.observations(parts.site.id);
@@ -76,19 +75,18 @@ export function createVersion(deps: ApiDeps, parts: VersionParts): RecordVersion
   return record;
 }
 
-// A new version that keeps everything from the last one except what the caller changes.
 export function nextVersion(deps: ApiDeps, latest: RecordVersion, trigger: RecordVersion["trigger"], features = latest.features): RecordVersion {
   return createVersion(deps, { site: latest.site, features, baseMap: latest.baseMap, sourceRuns: latest.sourceRuns, trigger });
 }
 
-function invalidRequest(error: z.ZodError): ApiFailure {
-  return new ApiFailure("illegal_transition", 400, `The request isn't valid: ${z.prettifyError(error)}`);
+function parseRequest<Schema extends z.ZodType>(schema: Schema, body: unknown): z.infer<Schema> {
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) throw new ApiFailure("illegal_transition", 400, `The request isn't valid: ${z.prettifyError(parsed.error)}`);
+  return parsed.data;
 }
 
 export async function runSite(deps: ApiDeps, body: unknown) {
-  const parsed = RunSiteRequestSchema.safeParse(body);
-  if (!parsed.success) throw invalidRequest(parsed.error);
-  const { address, choice } = parsed.data;
+  const { address, choice } = parseRequest(RunSiteRequestSchema, body);
   const region = selectRegion(address, REGIONS);
   if (!region) throw new ApiFailure("not_found", 404, "No region is configured for this address. Write it as street, city, state.");
 
@@ -101,7 +99,6 @@ export async function runSite(deps: ApiDeps, body: unknown) {
   deps.store.saveSite(collection.site);
   deps.store.appendObservations(collection.observations);
 
-  // Pins placed in earlier versions stay on the map after a re-run.
   const pins = (deps.store.readVersion(siteId, "latest")?.features ?? []).filter((feature) => feature.kind === "capture_pin" || feature.kind === "existing_equipment");
   const sourceRuns = deps.snapshot
     ? collection.sourceRuns.map((run) => (run.status === "done" ? { ...run, status: "snapshot" as const } : run))
@@ -117,7 +114,7 @@ export async function runSite(deps: ApiDeps, body: unknown) {
   return { status: "ok" as const, record };
 }
 
-function latestOrFail(deps: ApiDeps, siteId: string): RecordVersion {
+export function latestOrFail(deps: ApiDeps, siteId: string): RecordVersion {
   const latest = deps.store.readVersion(siteId, "latest");
   if (!latest) throw new ApiFailure("not_found", 404, `No site ${siteId}`);
   return latest;
@@ -132,7 +129,7 @@ function valueOrFail(record: RecordVersion, field: string): Value {
 type Actor = { verifierName: string; evidence: EvidenceRef[] };
 
 // Named reasons come first, so the engineer sees which of the two is missing.
-function requireActor(body: unknown, deps: ApiDeps, siteId: string): Actor {
+function requireActor(body: unknown, latest: RecordVersion): Actor {
   const input = (body ?? {}) as { verifierName?: unknown; evidence?: unknown };
   if (typeof input.verifierName !== "string" || input.verifierName.trim() === "") {
     throw new ApiFailure("verifier_required", 400, "Verifying a value needs the name of the person verifying it.");
@@ -141,7 +138,7 @@ function requireActor(body: unknown, deps: ApiDeps, siteId: string): Actor {
   if (!evidence.success) {
     throw new ApiFailure("evidence_required", 400, "Verifying a value needs at least one piece of cited evidence.");
   }
-  const known = new Set(deps.store.observations(siteId).map((observation) => observation.id));
+  const known = new Set(latest.observations.map((observation) => observation.id));
   for (const reference of evidence.data) {
     if (reference.kind === "observation" && !known.has(reference.observationId)) {
       throw new ApiFailure("evidence_required", 400, `The cited evidence ${reference.observationId} isn't on this site's record.`);
@@ -178,9 +175,8 @@ function appendVerification(deps: ApiDeps, value: Value, siteId: string, actor: 
 export function confirmValue(deps: ApiDeps, siteId: string, field: string, body: unknown): RecordVersion {
   const latest = latestOrFail(deps, siteId);
   const value = valueOrFail(latest, field);
-  const actor = requireActor(body, deps, siteId);
-  const parsed = ConfirmValueRequestSchema.safeParse(body);
-  if (!parsed.success) throw invalidRequest(parsed.error);
+  const actor = requireActor(body, latest);
+  parseRequest(ConfirmValueRequestSchema, body);
   if (value.state !== "inferred" || !value.current) {
     throw new ApiFailure("illegal_transition", 409, `Only an inferred value can be confirmed. This one is ${value.state}.`);
   }
@@ -192,35 +188,39 @@ export function confirmValue(deps: ApiDeps, siteId: string, field: string, body:
 export function correctValue(deps: ApiDeps, siteId: string, field: string, body: unknown): RecordVersion {
   const latest = latestOrFail(deps, siteId);
   const value = valueOrFail(latest, field);
-  const actor = requireActor(body, deps, siteId);
-  const parsed = CorrectValueRequestSchema.safeParse(body);
-  if (!parsed.success) throw invalidRequest(parsed.error);
-  appendVerification(deps, value, siteId, actor, parsed.data.value);
+  const actor = requireActor(body, latest);
+  const { value: corrected } = parseRequest(CorrectValueRequestSchema, body);
+  appendVerification(deps, value, siteId, actor, corrected);
   return nextVersion(deps, latest, "human_action");
 }
 
 export function resolveConflict(deps: ApiDeps, siteId: string, field: string, body: unknown): RecordVersion {
   const latest = latestOrFail(deps, siteId);
   const value = valueOrFail(latest, field);
-  const actor = requireActor(body, deps, siteId);
-  const parsed = ResolveConflictRequestSchema.safeParse(body);
-  if (!parsed.success) throw invalidRequest(parsed.error);
+  const actor = requireActor(body, latest);
+  const { candidateId } = parseRequest(ResolveConflictRequestSchema, body);
   if (value.state !== "conflicting") {
     throw new ApiFailure("illegal_transition", 409, `Only a conflicting value can be resolved. This one is ${value.state}.`);
   }
-  const candidate = value.candidates.find((entry) => entry.id === parsed.data.candidateId);
-  if (!candidate) throw new ApiFailure("not_found", 404, `No candidate ${parsed.data.candidateId} on ${field}`);
+  const candidate = value.candidates.find((entry) => entry.id === candidateId);
+  if (!candidate) throw new ApiFailure("not_found", 404, `No candidate ${candidateId} on ${field}`);
   appendVerification(deps, value, siteId, actor, candidate.value);
   return nextVersion(deps, latest, "human_action");
 }
 
 const PERSON_SOURCE_ID = "engineer-pin";
 
+export function withPin(features: MapFeature[], pin: { field: string; label: string; longitude: number; latitude: number; placedByHand: boolean }): MapFeature[] {
+  const id = `pin-${pin.field}`;
+  return [
+    ...features.filter((feature) => feature.id !== id),
+    { id, kind: "capture_pin", field: pin.field, geometry: { type: "Point", coordinates: [pin.longitude, pin.latitude] }, label: pin.label, placedByHand: pin.placedByHand },
+  ];
+}
+
 export function movePin(deps: ApiDeps, siteId: string, body: unknown): RecordVersion {
   const latest = latestOrFail(deps, siteId);
-  const parsed = MovePinRequestSchema.safeParse(body);
-  if (!parsed.success) throw invalidRequest(parsed.error);
-  const { field, latitude, longitude, placedBy } = parsed.data;
+  const { field, latitude, longitude, placedBy } = parseRequest(MovePinRequestSchema, body);
   const value = valueOrFail(latest, field);
 
   // A moved location replaces the earlier pin as the current reading until someone confirms it.
@@ -247,14 +247,5 @@ export function movePin(deps: ApiDeps, siteId: string, body: unknown): RecordVer
     ]);
   }
 
-  const pin: MapFeature = {
-    id: `pin-${field}`,
-    kind: "capture_pin",
-    field,
-    geometry: { type: "Point", coordinates: [longitude, latitude] },
-    label: value.label,
-    placedByHand: true,
-  };
-  const features = [...latest.features.filter((feature) => feature.id !== pin.id), pin];
-  return nextVersion(deps, latest, "human_action", features);
+  return nextVersion(deps, latest, "human_action", withPin(latest.features, { field, label: value.label, longitude, latitude, placedByHand: true }));
 }

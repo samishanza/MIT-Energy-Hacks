@@ -3,9 +3,8 @@ import { extname, join } from "node:path";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { routes } from "@eqore/contract";
-import { MAX_FILE_BYTES, readCaptureRequest, submitCapture, type CaptureDeps } from "./capture.ts";
+import { MAX_FILE_BYTES, fileTooLarge, readCaptureRequest, submitCapture, type CaptureDeps } from "./capture.ts";
 import { respondToFailures } from "./routes.ts";
-import { ApiFailure } from "./run.ts";
 
 const STATIC_TYPES: Record<string, string> = {
   ".js": "text/javascript",
@@ -16,7 +15,6 @@ const STATIC_TYPES: Record<string, string> = {
 };
 
 // The only thing a tunnel may reach: token-checked capture routes and the built phone page.
-// Every engineer route returns 404 here, because this app doesn't have them.
 export function createCaptureApp(deps: CaptureDeps, pageDir?: string): Hono {
   const app = new Hono();
   respondToFailures(app);
@@ -36,7 +34,7 @@ export function createCaptureApp(deps: CaptureDeps, pageDir?: string): Hono {
       // Room for the file and its form fields. The file's own limit is checked in capture intake.
       maxSize: MAX_FILE_BYTES + 64 * 1024,
       onError: () => {
-        throw new ApiFailure("file_too_large", 413, `The file is over the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit.`);
+        throw fileTooLarge();
       },
     }),
     async (c) => c.json(await submitCapture(deps, c.req.param("token")!, await c.req.parseBody())),

@@ -33,17 +33,14 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
 
   app.post(routes.runSite.path, async (c) => c.json(await runSite(deps, await jsonBody(c.req.raw))));
 
-  app.get(routes.readVersion.path, (c) => {
-    const record = deps.store.readVersion(c.req.param("siteId")!, parseVersion(c.req.param("version")!));
+  const requestedVersion = (siteId: string, version: string) => {
+    const record = deps.store.readVersion(siteId, parseVersion(version));
     if (!record) throw new ApiFailure("not_found", 404, "No such site or version");
-    return c.json(record);
-  });
+    return record;
+  };
 
-  app.get(routes.readReadiness.path, (c) => {
-    const record = deps.store.readVersion(c.req.param("siteId")!, parseVersion(c.req.param("version")!));
-    if (!record) throw new ApiFailure("not_found", 404, "No such site or version");
-    return c.json(checkReadiness(record));
-  });
+  app.get(routes.readVersion.path, (c) => c.json(requestedVersion(c.req.param("siteId")!, c.req.param("version")!)));
+  app.get(routes.readReadiness.path, (c) => c.json(checkReadiness(requestedVersion(c.req.param("siteId")!, c.req.param("version")!))));
 
   app.post(routes.confirmValue.path, async (c) =>
     c.json(confirmValue(deps, c.req.param("siteId")!, c.req.param("field")!, await jsonBody(c.req.raw))),

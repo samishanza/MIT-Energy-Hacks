@@ -32,7 +32,6 @@ export type DraftReading = z.infer<typeof DraftReadingSchema>;
 const ResponseSchema = z.object({ readings: z.array(DraftReadingSchema) });
 
 export type Extraction =
-  // Drafts for a person to confirm. Nothing here can set a value's state to verified.
   | { kind: "readings"; readings: DraftReading[] }
   // A refusal or an answer that doesn't fit the schema. The file is kept.
   | { kind: "unreadable"; reason: string }

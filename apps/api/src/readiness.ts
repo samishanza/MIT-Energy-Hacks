@@ -1,9 +1,8 @@
 import { ReadinessReportSchema } from "@eqore/contract";
 import type { Gap, Owner, ReadinessItem, ReadinessReport, RecordVersion, Value, ValueState } from "@eqore/contract";
 import { NATIONAL_GRID_EXHIBIT_C, type RequirementRow, type RequirementsTable } from "./requirements/national-grid-exhibit-c.ts";
-import { EVIDENCE_REQUESTS, draftRequest, engineerDraft } from "./requests.ts";
+import { EVIDENCE_REQUESTS, draftRequest, engineerDraft, offersCaptureLink } from "./requests.ts";
 
-// Tables are chosen by serving utility. PG&E's is added after the Worcester walkthrough.
 const TABLES: RequirementsTable[] = [NATIONAL_GRID_EXHIBIT_C];
 
 const PRE_APPLICATION_THRESHOLD_KW = 250;
@@ -69,7 +68,7 @@ function rankGaps(items: ReadinessItem[], values: Map<string, Value>, record: Re
       field: unfilled,
       rowsFilled,
       routeCost: request.routeCost,
-      captureLinkAllowed: request.route === "capture_photo" || request.route === "capture_bill",
+      captureLinkAllowed: offersCaptureLink(request.route),
       draftRequest: draftRequest(request, record),
     }];
   });
@@ -82,7 +81,6 @@ function rankGaps(items: ReadinessItem[], values: Map<string, Value>, record: Re
       route: "engineer" as const,
       owner: "engineer" as const,
       field: item.fields[0]!,
-      // Engineer-owned rows aren't filled by evidence from anyone else.
       rowsFilled: [],
       routeCost: 5,
       captureLinkAllowed: false,
@@ -133,7 +131,6 @@ function noTableReport(record: RecordVersion, utility: string | null): Readiness
   });
 }
 
-// Deterministic: the same record version always gives the same report, with no model involved.
 export function checkReadiness(record: RecordVersion): ReadinessReport {
   const values = new Map(record.values.map((value) => [value.field, value]));
   const utility = values.get("serving_utility")?.current;

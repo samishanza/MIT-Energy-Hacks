@@ -41,7 +41,7 @@ describe("the record store", () => {
 
   it("counts capture uploads only up to the limit", () => {
     const store = new Store();
-    store.saveCaptureLink({ id: "l", tokenHash: "t", siteId: "s", field: "meter_number", url: "u", expiresAt: "2026-11-08T00:00:00Z", uploadsUsed: 0, maxUploads: 1 });
+    store.saveCaptureLink({ id: "l", tokenHash: "t", siteId: "s", field: "meter_number", expiresAt: "2026-11-08T00:00:00Z", uploadsUsed: 0, maxUploads: 1 });
     expect(store.useCaptureUpload("l")).toBe(true);
     expect(store.useCaptureUpload("l")).toBe(false);
   });

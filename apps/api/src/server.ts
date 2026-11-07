@@ -12,7 +12,7 @@ import { Store } from "./store.ts";
 try {
   process.loadEnvFile();
 } catch {
-  // No .env file: every setting has a default or reports its absence where it's used.
+  // Every setting has a default or reports its absence where it's used.
 }
 
 const inRepo = (path: string) => fileURLToPath(new URL(`../../../${path}`, import.meta.url));

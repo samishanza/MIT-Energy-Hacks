@@ -25,11 +25,13 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
   const runs: SourceRun[] = [];
   let servingUtilityFound = false;
   const results = await Promise.all(
-    region.grid.map(async (source) => ({
-      source,
-      result: await queryArcgis(source.entry, queryFor(source.entry, anchor), ctx),
-      lines: source.lineGeometry ? await queryArcgis(source.lineGeometry, queryFor(source.lineGeometry, anchor), ctx) : null,
-    })),
+    region.grid.map(async (source) => {
+      const [result, lines] = await Promise.all([
+        queryArcgis(source.entry, queryFor(source.entry, anchor), ctx),
+        source.lineGeometry ? queryArcgis(source.lineGeometry, queryFor(source.lineGeometry, anchor), ctx) : null,
+      ]);
+      return { source, result, lines };
+    }),
   );
 
   for (const { source, result, lines } of results) {

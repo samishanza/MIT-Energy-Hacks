@@ -109,9 +109,15 @@ describe("physical collection", () => {
   });
 
   it("settles on the chosen candidate once the engineer picks one", async () => {
-    const one = parcelService([parcel({ LOC_ID: "P-2" })]);
-    const resolved = await resolveSite("1 Test Way, Worcester, MA", massachusetts, context(one), { kind: "candidate", candidateId: "P-2" });
-    expect(resolved.status).toBe("resolved");
+    // The stand-in answers like the real service: a filter on one parcel ID returns only that parcel.
+    const byId: FetchLike = async (url, init) => {
+      const where = new URLSearchParams(String(init?.body)).get("where");
+      const features = [parcel({ LOC_ID: "P-1" }), parcel({ LOC_ID: "P-2" })].filter((feature) => where === `LOC_ID='${feature.attributes.LOC_ID}'`);
+      return parcelService(features)(url, init);
+    };
+    const resolved = await resolveSite("1 Test Way, Worcester, MA", massachusetts, context(byId), { kind: "candidate", candidateId: "P-2" });
+    if (resolved.status !== "resolved" || resolved.anchor.kind !== "parcel") throw new Error("Expected a parcel anchor");
+    expect(resolved.anchor.parcel.objectId).toBe("P-2");
   });
 
   it("offers a map pin when an address has no match, and records that method", async () => {
