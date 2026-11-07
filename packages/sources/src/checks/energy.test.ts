@@ -66,6 +66,9 @@ describe("the feeder search", () => {
     const { value } = await collect("455 Main St, Worcester, MA");
     expect(value("feeder")).toMatchObject({ state: "inferred", current: { type: "text", value: "05_01_3J341" } });
     expect(value("feeder").flags.join(" ")).toContain("Nothing is mapped within 30 m of the site, so the search reached 150 m");
+    // A line that far off doesn't settle which utility serves the site.
+    expect(value("serving_utility")).toMatchObject({ state: "conflicting", current: null });
+    expect(names(value("serving_utility"))).toEqual(["National Grid", "Unitil"]);
   });
 
   it("names the searched distance when even the wider search finds nothing", async () => {

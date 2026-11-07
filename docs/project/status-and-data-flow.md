@@ -29,14 +29,14 @@ These are REST API calls to public map services, with no web scraping. An addres
 
 ## Massachusetts coverage
 
-`scripts/massachusetts-coverage.ts` runs 27 public addresses, all city and town halls apart from the two demo sites, through live collection. These numbers come from its run on 2026-11-07, and they're the ones to quote. 27 addresses is still a small sample of the state.
+`scripts/massachusetts-coverage.ts` runs 27 public addresses, all city and town halls apart from the two demo sites, through live collection. These numbers come from its second run on 2026-11-07, after the review fixes, and they're the ones to quote. 27 addresses is still a small sample of the state.
 
 | Measure | Result |
 |---|---|
 | Reached a map | 23 of 27 |
 | Reached a map or offered a choice of parcels and a pin | 27 of 27 |
 | Got a parcel | 23 of 27 |
-| Named one utility | 14 of 27 |
+| Named one utility | 13 of 27 |
 | Named the utility or its candidates | 23 of 27 |
 | Got grid data | 10 of 27, all National Grid |
 
@@ -44,7 +44,8 @@ These are REST API calls to public map services, with no web scraping. An addres
 - **Villages:** Hyannis resolves to its Barnstable parcel.
 - **Utilities:** the service territory layer names a utility everywhere it has an answer. Territories overlap, so several are candidates until a utility's own map returns a feeder, or the bill names one.
 - **Grid data:** this comes only from National Grid. Eversource's map isn't read, because its terms bar reuse without written permission (D18), so Eversource sites get the utility's name and a person route. Municipal utilities, such as Holyoke and Hudson, have none.
-- **Downtown Worcester:** no feeder is mapped within 30 m of 455 Main St. The search now widens to 150 m and says so on the value.
+- **Downtown Worcester:** no feeder is mapped within 30 m of 455 Main St. The search now widens to 150 m and says so on the value. A feeder that far off doesn't settle the utility, so National Grid and Unitil stay candidates there.
+- **Run time:** the first three addresses took 150 to 210 s while the parcel service was cold. The 90-second deadline starts after the parcel resolves, so a cold parcel lookup isn't capped.
 
 ## What happens after collection
 

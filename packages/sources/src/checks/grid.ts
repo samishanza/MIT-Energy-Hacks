@@ -51,7 +51,7 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
 
   for (const { source, result, lines, searchedMeters, note } of results) {
     runs.push(result.run);
-    outcomes.push({ utilityName: source.utilityName, feederFound: result.features.length > 0, searchedMeters, failure: result.failure, barredReason: source.entry.barred?.reason });
+    outcomes.push({ utilityName: source.utilityName, feederFound: result.features.length > 0, widened: Boolean(note), searchedMeters, failure: result.failure, barredReason: source.entry.barred?.reason });
     observations.push(...toObservations(result, ctx, result.features, { note, emptyReason: `${source.utilityName}'s map shows no feeder within ${searchedMeters} m of this site.` }));
     if (lines) runs.push(lines.run);
     const feederAttribute = source.entry.fields.find((mapping) => mapping.field === "feeder")?.attribute;
@@ -72,7 +72,7 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
         });
       }
     });
-    if (result.features.length > 0) {
+    if (result.features.length > 0 && !note) {
       servingUtilityFound = true;
       observations.push(
         observe(result, ctx, {
@@ -94,7 +94,11 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
           field: "serving_utility",
           kind: "no_value",
           value: null,
-          reason: first.failure ?? `${first.entry.name} returned no feeder here. That doesn't say another utility serves this site. The bill names the utility.`,
+          reason:
+            first.failure ??
+            (results.some(({ note, result }) => note && result.features.length > 0)
+              ? "The only feeder found is beyond the first search distance, which doesn't show which utility serves this site. The bill names the utility."
+              : `${first.entry.name} returned no feeder here. That doesn't say another utility serves this site. The bill names the utility.`),
         }),
       );
     }

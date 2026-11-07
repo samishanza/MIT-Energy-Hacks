@@ -31,8 +31,8 @@ export const parcelAgent: Agent = {
     });
     if (parcel.zoningDistrict) {
       e.propose('zoning.district', parcel.zoningDistrict, parcel, 'parcel', {
-        confidence: 0.85,
-        rationale: 'Zoning district from the municipal zoning layer at the parcel centroid.',
+        confidence: 0.6,
+        rationale: "Zoning code the town reports on its assessor record (MassGIS L3 ZONING), not read from the town's zoning map.",
       });
     } else {
       e.miss('zoning.district');

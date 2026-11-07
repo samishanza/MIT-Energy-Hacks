@@ -52,7 +52,7 @@ describe("the catalog map", () => {
     const coverage = catalogCoverage(await worcesterValues());
     // address, parcel ID, year built, lot width and depth, building x, y, width, and depth, height,
     // road side, slope, zoning district, serving utility, and hosting capacity on the feeder candidates.
-    expect(coverage).toEqual({ filled: 15, total: FIELD_CATALOG.length, byOwner: { public_data: 1, customer: 23, engineer: 30, qualified_person: 7, utility: 2 } });
+    expect(coverage).toEqual({ filled: 15, total: FIELD_CATALOG.length, byOwner: { customer: 23, engineer: 31, qualified_person: 7, utility: 2 } });
   });
 
   it("sets a family on every value", async () => {

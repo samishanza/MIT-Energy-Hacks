@@ -20,7 +20,7 @@ describe("resolving an address the assessor wrote differently", () => {
     const resolved = await resolveSite("36 Court St, Springfield, MA", massachusetts, context());
     if (resolved.status !== "needs_choice") throw new Error("Expected a choice");
     expect(resolved.candidates.map((candidate) => candidate.id)).toEqual(["F_360412_2863477", "F_360324_2863780", "geocoder:-72.589724213405,42.100909903336"]);
-    expect(resolved.candidates.at(-1)!.label).toContain("with no parcel");
+    expect(resolved.candidates.at(-1)!.label).toContain("where no parcel matched the address");
   });
 
   it("offers a parcel by house number and street when the geocoder has no match", async () => {
@@ -29,6 +29,16 @@ describe("resolving an address the assessor wrote differently", () => {
       status: "needs_choice",
       candidates: [{ id: "F_750479_2716232", label: expect.stringContaining("1 GOVERNMENT CEN TER, FALL RIVER"), source: "MassGIS L3 property tax parcels" }],
     });
+  });
+
+  it("keeps a parcel outage on the anchor during the fallback search, instead of offering a point as if no parcel existed", async () => {
+    const parcelsDown: FetchLike = async (url, init) => {
+      const body = String(init?.body ?? "");
+      return url.includes("Property_Tax_Parcels") && (body.includes("LIKE") || body.includes("esriGeometryPoint")) ? new Response("down", { status: 503 }) : recorded(url, init);
+    };
+    const resolved = await resolveSite("367 Main St, Hyannis, MA", massachusetts, context(parcelsDown));
+    if (resolved.status !== "resolved" || resolved.anchor.kind !== "point") throw new Error("Expected a point anchor");
+    expect(resolved.anchor.parcelLookup?.failure).toContain("503");
   });
 
   it("returns an empty choice only when nothing matches anywhere, which the app answers with a pin", async () => {

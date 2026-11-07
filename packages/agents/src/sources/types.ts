@@ -25,7 +25,7 @@ export interface ParcelRecord extends SourceDoc {
   lotDepthFt: number;
   /** Parcel polygons are surveyed-ish but not survey grade; this drives the range. */
   toleranceFt: number;
-  /** Absent from MassGIS L3. A use code is not a zoning district and must not stand in for one. */
+  /** The assessor record's ZONING code where the town reports it, not the zoning map. A use code must not stand in for one. */
   zoningDistrict?: string;
   roadSide?: Wall;
   floodZone?: string;

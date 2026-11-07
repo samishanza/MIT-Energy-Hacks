@@ -387,6 +387,18 @@ describe("the engineer API", () => {
     expect((await app.request(`${routes.readRunProgress.path}?address=nowhere`)).status).toBe(404);
   });
 
+  it("says why when an address can't be settled, rather than offering an empty choice", async () => {
+    const { deps } = setup();
+    deps.fetch = async (url) => new Response(JSON.stringify(url.includes("geocoder") ? { result: { addressMatches: [] } } : { features: [] }));
+    const app = createEngineerApp(deps);
+    const unknown = await app.request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: "nowhere in particular" }) });
+    expect(unknown.status).toBe(404);
+    deps.fetch = async () => new Response("down", { status: 503 });
+    const down = await createEngineerApp(deps).request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: "nowhere in particular" }) });
+    expect(down.status).toBe(502);
+    expect(ApiErrorSchema.parse(await down.json()).message).toContain("HTTP 503");
+  });
+
   it("resolves a pin choice to a site", async () => {
     const { post } = setup();
     const response = await post(routes.runSite.path, { address: ADDRESS, choice: { kind: "pin", latitude: 42.27614096601859, longitude: -71.7694444626631 } });

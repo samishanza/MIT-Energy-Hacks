@@ -10,7 +10,7 @@ import {
   RunSiteRequestSchema,
 } from "@eqore/contract";
 import type { EvidenceRef, MapFeature, Observation, ObservedValue, RecordVersion, RunProgress, Value } from "@eqore/contract";
-import { REGIONS, canonicalAddress, catalogCoverage, collectSite, deriveValues, fieldDefinition, resolveSite, selectRegion, sha256, siteIdFor } from "@eqore/sources";
+import { ADDRESS_CANDIDATE, REGIONS, canonicalAddress, catalogCoverage, collectSite, deriveValues, fieldDefinition, resolveSite, selectRegion, sha256, siteIdFor } from "@eqore/sources";
 import { measureSlope } from "@eqore/agents";
 import type { CollectContext, FetchLike, RegionConfig, SiteChoice } from "@eqore/sources";
 import { z } from "zod";
@@ -108,11 +108,18 @@ function setProgress(deps: ApiDeps, key: string, progress: RunProgress) {
 }
 
 export async function runSite(deps: ApiDeps, body: unknown) {
-  const { address: asTyped, choice } = parseRequest(RunSiteRequestSchema, body);
+  const request = parseRequest(RunSiteRequestSchema, body);
+  const asTyped = request.address;
   const progressKey = runProgressKey(asTyped);
+  // A chosen spelling replaces the typed one and isn't a site choice.
+  const spelled = request.choice?.kind === "candidate" && request.choice.candidateId.startsWith(ADDRESS_CANDIDATE) ? request.choice.candidateId.slice(ADDRESS_CANDIDATE.length) : null;
+  const choice = spelled ? undefined : request.choice;
   const firstCtx: CollectContext = { siteId: "", fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs };
-  const address = await canonicalAddress(asTyped, firstCtx);
-  if (!address) return { status: "needs_choice" as const, candidates: [] };
+  const canonical = await canonicalAddress(spelled ?? asTyped, firstCtx);
+  if (canonical.status === "failed") throw new ApiFailure("source_failed", 502, `The address couldn't be checked. ${canonical.reason}`);
+  if (canonical.status === "choose") return { status: "needs_choice" as const, candidates: canonical.candidates };
+  if (canonical.status === "unknown") throw new ApiFailure("not_found", 404, "No match for this address. Write it as street, city, state.");
+  const address = canonical.address;
   const region = selectRegion(address, REGIONS);
   if (!region) throw new ApiFailure("not_found", 404, "No region is configured for this address. Write it as street, city, state.");
 

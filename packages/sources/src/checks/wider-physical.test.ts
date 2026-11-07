@@ -57,7 +57,13 @@ describe("the general registry", () => {
 describe("address spellings", () => {
   it("reaches one site from all four spellings", async () => {
     const spellings = ["100 Research Dr, Worcester, MA", "100 Research Dr, Worcester MA", "100 Research Dr Worcester MA 01605", "100 Research Drive, Worcester, Massachusetts"];
-    const ids = await Promise.all(spellings.map(async (spelling) => siteIdFor((await canonicalAddress(spelling, context()))!)));
+    const ids = await Promise.all(
+      spellings.map(async (spelling) => {
+        const canonical = await canonicalAddress(spelling, context());
+        if (canonical.status !== "ok") throw new Error(`${spelling} didn't settle`);
+        return siteIdFor(canonical.address);
+      }),
+    );
     expect(new Set(ids)).toEqual(new Set(["100-research-dr-worcester-ma"]));
   });
 
@@ -70,14 +76,23 @@ describe("address spellings", () => {
 
   it("gives no address when the geocoder can't settle on one", async () => {
     const none: FetchLike = async () => new Response(JSON.stringify({ result: { addressMatches: [] } }));
-    expect(await canonicalAddress("nowhere in particular", context(none))).toBeNull();
+    expect(await canonicalAddress("nowhere in particular", context(none))).toEqual({ status: "unknown" });
+    const down: FetchLike = async () => new Response("down", { status: 503 });
+    expect((await canonicalAddress("nowhere in particular", context(down))).status).toBe("failed");
   });
 });
 
 describe("running sources in parallel, with a deadline", () => {
   it("stores a source that never answers as missing at the deadline, and still finishes", async () => {
-    const hang: FetchLike = (url, init) => (url.includes("DEP_Wetlands") ? new Promise(() => {}) : recorded(url, init));
+    const aborted: unknown[] = [];
+    const hang: FetchLike = (url, init) =>
+      url.includes("DEP_Wetlands")
+        ? new Promise((_, reject) => init?.signal?.addEventListener("abort", () => (aborted.push(init.signal!.reason), reject(init.signal!.reason))))
+        : recorded(url, init);
     const { value, collection } = await collect("100 Research Dr, Worcester, MA", hang, { runDeadlineMs: 50 });
+    // The request itself is cancelled, not only abandoned.
+    expect(aborted.length).toBeGreaterThan(0);
+    expect((aborted[0] as Error).name).toBe("RunDeadlineError");
     expect(value("wetlands_nearby").state).toBe("missing");
     expect(value("wetlands_nearby").reason).toContain("deadline");
     expect(collection.sourceRuns.find((run) => run.sourceId === "massdep-wetlands")).toMatchObject({ status: "missing" });
@@ -126,6 +141,12 @@ describe("the wider physical record", () => {
     expect(wetlands[0]).toMatchObject({ kind: "constraint", attributes: { distance_ft: { unit: "ft" } } });
     expect(value("fire_stations_nearby").state).toBe("inferred");
     expect(collection.features.filter((feature) => feature.field === "fire_stations_nearby")).toHaveLength(3);
+  });
+
+  it("reports a wetland that overlaps the parcel as overlapping, at 0 ft", async () => {
+    const { value, collection } = await collect("11 Bartzak Dr, Holliston, MA");
+    expect((value("wetlands_nearby").current as { value: string }).value).toContain("WOODED SWAMP DECIDUOUS, which overlaps the site");
+    expect(collection.features.find((feature) => feature.field === "wetlands_nearby")!.attributes!.distance_ft).toEqual({ type: "quantity", value: 0, unit: "ft" });
   });
 
   it("stores no wetlands as none mapped within the distance, and not as missing", async () => {

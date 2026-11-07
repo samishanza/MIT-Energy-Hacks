@@ -213,7 +213,8 @@ export async function makeLiveSources(opts: LiveOptions): Promise<LiveSources> {
   };
 
   // --- parcel: real geometry and zoning, with the owner openly missing
-  const roadSide = readText(observations, 'road_side');
+  const roadSideReading = observations.find((o) => o.field === 'road_side' && o.kind === 'reading');
+  const roadSide = roadSideReading?.reason?.includes("isn't the street in the address") ? null : readText(observations, 'road_side');
   const collectedRoadSide = (['north', 'south', 'east', 'west'] as const).find((side) => side === roadSide);
   const parcelId = readText(observations, 'parcel_id');
   const lotSizeAcres = readNumber(observations, 'lot_size_acres');

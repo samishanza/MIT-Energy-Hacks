@@ -3,7 +3,7 @@ import { observe, queryArcgis, sourceDateOf, type ArcgisFeature, type ArcgisResu
 import type { TerritorySource } from "../registry.ts";
 
 // What each configured grid source found, so the territory can be settled and a missing feeder explained.
-export type GridOutcome = { utilityName: string; feederFound: boolean; searchedMeters: number; failure?: string; barredReason?: string };
+export type GridOutcome = { utilityName: string; feederFound: boolean; widened: boolean; searchedMeters: number; failure?: string; barredReason?: string };
 
 type Territory = { legalName: string; utility: string; feature: ArcgisFeature };
 
@@ -58,7 +58,7 @@ export function servingUtility(source: TerritorySource, result: ArcgisResult, gr
     }),
   ];
 
-  const withFeeder = new Set(grid.filter((outcome) => outcome.feederFound).map((outcome) => outcome.utilityName));
+  const withFeeder = new Set(grid.filter((outcome) => outcome.feederFound && !outcome.widened).map((outcome) => outcome.utilityName));
   const settled = territories.filter((territory) => withFeeder.has(territory.utility));
   const named = settled.length > 0 ? settled : territories;
   for (const territory of named) {
@@ -72,7 +72,7 @@ export function servingUtility(source: TerritorySource, result: ArcgisResult, gr
     observations.push(observe(result, ctx, { field: "serving_utility", kind: "reading", value: { type: "text", value: territory.utility }, ...shared(territory), reason }));
   }
 
-  if (withFeeder.size === 0) {
+  if (!grid.some((outcome) => outcome.feederFound)) {
     observations.push(observe(result, ctx, { field: "feeder", kind: "no_value", value: null, reason: whyNoFeeder(source, territories.map((territory) => territory.utility), grid) }));
   }
   return observations;

@@ -33,7 +33,7 @@ export const CATALOG_ROUTES: CatalogRoute[] = [
   row("site.year_built", "year_built", "physical", "public_data", "Assessor parcel layer."),
   row("site.occupancy_type", "occupancy_type", "decision", "engineer", "The use code only hints at it, so an engineer classifies it."),
   row("site.construction_type", "construction_type", "decision", "engineer", PERMIT),
-  row("site.flood_zone", "flood_zone", "physical", "public_data", "Flood hazard layer."),
+  row("site.flood_zone", "flood_zone", "physical", "engineer", "A person reads it from FEMA's flood map, because no flood layer is queried."),
   row("ahj.building", "ahj_building", "decision", "engineer", "The municipality points to it, and a person confirms the office.", { publicNotCollected: true }),
   row("ahj.fire", "ahj_fire", "decision", "engineer", "The municipality points to it, and a person confirms the office.", { publicNotCollected: true }),
   row("codes.building", "codes_building", "decision", "engineer", CODE_TABLE, { publicNotCollected: true }),

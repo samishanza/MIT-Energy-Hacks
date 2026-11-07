@@ -44,7 +44,13 @@ function withRunDeadline(fetchImpl: FetchLike, milliseconds: number) {
     const signal = init?.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
     return Promise.race([fetchImpl(url, { ...init, signal }), deadline]);
   };
-  return { limited, cancel: () => clearTimeout(timer) };
+  return {
+    limited,
+    cancel: () => {
+      clearTimeout(timer);
+      controller.abort(new Error("The run ended"));
+    },
+  };
 }
 
 // Spellings of one address name one site: 100 Research Drive, Worcester, MA 01605 and 100 Research Dr, Worcester, MA.

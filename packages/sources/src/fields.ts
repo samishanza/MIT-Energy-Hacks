@@ -55,7 +55,6 @@ export const FIELDS: FieldDefinition[] = [
     ["road_width_ft", "Road surface width"],
     ["road_lanes", "Road lanes"],
     ["road_surface_type", "Road surface type"],
-    ["flood_zone", "Flood zone"],
     ["wetlands_nearby", "Wetlands nearby"],
     ["fire_stations_nearby", "Fire stations nearby"],
     ["ground_elevation_ft", "Ground elevation"],

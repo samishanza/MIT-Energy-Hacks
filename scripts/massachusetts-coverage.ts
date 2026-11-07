@@ -44,9 +44,10 @@ async function check(address: string): Promise<Row> {
   const row: Row = { address, reached: "", parcel: false, utility: "", named: false, grid: false, seconds: 0 };
   const done = () => ({ ...row, seconds: Math.round((Date.now() - started) / 1000) });
   const ctx: CollectContext = { siteId: "", fetch, now: () => new Date().toISOString() };
-  const canonical = await canonicalAddress(address, ctx);
+  const settled = await canonicalAddress(address, ctx);
+  const canonical = settled.status === "ok" ? settled.address : null;
   const region = canonical ? selectRegion(canonical, REGIONS) : null;
-  if (!canonical || !region) return { ...done(), reached: "no region" };
+  if (!canonical || !region) return { ...done(), reached: settled.status === "ok" ? "no region" : `address ${settled.status}` };
   ctx.siteId = siteIdFor(canonical);
   const resolved = await resolveSite(canonical, region, ctx);
   if (resolved.status === "needs_choice") {
