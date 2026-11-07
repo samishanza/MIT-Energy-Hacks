@@ -644,6 +644,214 @@ legend {
   font-size: 12.5px;
 }
 
+/* Notices */
+.notice-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 16px;
+  background: var(--select-wash);
+  font-weight: 600;
+}
+
+.change-bar {
+  background: #e7f2ec;
+}
+
+.notice {
+  margin: 8px 0;
+  padding: 8px;
+  border-left: 3px solid var(--select);
+  background: var(--select-wash);
+}
+
+/* Placing equipment */
+.is-placing .maplibregl-canvas {
+  cursor: crosshair;
+}
+
+.place-prompt {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  background: var(--select);
+  color: var(--white);
+  font-weight: 700;
+}
+
+/* Confirm takeover */
+.takeover {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr 440px;
+  background: var(--paper);
+}
+
+.confirm-file {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 16px;
+  background: #2b3136;
+  color: var(--white);
+}
+
+.confirm-file .note,
+.confirm-file .error {
+  color: var(--white);
+}
+
+.confirm-file iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--white);
+}
+
+.confirm-image {
+  position: relative;
+  display: inline-block;
+  max-height: 100%;
+}
+
+.confirm-image img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 32px);
+}
+
+.confirm-region {
+  position: absolute;
+  outline: 3px solid var(--select);
+  pointer-events: none;
+}
+
+.confirm-side {
+  overflow-y: auto;
+  padding: 14px 16px 24px;
+  border-left: 2px solid var(--ink);
+}
+
+.confirm-draft {
+  margin: 10px 0;
+}
+
+/* Phone capture page */
+.capture {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.capture h1 {
+  margin: 8px 0 12px;
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.capture .note,
+.capture p {
+  font-size: 16px;
+}
+
+.capture footer.note {
+  margin-top: 24px;
+  font-size: 13px;
+}
+
+.capture-message {
+  font-size: 18px !important;
+  font-weight: 600;
+}
+
+.safety {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-left: 4px solid var(--conflicting);
+  background: var(--white);
+  font-weight: 600;
+}
+
+.capture-step {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.big {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.capture-file {
+  border-radius: 2px;
+  background: var(--ink);
+  color: var(--white);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.capture-file:focus-within {
+  outline: 2px solid var(--select);
+  outline-offset: 1px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.capture-preview {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--rule);
+}
+
+.aerial-frame {
+  margin: 0 0 8px;
+}
+
+.aerial {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  background: var(--rule);
+}
+
+.aerial img {
+  position: absolute;
+  width: 256px;
+  height: 256px;
+}
+
+.aerial-pin {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  border: 3px solid var(--white);
+  border-radius: 50%;
+  background: var(--select);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

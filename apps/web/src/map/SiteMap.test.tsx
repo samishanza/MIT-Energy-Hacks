@@ -153,6 +153,16 @@ describe("site map", () => {
     expect(screen.getByRole("button", { name: "Photo, unconfirmed" }).textContent).not.toMatch(/\(E\)/);
   });
 
+  it("records a click as a hand placement while placing, and selects nothing", () => {
+    const onPlace = vi.fn();
+    const { onSelect } = setup({ placingField: "meter_number", onPlace });
+    lastMap().queryRenderedFeatures.result = [{ properties: { field: "property_line" } }];
+    act(() => lastMap().fire("click", { point: { x: 1, y: 2 }, lngLat: { lng: -71.8, lat: 42.26 } }));
+    expect(onPlace).toHaveBeenCalledWith("meter_number", -71.8, 42.26);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.getByText(/Click the map to place/)).toBeTruthy();
+  });
+
   it("says when the aerial failed and keeps the map", () => {
     setup();
     act(() => lastMap().fire("error", { sourceId: "base", error: new Error("tile") }));

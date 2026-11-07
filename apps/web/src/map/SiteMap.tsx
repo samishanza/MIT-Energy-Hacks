@@ -18,6 +18,10 @@ export interface SiteMapProps {
   selectedFields: string[];
   onSelect: (field: string) => void;
   dockOpen?: boolean;
+  placingField?: string | null;
+  onPlace?: (field: string, longitude: number, latitude: number) => void;
+  // A field to bring into view, such as a label that just appeared.
+  focusField?: string | null;
 }
 
 const HIT_RADIUS = 6;
@@ -32,12 +36,15 @@ function pointLabel(feature: MapFeature) {
   return feature.kind === "capture_pin" ? "Photo, unconfirmed" : (feature.label ?? "(E) Existing equipment");
 }
 
-export function SiteMap({ record, selectedFields, onSelect, dockOpen = false }: SiteMapProps) {
+export function SiteMap(props: SiteMapProps) {
+  const { record, selectedFields, onSelect, dockOpen = false, placingField = null, onPlace, focusField = null } = props;
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibre | null>(null);
   const highlighted = useRef<string[]>([]);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const placeRef = useRef({ placingField, onPlace });
+  placeRef.current = { placingField, onPlace };
   const [loaded, setLoaded] = useState(false);
   const [aerialFailed, setAerialFailed] = useState(false);
   const { baseMap, features, site } = record;
@@ -76,6 +83,11 @@ export function SiteMap({ record, selectedFields, onSelect, dockOpen = false }: 
       if ((event as { sourceId?: string }).sourceId === BASE_SOURCE) setAerialFailed(true);
     });
     instance.on("click", (event) => {
+      const placing = placeRef.current;
+      if (placing.placingField) {
+        placing.onPlace?.(placing.placingField, event.lngLat.lng, event.lngLat.lat);
+        return;
+      }
       const { x, y } = event.point;
       for (const layer of HIT_LAYERS) {
         const [hit] = instance.queryRenderedFeatures(
@@ -141,14 +153,21 @@ export function SiteMap({ record, selectedFields, onSelect, dockOpen = false }: 
     map.current?.setPadding({ top: 0, bottom: 0, left: 0, right: dockOpen ? 420 : 0 });
   }, [dockOpen, loaded]);
 
+  useEffect(() => {
+    if (!loaded || !focusField) return;
+    const point = pointFeatures(features).find((f) => f.field === focusField);
+    if (point) map.current?.easeTo({ center: point.geometry.coordinates as [number, number], duration: 600 });
+  }, [focusField, features, loaded]);
+
   const noEquipment = !features.some((f) => f.kind === "existing_equipment" || f.kind === "capture_pin");
 
   return (
-    <div className="map-frame">
+    <div className={`map-frame${placingField ? " is-placing" : ""}`}>
       <div ref={container} className="map-canvas" />
       <div className="map-north" aria-label="North is up">
         N ↑
       </div>
+      {placingField ? <p className="place-prompt">Click the map to place this equipment. It's recorded as placed by hand.</p> : null}
       <div className="map-legend">
         <p className="concept-note">{conceptNote(features)}</p>
         <ul className="legend-list">

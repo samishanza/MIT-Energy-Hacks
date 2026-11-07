@@ -46,6 +46,8 @@ export interface EngineerApi {
   createCaptureLink(siteId: string, field: string): Promise<CaptureLink>;
   uploadEvidence(siteId: string, field: string, file: File, metadata?: CaptureMetadata): Promise<CaptureResult>;
   evidenceUrl(evidenceFileId: string): string;
+  // The contract serves a stored file's bytes without naming its type, so the type is read from the response.
+  evidenceKind?(evidenceFileId: string): Promise<"image" | "pdf">;
 }
 
 function fill(path: string, params: Record<string, string | number>): string {
@@ -99,4 +101,9 @@ export const httpApi: EngineerApi = {
     });
   },
   evidenceUrl: (evidenceFileId) => fill(routes.readEvidenceFile.path, { evidenceFileId }),
+  evidenceKind: async (evidenceFileId) => {
+    const url = fill(routes.readEvidenceFile.path, { evidenceFileId });
+    const response = await fetch(url, { method: "HEAD" }).catch(() => null);
+    return response?.headers.get("content-type")?.includes("pdf") ? "pdf" : "image";
+  },
 };

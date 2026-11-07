@@ -88,6 +88,7 @@ export function createMockApi(): EngineerApi {
   let record = RecordVersionSchema.parse(structuredClone(recordSample));
   let report = ReadinessReportSchema.parse(structuredClone(readinessSample));
   const files = new Map<string, string>([["sample-file-1", SAMPLE_PHOTO]]);
+  const pdfs = new Set<string>();
   let serial = 100;
 
   function commit(trigger: RecordVersion["trigger"], change: (next: RecordVersion) => void): RecordVersion {
@@ -188,6 +189,9 @@ export function createMockApi(): EngineerApi {
       return commit("human_action", (next) => verify(next, field, request, candidate.value));
     },
     async movePin(_siteId, request) {
+      if (!request.placedBy.trim()) {
+        throw new ApiRequestError("verifier_required", "Placing equipment needs a named person.");
+      }
       const value = record.values.find((v) => v.field === request.field);
       if (!value) throw new ApiRequestError("not_found", "That value no longer exists.");
       return commit("human_action", (next) => {
@@ -225,7 +229,8 @@ export function createMockApi(): EngineerApi {
       const value = record.values.find((v) => v.field === field);
       if (!value) throw new ApiRequestError("not_found", "That value no longer exists.");
       const evidenceFileId = `sample-upload-${(serial += 1)}`;
-      files.set(evidenceFileId, file.size > 0 ? URL.createObjectURL(file) : SAMPLE_PHOTO);
+      files.set(evidenceFileId, URL.createObjectURL?.(file) ?? SAMPLE_PHOTO);
+      if (file.type === "application/pdf") pdfs.add(evidenceFileId);
       const placed = metadata.latitude !== undefined && metadata.longitude !== undefined;
       commit("capture", (next) => {
         const draft = draftFor(field);
@@ -251,5 +256,6 @@ export function createMockApi(): EngineerApi {
       return CaptureResultSchema.parse({ evidenceFileId, state: "inferred", positionStatus: placed ? "placed" : "needs_pin" });
     },
     evidenceUrl: (evidenceFileId) => files.get(evidenceFileId) ?? SAMPLE_PHOTO,
+    evidenceKind: async (evidenceFileId) => (pdfs.has(evidenceFileId) ? "pdf" : "image"),
   };
 }

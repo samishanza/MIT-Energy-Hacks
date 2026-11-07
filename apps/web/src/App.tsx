@@ -1,9 +1,10 @@
 import type { ReadinessReport, RecordVersion } from "@eqore/contract";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { EngineerApi, RunSiteRequest, RunSiteResponse } from "./api";
 import { SOURCE_RUN_WORDS } from "./app/format";
-import { trackLink, type TrackedLink } from "./app/links";
+import { isLinkOpen, trackLink, type TrackedLink } from "./app/links";
 import { SiteMap } from "./map/SiteMap";
+import { ConfirmPanel } from "./panels/ConfirmPanel";
 import { EvidencePanel } from "./panels/EvidencePanel";
 import { ReadinessPanel } from "./panels/ReadinessPanel";
 import { ProvenanceTag } from "./ui/marks";
@@ -25,6 +26,8 @@ function saveActor(name: string) {
     // Storage is only a convenience. The name still works for this session.
   }
 }
+
+const POLL_MS = 3000;
 
 type Candidates = Extract<RunSiteResponse, { status: "needs_choice" }>["candidates"];
 
@@ -64,6 +67,13 @@ export function App({ api }: { api: EngineerApi }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [links, setLinks] = useState<TrackedLink[]>([]);
   const [actorName, setActorName] = useState(loadActor);
+  const [confirmField, setConfirmField] = useState<string | null>(null);
+  const [placingField, setPlacingField] = useState<string | null>(null);
+  const [focusField, setFocusField] = useState<string | null>(null);
+  const [arrival, setArrival] = useState<string | null>(null);
+  const [change, setChange] = useState<string | null>(null);
+  const current = useRef<{ record: RecordVersion | null; report: ReadinessReport | null }>({ record, report });
+  current.current = { record, report };
 
   useEffect(() => {
     if (!running) return;
@@ -82,6 +92,48 @@ export function App({ api }: { api: EngineerApi }) {
     [api],
   );
 
+  // A capture creates a new version, so asking for the latest one is enough to notice it.
+  const hasOpenLink = record ? links.some((tracked) => isLinkOpen(tracked, record)) : false;
+  const siteId = record?.site.id;
+  useEffect(() => {
+    if (!hasOpenLink || !siteId) return;
+    const timer = setInterval(() => {
+      void api
+        .readVersion(siteId, "latest")
+        .then(async (latest) => {
+          const previous = current.current.record;
+          if (!previous || latest.version <= previous.version) return;
+          const seen = new Set(previous.observations.map((o) => o.id));
+          const labels = [
+            ...new Set(
+              latest.observations
+                .filter((o) => !seen.has(o.id))
+                .map((o) => latest.values.find((v) => v.field === o.field)?.label ?? o.field),
+            ),
+          ];
+          await show(latest);
+          if (labels.length > 0) setArrival(`New evidence for ${labels.join(", ")}`);
+        })
+        .catch(() => {
+          // A missed check is retried on the next tick.
+        });
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [api, hasOpenLink, siteId, show]);
+
+  // Shows a person's action on screen as a before and after, measured from this run's own records.
+  async function afterAction(next: RecordVersion) {
+    const before = current.current;
+    await show(next);
+    if (!before.record) return;
+    const nextReport = await api.readReadiness(next.site.id, next.version);
+    const share = (report: ReadinessReport | null) => report?.share?.formRows;
+    const was = share(before.report);
+    const now = share(nextReport);
+    const rows = was && now ? ` Form rows with evidence: ${was.withEvidence} to ${now.withEvidence} of ${now.total}.` : "";
+    setChange(`Record v${before.record.version} to v${next.version}.${rows} Measured in this run.`);
+  }
+
   const failed = (failure: unknown) => setError(failure instanceof Error ? failure.message : "That didn't work.");
 
   async function run(request: RunSiteRequest) {
@@ -95,6 +147,11 @@ export function App({ api }: { api: EngineerApi }) {
       } else {
         setSelected([]);
         setLinks([]);
+        setConfirmField(null);
+        setPlacingField(null);
+        setFocusField(null);
+        setArrival(null);
+        setChange(null);
         await show(response.record);
       }
     } catch (failure) {
@@ -127,10 +184,30 @@ export function App({ api }: { api: EngineerApi }) {
       await api.uploadEvidence(record.site.id, field, file);
       await show(await api.readVersion(record.site.id, "latest"));
       setSelected([field]);
+      setConfirmField(field);
     } catch (failure) {
       failed(failure);
     }
   }
+
+  async function place(field: string, longitude: number, latitude: number) {
+    if (!record) return;
+    setError(null);
+    try {
+      const next = await api.movePin(record.site.id, { field, latitude, longitude, placedBy: actorName });
+      setPlacingField(null);
+      setFocusField(field);
+      // Placing moves a label but adds no evidence, so the last before-and-after line stays up.
+      await show(next);
+    } catch (failure) {
+      failed(failure);
+    }
+  }
+
+  const updateActor = (name: string) => {
+    setActorName(name);
+    saveActor(name);
+  };
 
   const answered = record?.sourceRuns.filter((run) => run.status === "done" || run.status === "snapshot").length ?? 0;
 
@@ -173,6 +250,21 @@ export function App({ api }: { api: EngineerApi }) {
         </div>
       ) : null}
 
+      {arrival ? (
+        <div role="status" aria-label="New evidence" className="notice-bar">
+          {arrival}
+          <button type="button" onClick={() => setArrival(null)}>
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {change ? (
+        <div role="status" aria-label="Change" className="notice-bar change-bar">
+          {change}
+        </div>
+      ) : null}
+
       {error ? (
         <p role="alert" className="error app-error">
           {error}
@@ -212,7 +304,10 @@ export function App({ api }: { api: EngineerApi }) {
             onSelectFields={setSelected}
             onCreateLink={(field) => void createLink(field)}
             onUpload={(field, file) => void upload(field, file)}
-            onOpenConfirm={(field) => setSelected([field])}
+            onOpenConfirm={(field) => {
+              setSelected([field]);
+              setConfirmField(field);
+            }}
           />
           <div className={`map-region${selected.length > 0 ? " dock-open" : ""}`}>
             <SiteMap
@@ -221,6 +316,9 @@ export function App({ api }: { api: EngineerApi }) {
               selectedFields={selected}
               onSelect={(field) => setSelected([field])}
               dockOpen={selected.length > 0}
+              placingField={placingField}
+              onPlace={(field, longitude, latitude) => void place(field, longitude, latitude)}
+              focusField={focusField}
             />
             {selected.length > 0 ? (
               <EvidencePanel
@@ -229,16 +327,38 @@ export function App({ api }: { api: EngineerApi }) {
                 report={report}
                 fields={selected}
                 actorName={actorName}
-                onActorName={(name) => {
-                  setActorName(name);
-                  saveActor(name);
-                }}
-                onRecord={(next) => void show(next)}
+                onActorName={updateActor}
+                onRecord={(next) => void afterAction(next)}
                 onClose={() => setSelected([])}
               />
             ) : null}
           </div>
         </main>
+      ) : null}
+
+      {record && confirmField ? (
+        <ConfirmPanel
+          api={api}
+          record={record}
+          field={confirmField}
+          actorName={actorName}
+          onActorName={updateActor}
+          onRecord={(next) => {
+            const hasPoint = next.features.some(
+              (f) => f.field === confirmField && (f.kind === "existing_equipment" || f.kind === "capture_pin"),
+            );
+            // With no position yet, go straight to placing it, so the label can appear.
+            if (hasPoint) setFocusField(confirmField);
+            else setPlacingField(confirmField);
+            setConfirmField(null);
+            void afterAction(next);
+          }}
+          onClose={() => setConfirmField(null)}
+          onPlace={(field) => {
+            setConfirmField(null);
+            setPlacingField(field);
+          }}
+        />
       ) : null}
     </div>
   );

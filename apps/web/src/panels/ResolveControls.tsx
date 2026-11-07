@@ -101,8 +101,8 @@ export function ResolveControls(props: ResolveControlsProps) {
       <label className="field">
         <span>Verifier name</span>
         <input value={actorName} onChange={(event) => onActorName(event.target.value)} />
-        <span className="note">Self-entered. This prototype has no login.</span>
       </label>
+      <p className="note">Self-entered. This prototype has no login.</p>
 
       <fieldset className="evidence-picks">
         <legend>Evidence you looked at</legend>

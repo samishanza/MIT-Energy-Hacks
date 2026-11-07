@@ -92,7 +92,13 @@ function GapAction(props: {
     );
   }
 
-  const row = tracked ? linkRow(tracked, record) : null;
+  const value = record.values.find((v) => v.field === gap.field);
+  const uploadedDraft = !tracked && value?.state === "inferred" && value.method === "model_draft";
+  const row = tracked
+    ? linkRow(tracked, record)
+    : uploadedDraft
+      ? { text: "Draft waiting for you to confirm", action: "confirm" as const }
+      : null;
   const canMakeLink = !record.snapshot && (!row || row.action === "new");
   return (
     <div className="gap-actions">
