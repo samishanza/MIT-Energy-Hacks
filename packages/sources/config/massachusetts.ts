@@ -349,14 +349,9 @@ export const massachusetts: RegionConfig = {
     licenseNote: "MassGIS: no restrictions apply, but conditions may have changed since the flight, and it isn't for critical use without checking.",
     description: "MassGIS 2025 aerial imagery, 15 cm, flown March to April 2025",
   },
-  unavailable: [
-    {
-      sourceId: "earth-engine",
-      name: "Google Earth Engine land cover",
-      fields: ["land_cover"],
-      reason: "The Earth Engine adapter isn't built yet, so land cover is missing.",
-    },
-  ],
+  // Imagery stays MassGIS where it's configured, and lidar slope stays the current slope.
+  earthEngine: { landCover: true, terrain: true, imagery: false },
+  unavailable: [],
   personRoutes: [
     {
       sourceId: "fema-flood-map",

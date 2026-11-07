@@ -9,6 +9,7 @@ const FACTORS: Record<string, number> = {
   "sqm>sqft": 10.7639104167,
   "sqft>acre": 1 / 43560,
   "acre>sqft": 43560,
+  "m>ft": 3.280839895,
 };
 
 export function convertUnit(value: number, from: string, to: string): number {

@@ -38,6 +38,8 @@ export type CollectContext = {
   retryDelayMs?: number;
   // Names of the API keys the live fetch can supply. The keys themselves never come through here.
   availableKeys?: string[];
+  // The Earth Engine runner the caller signed in, or why there isn't one.
+  earthEngine?: import("./earthengine.ts").EarthEngineRunner | { missing: string };
   runDeadlineMs?: number;
   // Lidar slope sampling lives in the agent layer, so the caller passes it in.
   measureSlope?: (box: { west: number; south: number; east: number; north: number }, fetchImpl: FetchLike) => Promise<{ slopePercent: number; sampleCount: number; demResolutionFt: number; aspectDegrees?: number } | null>;

@@ -1,4 +1,5 @@
 import type { FitnessGrade, MapFeature, ObservedValue, Source } from "@eqore/contract";
+import type { EarthEngineConfig } from "./earthengine.ts";
 import type { JsonSource } from "./json-api.ts";
 import type { Transform } from "./transforms.ts";
 import { parseAddress } from "./resolve-site.ts";
@@ -164,6 +165,7 @@ export type RegionConfig = {
   layers?: LayerSource[];
   jsonSources?: JsonSource[];
   lidarSlope?: LidarSlope;
+  earthEngine?: EarthEngineConfig;
   imagery?: ImageryConfig;
   // Sources with no working adapter yet. They report missing with the reason.
   unavailable: NamedRoute[];
