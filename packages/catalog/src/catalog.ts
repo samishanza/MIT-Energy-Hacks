@@ -6,7 +6,7 @@
 //
 // This file is the shared contract. One named owner changes it (decision.md D5).
 
-import type { SourceKind, Tier } from './types';
+import type { SourceKind, Tier } from './types.ts';
 
 export type AgentId =
   | 'parcel'

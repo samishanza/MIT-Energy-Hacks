@@ -1,7 +1,7 @@
 // Tier 0. Tariff and feeder-level interconnection facts.
 
-import type { Agent, AgentContext } from './base';
-import { Emit } from './base';
+import type { Agent, AgentContext } from './base.ts';
+import { Emit } from './base.ts';
 
 export const utilityAgent: Agent = {
   id: 'utility',

@@ -10,10 +10,10 @@
 import { runDiscovery, type AgentRun } from "@eqore/agents";
 import { validateProposal, type AcceptedProposal, type Rejection } from "@eqore/gatekeeper";
 import type { Proposal } from "@eqore/catalog";
-import { analyse, type ReadinessReport } from "./readiness";
-import { reconcile, verifyRecord, type Inconsistency, type SiteRecord } from "./reconcile";
-import { EQORE_EDGE760 } from "./rules";
-import type { PackSpec } from "./types";
+import { analyse, type ReadinessReport } from "./readiness.ts";
+import { reconcile, verifyRecord, type Inconsistency, type SiteRecord } from "./reconcile.ts";
+import { EQORE_EDGE760 } from "./rules.ts";
+import type { PackSpec } from "./types.ts";
 import { METER_PHOTO_PROPOSALS, TRANSFORMER_PHOTO_PROPOSALS, SITE_PHOTO_FLAGS } from "@eqore/agents";
 import type { SiteInput, SourceClient } from "@eqore/agents";
 

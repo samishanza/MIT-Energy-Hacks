@@ -171,6 +171,7 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
     candidates,
     conflictKind: state === "conflicting" ? conflictKind : undefined,
     observationIds: observations.map((observation) => observation.id),
+    currentObservationId: currentReading?.id,
     verification,
     reason,
     flags: [...flags, ...failedExtractions],

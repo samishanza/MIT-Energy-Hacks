@@ -10,8 +10,8 @@
 
 import { STANDARD_BUS_RATINGS_A, specFor } from "@eqore/catalog";
 import type { Field, SourceKind as RecordSourceKind } from "@eqore/catalog";
-import type { SiteRecord } from './reconcile';
-import type { Opening, Param, Side, Site, Source, SourceKind as SetbackSourceKind } from './types';
+import type { SiteRecord } from './reconcile.ts';
+import type { Opening, Param, Side, Site, Source, SourceKind as SetbackSourceKind } from './types.ts';
 
 /** Our source vocabulary is finer than Setback's; collapse it without losing the label. */
 const SOURCE_MAP: Record<RecordSourceKind, SetbackSourceKind> = {

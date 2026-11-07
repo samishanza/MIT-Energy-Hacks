@@ -1,3 +1,3 @@
-export * from "./catalog";
-export * from "./types";
-export * from "./units";
+export * from "./catalog.ts";
+export * from "./types.ts";
+export * from "./units.ts";

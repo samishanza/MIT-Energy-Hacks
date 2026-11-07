@@ -12,13 +12,13 @@
 // "completeness", which would rank a missing owner name alongside a missing bus rating.
 
 import { ALL_SHEETS, specFor, type SheetId } from "@eqore/catalog";
-import { compile } from './compile';
-import { exportToSetback, plausibleRange } from './export';
-import type { SiteRecord } from './reconcile';
-import { requiredFor } from './reconcile';
-import { EQORE_EDGE760 } from './rules';
-import type { CompileResult, PackSpec, Site } from './types';
-import { withValue } from './uncertainty';
+import { compile } from './compile.ts';
+import { exportToSetback, plausibleRange } from './export.ts';
+import type { SiteRecord } from './reconcile.ts';
+import { requiredFor } from './reconcile.ts';
+import { EQORE_EDGE760 } from './rules.ts';
+import type { CompileResult, PackSpec, Site } from './types.ts';
+import { withValue } from './uncertainty.ts';
 
 /** Record field key -> dotted path in the Setback Site model. */
 const SETBACK_PATH: Record<string, string> = {

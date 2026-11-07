@@ -9,9 +9,9 @@
 
 import { isAgentAllowed } from "@eqore/catalog";
 import type { SourceKind } from "@eqore/catalog";
-import type { CustomerDoc } from "./sources/types";
-import type { Agent, AgentContext } from './base';
-import { Emit } from './base';
+import type { CustomerDoc } from "./sources/types.ts";
+import type { Agent, AgentContext } from './base.ts';
+import { Emit } from './base.ts';
 
 const SOURCE_OF: Record<CustomerDoc['kind'], SourceKind> = {
   bill: 'bill',

@@ -7,6 +7,7 @@ import {
   EvidenceRefSchema,
   ObservedValueSchema,
   ReadinessReportSchema,
+  RunProgressSchema,
   SiteMapExportSchema,
   RecordVersionSchema,
 } from "./schemas.ts";
@@ -45,7 +46,7 @@ export const RunSiteResponseSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
-export const ConfirmValueRequestSchema = z.object(actor);
+export const ConfirmValueRequestSchema = z.object({ ...actor, expectedObservationId: z.string().min(1) });
 export const CorrectValueRequestSchema = z.object({ ...actor, value: ObservedValueSchema });
 export const ResolveConflictRequestSchema = z.object({ ...actor, candidateId: z.string().min(1) });
 export const CreateCaptureLinkRequestSchema = z.object({ field: z.string().min(1) });
@@ -77,6 +78,14 @@ export const routes = {
     listener: "engineer",
     request: RunSiteRequestSchema,
     response: RunSiteResponseSchema,
+  }),
+  // Takes the address as a query parameter, and answers while a run is still going.
+  readRunProgress: route({
+    method: "GET",
+    path: "/api/sites/progress",
+    listener: "engineer",
+    request: noBody,
+    response: RunProgressSchema,
   }),
   readVersion: route({
     method: "GET",

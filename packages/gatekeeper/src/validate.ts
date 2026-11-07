@@ -21,7 +21,7 @@ import {
   type FieldValue,
   type Proposal,
 } from "@eqore/catalog";
-import { checkBudget, zeroSpent, type BudgetBreach, type Spent } from './budgets';
+import { checkBudget, zeroSpent, type BudgetBreach, type Spent } from './budgets.ts';
 
 export interface AcceptedProposal {
   proposal: Proposal;

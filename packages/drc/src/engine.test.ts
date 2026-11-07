@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { compile } from './compile';
-import { EQORE_EDGE760, QOREPACK_V1, QOREPACK_V2 } from './rules';
-import { DEMO_SITE, makePortfolio } from './sites';
-import { rankUnknowns } from './uncertainty';
-import { compilePortfolio, diffPortfolio } from './portfolio';
+import { compile } from './compile.ts';
+import { EQORE_EDGE760, QOREPACK_V1, QOREPACK_V2 } from './rules.ts';
+import { DEMO_SITE, makePortfolio } from './sites.ts';
+import { rankUnknowns } from './uncertainty.ts';
+import { compilePortfolio, diffPortfolio } from './portfolio.ts';
 
 describe('demo site', () => {
   it('1 pack passes cleanly', () => {

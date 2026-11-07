@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { runDiscovery } from "@eqore/agents";
 import { DEMO_SITE_INPUT, makeFixtureSources } from "@eqore/agents";
-import { reconcile } from './reconcile';
-import { analyse } from './readiness';
-import { exportToSetback } from './export';
+import { reconcile } from './reconcile.ts';
+import { analyse } from './readiness.ts';
+import { exportToSetback } from './export.ts';
 
 async function buildRecord() {
   const { runs } = await runDiscovery(DEMO_SITE_INPUT, makeFixtureSources());

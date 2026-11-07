@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { RecordVersionSchema } from '@eqore/contract';
 import { DEMO_SITE_INPUT, makeFixtureSources, runDiscovery } from '@eqore/agents';
-import { reconcile, verifyRecord } from './reconcile';
-import { analyse } from './readiness';
-import { VALUE_STATE, methodOf, refHash, toContractFieldKey, toRecordVersion } from './contract';
+import { reconcile, verifyRecord } from './reconcile.ts';
+import { analyse } from './readiness.ts';
+import { VALUE_STATE, methodOf, refHash, toContractFieldKey, toRecordVersion } from './contract.ts';
 
 async function record(withPhotos = false) {
   const { runs } = await runDiscovery(DEMO_SITE_INPUT, makeFixtureSources({ includeDoctoredBill: withPhotos }));

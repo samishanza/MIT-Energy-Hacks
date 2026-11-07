@@ -17,7 +17,7 @@
 // returning 504s and 500s when this was written, so this uses the in-state LiDAR instead.
 
 import type { FetchLike } from '@eqore/sources';
-import type { SourceDoc } from './types';
+import type { SourceDoc } from './types.ts';
 
 const DEM_SERVICE =
   'https://arcgisserver.digital.mass.gov/arcgisserver/rest/services/LiDAR/DEM_lidar_2013to2021_32bitFloat/ImageServer';

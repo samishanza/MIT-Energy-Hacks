@@ -151,6 +151,7 @@ describe("the engineer API", () => {
         await post(`/api/sites/${SITE}/values/main_device_rating/confirm`, {
           verifierName: "A. Engineer",
           evidence: [{ kind: "observation", observationId: "draft-1" }],
+          expectedObservationId: "draft-1",
         })
       ).json(),
     );
@@ -232,7 +233,7 @@ describe("the engineer API", () => {
   it("refuses transitions the state model doesn't allow", async () => {
     const { post, run } = setup();
     await run();
-    const confirmMissing = await post(`/api/sites/${SITE}/values/meter_number/confirm`, { verifierName: "A. Engineer", evidence });
+    const confirmMissing = await post(`/api/sites/${SITE}/values/meter_number/confirm`, { verifierName: "A. Engineer", evidence, expectedObservationId: "none" });
     expect(confirmMissing.status).toBe(409);
     expect(ApiErrorSchema.parse(await confirmMissing.json()).code).toBe("illegal_transition");
 
@@ -243,7 +244,7 @@ describe("the engineer API", () => {
   it("returns an older version's original values", async () => {
     const { app, post, run, value } = setup();
     const first = await run();
-    await post(`/api/sites/${SITE}/values/parcel_id/confirm`, { verifierName: "A. Engineer", evidence });
+    await post(`/api/sites/${SITE}/values/parcel_id/confirm`, { verifierName: "A. Engineer", evidence, expectedObservationId: value(first, "parcel_id").currentObservationId });
 
     const older = RecordVersionSchema.parse(await (await app.request(`/api/sites/${SITE}/versions/1`)).json());
     const latest = RecordVersionSchema.parse(await (await app.request(`/api/sites/${SITE}/versions/latest`)).json());
@@ -273,7 +274,7 @@ describe("the engineer API", () => {
     expect(moved.features.filter((feature) => feature.id === "pin-switchboard_location")).toHaveLength(1);
 
     const verified = RecordVersionSchema.parse(
-      await (await post(`/api/sites/${SITE}/values/switchboard_location/confirm`, { verifierName: "A. Engineer", evidence })).json(),
+      await (await post(`/api/sites/${SITE}/values/switchboard_location/confirm`, { verifierName: "A. Engineer", evidence, expectedObservationId: value(moved, "switchboard_location").currentObservationId })).json(),
     );
     expect(verified.features.find((feature) => feature.id === "pin-switchboard_location")).toMatchObject({
       kind: "existing_equipment",
@@ -301,7 +302,7 @@ describe("the engineer API", () => {
     expect(back.features.find((feature) => feature.id === "pin-meter_location")!.geometry).toEqual({ type: "Point", coordinates: [-71.769, 42.276] });
   });
 
-  it("refuses to confirm a location that changed after the evidence cited", async () => {
+  it("refuses a confirm that names a reading the value no longer rests on", async () => {
     const { post, run, value } = setup();
     await run();
     const pin = async (latitude: number) =>
@@ -309,11 +310,11 @@ describe("the engineer API", () => {
     const first = await pin(42.276);
     const seen = value(first, "meter_location").observationIds.at(-1)!;
     const moved = await pin(42.277);
-    const confirm = (observationId: string) => post(`/api/sites/${SITE}/values/meter_location/confirm`, { verifierName: "A. Engineer", evidence: [{ kind: "observation", observationId }] });
+    const confirm = (observationId: string) => post(`/api/sites/${SITE}/values/meter_location/confirm`, { verifierName: "A. Engineer", evidence: [{ kind: "observation", observationId }], expectedObservationId: observationId });
 
     const refused = await confirm(seen);
     expect(refused.status).toBe(409);
-    expect(ApiErrorSchema.parse(await refused.json()).code).toBe("illegal_transition");
+    expect(ApiErrorSchema.parse(await refused.json()).code).toBe("stale_value");
 
     const accepted = await confirm(value(moved, "meter_location").observationIds.at(-1)!);
     expect(accepted.status).toBe(200);
@@ -345,10 +346,16 @@ describe("the engineer API", () => {
   });
 
   it("refuses requests from another site or a rebound host, and accepts the local app", async () => {
-    const { app, run } = setup();
-    await run();
+    const { app, run, value } = setup();
+    const first = await run();
+    const expectedObservationId = value(first, "parcel_id").currentObservationId;
     const confirm = (headers: Record<string, string>) =>
-      app.request(`/api/sites/${SITE}/values/parcel_id/confirm`, { method: "POST", headers, body: JSON.stringify({ verifierName: "Forged", evidence }) });
+      app.request(`/api/sites/${SITE}/values/parcel_id/confirm`, { method: "POST", headers, body: JSON.stringify({ verifierName: "Forged", evidence, expectedObservationId }) });
+
+    const upload = new FormData();
+    upload.append("file", new Blob(["forged"], { type: "image/png" }), "forged.png");
+    const forgedUpload = await app.request(`/api/sites/${SITE}/values/meter_number/evidence`, { method: "POST", headers: { origin: "https://evil.example" }, body: upload });
+    expect(forgedUpload.status).toBe(403);
 
     expect((await confirm({ "content-type": "text/plain", origin: "https://evil.example" })).status).toBe(403);
     expect((await confirm({ origin: "null" })).status).toBe(403);

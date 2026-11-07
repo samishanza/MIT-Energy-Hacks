@@ -294,6 +294,7 @@ describe("route table", () => {
       routes.confirmValue.request.safeParse({
         verifierName: "A. Engineer",
         evidence: [{ kind: "document", description: "Signed contract, page 2" }],
+        expectedObservationId: "obs-1",
       }).success,
     ).toBe(true);
   });

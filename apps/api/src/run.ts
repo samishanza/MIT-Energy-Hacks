@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { Store } from "./store.ts";
 
 export class ApiFailure extends Error {
-  readonly code: "verifier_required" | "evidence_required" | "illegal_transition" | "not_found" | "source_failed" | "invalid_token" | "token_closed" | "token_expired" | "upload_limit" | "file_too_large" | "file_type";
+  readonly code: "stale_value" | "verifier_required" | "evidence_required" | "illegal_transition" | "not_found" | "source_failed" | "invalid_token" | "token_closed" | "token_expired" | "upload_limit" | "file_too_large" | "file_type";
   readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 413 | 415 | 429 | 502;
 
   constructor(code: ApiFailure["code"], status: ApiFailure["status"], message: string) {
@@ -184,18 +184,12 @@ export function confirmValue(deps: ApiDeps, siteId: string, field: string, body:
   const latest = latestOrFail(deps, siteId);
   const value = valueOrFail(latest, field);
   const actor = requireActor(body, latest);
-  parseRequest(ConfirmValueRequestSchema, body);
+  const { expectedObservationId } = parseRequest(ConfirmValueRequestSchema, body);
   if (value.state !== "inferred" || !value.current) {
     throw new ApiFailure("illegal_transition", 409, `Only an inferred value can be confirmed. This one is ${value.state}.`);
   }
-  // A newer location replaces the current one without a conflict, so it could change while a person is
-  // looking at the old one. Citing a reading that no longer matches means they haven't seen this value.
-  if (fieldDefinition(field)?.comparison?.kind === "latest") {
-    const cited = new Set(actor.evidence.flatMap((reference) => (reference.kind === "observation" ? [reference.observationId] : [])));
-    const outdated = latest.observations.some(
-      (observation) => cited.has(observation.id) && observation.field === field && observation.value && JSON.stringify(observation.value) !== JSON.stringify(value.current),
-    );
-    if (outdated) throw new ApiFailure("illegal_transition", 409, "This location changed after the evidence you cited. Review the current one, then confirm it.");
+  if (expectedObservationId !== value.currentObservationId) {
+    throw new ApiFailure("stale_value", 409, "This value changed after you opened it. Review the current reading, then confirm it.");
   }
   appendVerification(deps, value, siteId, actor, value.current);
   return nextVersion(deps, latest, "human_action");

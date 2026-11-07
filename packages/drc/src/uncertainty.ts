@@ -1,5 +1,5 @@
-import { compile } from './compile';
-import type { CompileResult, PackSpec, Param, Site } from './types';
+import { compile } from './compile.ts';
+import type { CompileResult, PackSpec, Param, Site } from './types.ts';
 
 export interface ParamRef {
   path: string; // e.g. "lot.w" or "openings.0.at"

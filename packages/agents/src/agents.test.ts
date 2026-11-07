@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { CROP_REQUIRED_SOURCES, nowIso, type CaptureTask, type Proposal } from "@eqore/catalog";
 import { isAgentAllowed, specFor } from "@eqore/catalog";
 import { screenAction, validateProposal } from "@eqore/gatekeeper";
-import { DEMO_SITE_INPUT, makeFixtureSources } from "./sources/fixture";
-import { captureAgent } from './capture';
-import { imageryAgent } from './imagery';
-import { intakeAgent, looksLikeInjection } from './intake';
-import { AGENTS, DISCOVERY_AGENTS, runAgent, runDiscovery } from './index';
+import { DEMO_SITE_INPUT, makeFixtureSources } from "./sources/fixture.ts";
+import { captureAgent } from './capture.ts';
+import { imageryAgent } from './imagery.ts';
+import { intakeAgent, looksLikeInjection } from './intake.ts';
+import { AGENTS, DISCOVERY_AGENTS, runAgent, runDiscovery } from './index.ts';
 
 const sources = makeFixtureSources();
 

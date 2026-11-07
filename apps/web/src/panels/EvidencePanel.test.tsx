@@ -148,7 +148,7 @@ describe("resolving a value", () => {
     setup("parcel_id", { confirmValue });
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/needs a named person/));
-    expect(confirmValue).toHaveBeenCalledWith("sample-site", "parcel_id", { verifierName: "", evidence: [] });
+    expect(confirmValue).toHaveBeenCalledWith("sample-site", "parcel_id", { verifierName: "", evidence: [], expectedObservationId: "obs-1" });
   });
 
   it("leaves the state unchanged when a confirm fails, and shows the error", async () => {

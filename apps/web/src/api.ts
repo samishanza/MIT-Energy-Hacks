@@ -32,7 +32,7 @@ export interface EngineerApi {
   runSite(request: RunSiteRequest): Promise<RunSiteResponse>;
   readVersion(siteId: string, version: number | "latest"): Promise<RecordVersion>;
   readReadiness(siteId: string, version: number | "latest"): Promise<ReadinessReport>;
-  confirmValue(siteId: string, field: string, actor: Actor): Promise<RecordVersion>;
+  confirmValue(siteId: string, field: string, request: Actor & { expectedObservationId: string }): Promise<RecordVersion>;
   correctValue(siteId: string, field: string, request: Actor & { value: ObservedValue }): Promise<RecordVersion>;
   resolveConflict(siteId: string, field: string, request: Actor & { candidateId: string }): Promise<RecordVersion>;
   movePin(siteId: string, request: MovePinRequest): Promise<RecordVersion>;
@@ -62,8 +62,8 @@ export const httpApi: EngineerApi = {
     send(RecordVersionSchema, fill(routes.readVersion.path, { siteId, version })),
   readReadiness: (siteId, version) =>
     send(ReadinessReportSchema, fill(routes.readReadiness.path, { siteId, version })),
-  confirmValue: (siteId, field, actor) =>
-    send(RecordVersionSchema, fill(routes.confirmValue.path, { siteId, field }), postJson(actor)),
+  confirmValue: (siteId, field, request) =>
+    send(RecordVersionSchema, fill(routes.confirmValue.path, { siteId, field }), postJson(request)),
   correctValue: (siteId, field, request) =>
     send(RecordVersionSchema, fill(routes.correctValue.path, { siteId, field }), postJson(request)),
   resolveConflict: (siteId, field, request) =>

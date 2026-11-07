@@ -30,7 +30,7 @@ import type {
   ParcelRecord,
   SiteInput,
   SourceClient,
-} from './types';
+} from './types.ts';
 
 // ------------------------------------------------------------------ geometry
 

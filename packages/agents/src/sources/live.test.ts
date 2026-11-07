@@ -1,8 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { fixtureFetch } from '@eqore/sources';
-import { runDiscovery } from '../index';
-import { boundsOf, boxSizeFt, buildingsByArea, makeLiveSources, offsetFt, NOT_AVAILABLE_FROM_GIS } from './live';
+import { runDiscovery } from '../index.ts';
+import { boundsOf, boxSizeFt, buildingsByArea, makeLiveSources, offsetFt, NOT_AVAILABLE_FROM_GIS } from './live.ts';
 
 // Replays responses recorded from the real services. No network, same bytes every run.
 const dir = (name: string) => fileURLToPath(new URL(`../../../../fixtures/${name}`, import.meta.url));

@@ -5,8 +5,8 @@
 // edition changes the setbacks the Setback rule pack applies, so a wrong answer here is
 // worse than no answer.
 
-import type { Agent, AgentContext } from './base';
-import { Emit } from './base';
+import type { Agent, AgentContext } from './base.ts';
+import { Emit } from './base.ts';
 
 export const codeAgent: Agent = {
   id: 'code',

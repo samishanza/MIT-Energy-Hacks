@@ -4,8 +4,8 @@
 // exception is a transformer kVA stencilled on a pad-mount, and even then it may only
 // be *inferred* with a range — the gatekeeper rejects it as a point value.
 
-import type { Agent, AgentContext } from './base';
-import { Emit, rangeFrom, round2 } from './base';
+import type { Agent, AgentContext } from './base.ts';
+import { Emit, rangeFrom, round2 } from './base.ts';
 
 /** Pad-mount transformers ship in standard sizes; a stencil read sits between neighbours. */
 const STANDARD_KVA = [75, 100, 150, 167, 225, 300, 500, 750, 1000, 1500, 2000, 2500, 3000];

@@ -16,7 +16,7 @@ import {
   type Proposal,
   type SourceKind,
 } from "@eqore/catalog";
-import type { SiteInput, SourceClient, SourceDoc } from "./sources/types";
+import type { SiteInput, SourceClient, SourceDoc } from "./sources/types.ts";
 
 export interface AgentContext {
   site: SiteInput;

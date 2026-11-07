@@ -7,15 +7,15 @@ import type { AgentId } from "@eqore/catalog";
 import { gate, type GateResult } from "@eqore/gatekeeper";
 import { zeroSpent } from "@eqore/gatekeeper";
 import type { AgentResult, FieldValue } from "@eqore/catalog";
-import type { SiteInput, SourceClient } from "./sources/types";
-import type { Agent, AgentContext } from './base';
-import { captureAgent } from './capture';
-import { codeAgent } from './code';
-import { imageryAgent } from './imagery';
-import { intakeAgent } from './intake';
-import { parcelAgent } from './parcel';
-import { recordsAgent } from './records';
-import { utilityAgent } from './utility';
+import type { SiteInput, SourceClient } from "./sources/types.ts";
+import type { Agent, AgentContext } from './base.ts';
+import { captureAgent } from './capture.ts';
+import { codeAgent } from './code.ts';
+import { imageryAgent } from './imagery.ts';
+import { intakeAgent } from './intake.ts';
+import { parcelAgent } from './parcel.ts';
+import { recordsAgent } from './records.ts';
+import { utilityAgent } from './utility.ts';
 
 export const AGENTS: Agent[] = [
   parcelAgent,
@@ -93,9 +93,9 @@ export async function runDiscovery(
 
 // The source seam and the demo payloads, re-exported so downstream packages can build a
 // record without reaching into this package's internals.
-export * from "./sources/types";
-export * from "./sources/fixture";
-export * from "./sources/site-photos";
-export * from "./sources/live";
-export * from "./sources/slope";
-export * from "./base";
+export * from "./sources/types.ts";
+export * from "./sources/fixture.ts";
+export * from "./sources/site-photos.ts";
+export * from "./sources/live.ts";
+export * from "./sources/slope.ts";
+export * from "./base.ts";

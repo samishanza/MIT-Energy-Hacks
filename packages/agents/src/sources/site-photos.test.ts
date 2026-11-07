@@ -5,7 +5,7 @@ import {
   NOT_RESOLVED_BY_SITE_PHOTOS,
   SITE_PHOTO_FLAGS,
   TRANSFORMER_PHOTO_PROPOSALS,
-} from './site-photos';
+} from './site-photos.ts';
 
 const ALL = [...METER_PHOTO_PROPOSALS, ...TRANSFORMER_PHOTO_PROPOSALS];
 

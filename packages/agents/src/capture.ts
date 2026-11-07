@@ -10,8 +10,8 @@
 
 import { specFor } from "@eqore/catalog";
 import type { CaptureTask } from "@eqore/catalog";
-import type { Agent, AgentContext } from './base';
-import { Emit } from './base';
+import type { Agent, AgentContext } from './base.ts';
+import { Emit } from './base.ts';
 
 const MINUTES = { laser_measurement: 2, nameplate_photo: 5, lidar_scan: 6, photo: 2, document_request: 0 } as const;
 

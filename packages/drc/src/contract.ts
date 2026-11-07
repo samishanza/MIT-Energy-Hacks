@@ -24,7 +24,7 @@ import {
 } from '@eqore/contract';
 import { specFor, type SourceKind } from '@eqore/catalog';
 import type { Field, FieldStatus } from '@eqore/catalog';
-import type { SiteRecord } from './reconcile';
+import type { SiteRecord } from './reconcile.ts';
 
 /**
  * Our status to theirs.

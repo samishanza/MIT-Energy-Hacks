@@ -4,9 +4,9 @@
 // scanned page carries its page and crop — the gatekeeper rejects it otherwise, because
 // an engineer cannot check a number they cannot see in context.
 
-import type { Agent, AgentContext } from './base';
-import { Emit } from './base';
-import type { PermitRecord } from "./sources/types";
+import type { Agent, AgentContext } from './base.ts';
+import { Emit } from './base.ts';
+import type { PermitRecord } from "./sources/types.ts";
 
 /** Newest record wins when two permits disagree; both are still proposed. */
 const byNewest = (a: PermitRecord, b: PermitRecord) => b.issuedYear - a.issuedYear;

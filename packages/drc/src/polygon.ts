@@ -16,7 +16,7 @@ import difference from '@turf/difference';
 import buffer from '@turf/buffer';
 import { featureCollection, polygon as turfPolygon } from '@turf/helpers';
 
-import type { Rect } from './types';
+import type { Rect } from './types.ts';
 
 /** A ring of points in local feet. First point is not repeated. */
 export type Ring = { x: number; y: number }[];

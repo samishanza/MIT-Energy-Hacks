@@ -134,7 +134,7 @@ export function ResolveControls(props: ResolveControlsProps) {
             type="button"
             className="primary"
             disabled={blocked}
-            onClick={() => void submit(() => api.confirmValue(siteId, value.field, actor()))}
+            onClick={() => void submit(() => api.confirmValue(siteId, value.field, { ...actor(), expectedObservationId: value.currentObservationId ?? value.observationIds.at(-1) ?? "" }))}
           >
             Confirm
           </button>

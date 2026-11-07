@@ -123,9 +123,11 @@ describe("capture intake", () => {
     expect(t.uploads()).toHaveLength(filesAtLimit);
 
     const closing = await t.createLink();
+    const latest = RecordVersionSchema.parse(await (await t.engineer.request(`/api/sites/${SITE}/versions/latest`)).json());
+    const reading = latest.values.find((value) => value.field === "meter_number")!.currentObservationId;
     await t.engineer.request(`/api/sites/${SITE}/values/meter_number/confirm`, {
       method: "POST",
-      body: JSON.stringify({ verifierName: "A. Engineer", evidence: [{ kind: "document", description: "The photo" }] }),
+      body: JSON.stringify({ verifierName: "A. Engineer", evidence: [{ kind: "document", description: "The photo" }], expectedObservationId: reading }),
     });
     const closed = await t.submit(t.tokenOf(closing.link!.url));
     expect(await t.code(closed)).toBe("token_closed");
@@ -274,6 +276,8 @@ describe("capture intake", () => {
     const wrong = await t.submit(token, new TextEncoder().encode("<html>not a photo</html>"), INSIDE, "photo.png");
     expect(wrong.status).toBe(415);
     expect(await t.code(wrong)).toBe("file_type");
+    const svg = await t.submit(token, new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'), INSIDE, "photo.png");
+    expect(await t.code(svg)).toBe("file_type");
 
     const none = await t.capture.request(`/capture/${token}/submit`, { method: "POST", body: new FormData() });
     expect(await t.code(none)).toBe("file_type");
@@ -362,6 +366,7 @@ describe("capture intake", () => {
     expect(record.observations.find((observation) => observation.source.id === "capture-draft")!.source.name).toContain("uploaded by the engineer");
 
     const served = await t.engineer.request(`/api/evidence/${result.evidenceFileId}`);
+    expect(served.headers.get("x-content-type-options")).toBe("nosniff");
     expect(served.headers.get("content-type")).toBe("image/png");
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(PNG);
     expect((await t.engineer.request("/api/evidence/none")).status).toBe(404);

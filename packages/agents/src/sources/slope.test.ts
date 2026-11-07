@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { fixtureFetch } from '@eqore/sources';
-import { DEM_VERTICAL_UNIT, firstBand, fitSlope, measureSlope, sampleElevations } from './slope';
+import { DEM_VERTICAL_UNIT, firstBand, fitSlope, measureSlope, sampleElevations } from './slope.ts';
 
 const dir = (name: string) => fileURLToPath(new URL(`../../../../fixtures/${name}`, import.meta.url));
 const recorded = fixtureFetch(dir('elevation'));

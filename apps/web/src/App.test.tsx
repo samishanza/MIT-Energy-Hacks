@@ -384,6 +384,7 @@ describe("waiting on a capture", () => {
     expect(confirmValue.mock.calls[0]![2]).toEqual({
       verifierName: "Sample Engineer",
       evidence: [{ kind: "observation", observationId: "obs-draft" }],
+      expectedObservationId: "obs-draft",
     });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(within(screen.getByRole("banner")).getByText(/Record v4/)).toBeTruthy();

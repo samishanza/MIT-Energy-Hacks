@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react';
 import type { RecordVersion } from '@eqore/contract';
-import { polygonPath, sheetGeometry, type PadOptions } from './geometry';
+import { polygonPath, sheetGeometry, type PadOptions } from './geometry.ts';
 
 const SHEET_W = 1000;
 const SHEET_H = 680;

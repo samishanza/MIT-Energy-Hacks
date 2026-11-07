@@ -1,4 +1,4 @@
-import type { Opening, Rect, Side, Site } from './types';
+import type { Opening, Rect, Side, Site } from './types.ts';
 
 export const v = (p: { value: number }) => p.value;
 

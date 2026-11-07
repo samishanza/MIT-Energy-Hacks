@@ -1,4 +1,4 @@
-import type { Param, Site, Source } from './types';
+import type { Param, Site, Source } from './types.ts';
 
 const AERIAL: Source = { kind: 'aerial', label: 'Aerial imagery + parcel lines', extractedBy: 'vision-model' };
 const PHOTO: Source = { kind: 'site-photo', label: 'Site photo, east yard', extractedBy: 'vision-model' };

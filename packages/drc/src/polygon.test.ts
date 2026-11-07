@@ -12,7 +12,7 @@ import {
   toLocalPolygon,
   toLonLat,
   type LocalPolygon,
-} from './polygon';
+} from './polygon.ts';
 
 // A 200 x 300 ft square lot, in local feet.
 const square: LocalPolygon = {

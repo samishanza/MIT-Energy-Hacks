@@ -1,5 +1,5 @@
-import { compile } from './compile';
-import type { CompileResult, PackSpec, Site } from './types';
+import { compile } from './compile.ts';
+import type { CompileResult, PackSpec, Site } from './types.ts';
 
 export interface Scenario {
   spec: PackSpec;

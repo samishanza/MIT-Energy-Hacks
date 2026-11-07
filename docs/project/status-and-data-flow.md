@@ -38,7 +38,7 @@ Address ─> packages/sources ──────┤
                                       (not connected to the app yet)
 ```
 
-The second path has no drawing renderer on `main`. The only sheet renderer is on `origin/integration`.
+`@eqore/sheets` draws a concept site plan from the record, with real polygons, in the app's sheet tab.
 
 ## Who's working on what
 
@@ -62,18 +62,14 @@ The team decided the agent layer wins where it overlaps the plan (KTD37).
 
 ## To do, in order
 
-1. Fix 3 type errors from the merge, in `packages/agents/src/sources/live.test.ts`.
-2. Finish plan review and hand the final plan to each stream.
-3. Contract update: stale confirm, new map feature kinds, value families, coverage, run progress.
-4. Backend: collect to the plan-set catalog, wider physical sources, deeper utility data, utility and rates anywhere, Earth Engine, then a third region.
-5. UI: map-first screen.
-6. Agent layer: battery areas, and the drawing handoff with a renderer.
-7. Lead: seeded demo and snapshot, combined code review.
+1. Backend: collect to the plan-set catalog, a general registry, wider physical sources, deeper utility data, cross-checks, Earth Engine, rates and utility anywhere, then a third region.
+2. Agent layer: battery areas, and the sheet and drawing handoff.
+3. UI: map-first screen on the wider record.
+4. Lead: seeded demo and snapshot, merges, combined code review.
 
 ## Needed from the team
 
 - Confirm the exposed API key is revoked, and add a new one to `.env`.
-- Say when the repo was public, and decide about the sample PDFs.
 - Name any other open-source drawing agent, if Setback isn't the only target.
 - Give the venue address for the phone test.
 - Pass the plan to the teammate running the agent layer.

@@ -24,7 +24,7 @@ import type {
   SourceClient,
   StreetLevelObservation,
   TariffRecord,
-} from './types';
+} from './types.ts';
 
 export const DEMO_SITE_INPUT: SiteInput = {
   siteId: 'demo-holliston-1',

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Bumped by the contract owner whenever a shape changes, so both worktrees can check they match.
-export const CONTRACT_VERSION = "2";
+export const CONTRACT_VERSION = "3";
 
 export const VALUE_STATES = ["missing", "conflicting", "unreadable", "inferred", "verified"] as const;
 export const ValueStateSchema = z.enum(VALUE_STATES);
@@ -152,6 +152,16 @@ export const CandidateSchema = z.object({
 });
 export type Candidate = z.infer<typeof CandidateSchema>;
 
+export const VALUE_FAMILIES = ["physical", "utility", "energy", "customer", "decision"] as const;
+
+// One source checked against another. "not_checked" says a check couldn't run, so a clean result can't be assumed.
+export const CrossCheckSchema = z.object({
+  label: nonBlank,
+  result: z.enum(["agrees", "disagrees", "not_checked"]),
+  detail: z.string().optional(),
+});
+export type CrossCheck = z.infer<typeof CrossCheckSchema>;
+
 export const ValueSchema = z
   .object({
     field: fieldKey,
@@ -168,6 +178,10 @@ export const ValueSchema = z
     verification: VerificationSchema.optional(),
     reason: z.string().optional(),
     flags: z.array(z.string()),
+    family: z.enum(VALUE_FAMILIES).optional(),
+    // The reading this value currently rests on. A confirm must name it, so nobody verifies a value they didn't see.
+    currentObservationId: nonBlank.optional(),
+    crossChecks: z.array(CrossCheckSchema).optional(),
     synthetic: z.boolean(),
   })
   .superRefine((value, ctx) => {
@@ -211,7 +225,7 @@ export type Geometry = z.infer<typeof GeometrySchema>;
 
 export const MapFeatureSchema = z.object({
   id: nonBlank,
-  kind: z.enum(["property_line", "building_outline", "utility_line", "existing_equipment", "capture_pin", "dimension_line"]),
+  kind: z.enum(["property_line", "building_outline", "utility_line", "existing_equipment", "capture_pin", "dimension_line", "candidate_area", "substation", "road", "constraint"]),
   // The value this feature shows, which carries its source and state.
   field: fieldKey,
   geometry: GeometrySchema,
@@ -250,6 +264,14 @@ export const SiteSchema = z.object({
 });
 export type Site = z.infer<typeof SiteSchema>;
 
+// Plan-set catalog fields this record fills, and who must supply the rest.
+export const CoverageSchema = z.object({
+  filled: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  byOwner: z.partialRecord(OwnerSchema, z.number().int().nonnegative()),
+});
+export type Coverage = z.infer<typeof CoverageSchema>;
+
 export const RecordVersionSchema = z.object({
   id: nonBlank,
   contractVersion: nonBlank,
@@ -265,6 +287,7 @@ export const RecordVersionSchema = z.object({
   features: z.array(MapFeatureSchema),
   baseMap: BaseMapSchema.nullable(),
   sourceRuns: z.array(SourceRunSchema),
+  coverage: CoverageSchema.optional(),
 });
 export type RecordVersion = z.infer<typeof RecordVersionSchema>;
 
@@ -431,6 +454,7 @@ export const ERROR_CODES = [
   "illegal_transition",
   "not_found",
   "source_failed",
+  "stale_value",
 ] as const;
 
 export const ApiErrorSchema = z.object({
@@ -476,8 +500,19 @@ export const SiteMapExportSchema = z.object({
   }),
   // Every value, including what's missing. Evidence stays on the record version this names.
   values: z.array(ValueSchema),
+  coverage: CoverageSchema.optional(),
 });
 export type SiteMapExport = z.infer<typeof SiteMapExportSchema>;
+
+// What's known during a run. A record version is still created only when the run ends.
+export const RunProgressSchema = z.object({
+  status: z.enum(["running", "done", "failed"]),
+  site: SiteSchema.optional(),
+  sourceRuns: z.array(SourceRunSchema),
+  features: z.array(MapFeatureSchema),
+  reason: z.string().optional(),
+});
+export type RunProgress = z.infer<typeof RunProgressSchema>;
 
 export const CaptureSampleSchema = z.object({
   synthetic: z.literal(true),

@@ -55,9 +55,10 @@ describe("the site map export", () => {
 
   it("shows a person's verification in the next version, and leaves the older export as it was", async () => {
     const { app, siteMap } = await setup();
+    const reading = (await siteMap()).values.find((value) => value.field === "property_line")!.currentObservationId;
     await app.request(`/api/sites/${SITE}/values/property_line/confirm`, {
       method: "POST",
-      body: JSON.stringify({ verifierName: "A. Engineer", evidence: [{ kind: "document", description: "Plot plan on file" }] }),
+      body: JSON.stringify({ verifierName: "A. Engineer", evidence: [{ kind: "document", description: "Plot plan on file" }], expectedObservationId: reading }),
     });
     const stateOf = (map: Awaited<ReturnType<typeof siteMap>>) => map.features.features.find((feature) => feature.properties.kind === "property_line")!.properties.state;
     expect(stateOf(await siteMap())).toBe("verified");

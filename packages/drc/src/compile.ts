@@ -7,9 +7,9 @@ import {
   rectDistance,
   SIDES,
   v,
-} from './geometry';
-import { resolvePack, type RulePack } from './rules';
-import type { Check, CompileResult, PackSpec, Placement, Rect, Site } from './types';
+} from './geometry.ts';
+import { resolvePack, type RulePack } from './rules.ts';
+import type { Check, CompileResult, PackSpec, Placement, Rect, Site } from './types.ts';
 
 const LARGEST_OCPD = 1200;
 const STD_OCPD = [15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1200];

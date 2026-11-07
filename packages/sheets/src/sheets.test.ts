@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MapFeature, RecordVersion } from '@eqore/contract';
-import { polygonPath, sheetGeometry } from './geometry';
+import { polygonPath, sheetGeometry } from './geometry.ts';
 
 const ring = (pts: [number, number][]): [number, number][] => [...pts, pts[0]!];
 

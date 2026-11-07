@@ -1,7 +1,7 @@
 // Tier 0. Lot geometry, ownership, zoning district. Nothing electrical, ever.
 
-import type { Agent, AgentContext } from './base';
-import { Emit, rangeFrom } from './base';
+import type { Agent, AgentContext } from './base.ts';
+import { Emit, rangeFrom } from './base.ts';
 
 export const parcelAgent: Agent = {
   id: 'parcel',

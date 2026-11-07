@@ -1,6 +1,6 @@
 {
   "id": "sample-site-v2",
-  "contractVersion": "2",
+  "contractVersion": "3",
   "version": 2,
   "createdAt": "2026-11-07T11:00:00Z",
   "trigger": "human_action",
