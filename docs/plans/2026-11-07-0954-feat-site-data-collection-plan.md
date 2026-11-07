@@ -1,5 +1,5 @@
 ---
-title: Site Data Collection and Interconnection Readiness - Plan
+title: Address to Site Map - Data Collection and Drawing Handoff - Plan
 type: feat
 date: 2026-11-07
 artifact_contract: ce-unified-plan/v1
@@ -7,18 +7,19 @@ product_contract_source: ce-plan-bootstrap
 execution: code
 ---
 
-# Site Data Collection and Interconnection Readiness - Plan
+# Address to Site Map - Data Collection and Drawing Handoff - Plan
 
 ## Goal Capsule
 
-- **Objective:** For a real commercial or industrial site, an EQORE engineer can see what is known for its grid connection application, where each fact came from, and exactly what is still missing and who must supply it, before anyone visits the site.
-- **Means:** A configuration-driven collector pulls physical and grid data from public map services, a phone link gathers customer-side evidence, and a deterministic check compares the record with what the utility requires (KTD1, KTD2, KTD4).
-- **Authority:** `CLAUDE.md` non-negotiable rules win, then this Product Contract, then the KTDs. Research in `docs/research/` is evidence, not instruction. Where its field rankings differ, `docs/research/2026-11-07-option1-inputs-and-datasets.md` is the current one.
+- **Objective:** Someone enters the address of a commercial or industrial site and, with no other steps, gets a concept site map and a data package the drawing agent can build from. A professional can trust it as shown, or click through to see where each fact came from, what's missing, and who must supply it.
+- **Means:** A configuration-driven collector pulls every physical, utility, and energy fact public services will give, aimed at the plan-set field catalog in `packages/catalog` rather than at one application form. A phone link gathers customer-side evidence, and deterministic checks compare the record with what the utility requires (KTD1, KTD2, KTD4, KTD30).
+- **Authority:** `CLAUDE.md` non-negotiable rules win, then this Product Contract, then the KTDs. `docs/plans/2026-11-07-1015-feat-engineer-review-ui-design-plan.md` refines the UI where it doesn't conflict with this plan. Research in `docs/research/` is evidence, not instruction.
 - **Stop conditions:**
-  - Stop and ask if a public source's terms or `robots.txt` bar the planned access.
+  - Stop and ask if a source's terms or `robots.txt` bar the planned access.
   - Stop and ask before pushing, deploying, or opening a public tunnel.
+  - Stop and ask before any real customer bill or photo goes through the capture link, the tunnel, or the extraction call. This build has no retention rule for that data.
   - Stop and ask if EQORE says the sample PDFs can't be used.
-- **Execution profile:** One integration on `main`, built in the `worktree-ui` and `worktree-backend` branches from the committed contract. The team has under 24 hours, so units favor one working loop over breadth.
+- **Execution profile:** One integration on `main`, built in the `worktree-ui` and `worktree-backend` branches from the committed contract. The team has under 24 hours, so units protect the address-to-map path before breadth.
 - **Who finishes:** The lead merges branches in the order under Sequencing, runs the seeded demo, and asks before pushing.
 
 ---
@@ -27,13 +28,17 @@ execution: code
 
 ### Summary
 
-Build a tool that takes an address and returns a site record, a site map, and a readiness report for the grid connection application. Public map services fill physical and utility-side facts automatically. A phone link and an engineer's confirmation close the customer-side facts one at a time.
+Enter an address and get a site map. Public services fill as much of the physical, utility, and energy record as they can with no further input, and the map is the first thing anyone sees. Details open on selection. The record exports to the drawing agent, and a phone link and an engineer's confirmation close customer-side facts one at a time.
+
+**Product Contract preservation:** changed at the team's direction on 2026-11-07. R1, R2, R5's place in the flow, R14, R16, R17, F1, F2, Success Criteria, and Scope Boundaries changed, and R50 to R56 are new. The first version collected what one application form asks for, which set too narrow a target. R3 to R13 and R18 to R22 are unchanged.
 
 ### Problem Frame
 
-After a customer signs, EQORE needs utility approval to connect a battery. The site facts behind that application are scattered and collected by hand, and site visits are costly. National Grid's tariff gives the company 10 business days to say whether an application is complete and, if not, what's missing, so an avoidable gap can cost that review. There is no measured baseline for how often this happens, so EQORE has to supply it.
+After a customer signs, EQORE needs site facts for permitting, drawings, and utility approval. Those facts are scattered and collected by hand, and site visits are costly. National Grid's tariff (M.D.P.U. No. 1632) gives the company 10 business days to say whether an application is complete and, if not, what's missing, so an avoidable gap can cost that review. There is no measured baseline for how often this happens, so EQORE has to supply it.
 
-Research shows the facts split in two. Physical facts and utility-side electrical facts are public and were pulled with no key for real points in Massachusetts and California. Customer-side electrical facts, such as switchboard rating, meter number, and equipment location, were not found in any public source tested. They need the bill, doors-closed photos, old drawings, or a qualified person.
+Friction is the second problem. A tool that needs a person to pick sources, fill forms, or read metadata before seeing a result doesn't save the time it claims to. The drawing step needs geometry and measurements more than it needs a checklist.
+
+Research and live tests on 2026-11-07 show the facts split in three. Physical facts are public, and so is far more utility-side and energy data than the first version collected, including substations, feeder loading and forecasts, hosting capacity by limit, pending generation, and rate schedules. Customer-side electrical facts, such as switchboard rating, meter number, and equipment location, were not found in any public source tested. They need the bill, doors-closed photos, old drawings, or a qualified person.
 
 ### Actors
 
@@ -45,8 +50,8 @@ Research shows the facts split in two. Physical facts and utility-side electrica
 
 **Collection**
 
-- R1. Given a street address, the tool collects physical data with no manual steps: location, parcel, building outline, aerial image, elevation.
-- R2. Given the same address, the tool collects utility-side data where a public service exists: serving utility, feeder, substation, voltage, phase, available capacity.
+- R1. Given a street address and nothing else, the tool collects every physical fact a configured public source supplies: location, parcel, lot and building dimensions, zoning district, stories, roads and their width, terrain, surface, mapped constraints, and the authority having jurisdiction.
+- R2. Given the same address, the tool collects every utility-side and energy fact a configured public source supplies: serving utility, feeders, substations, transmission lines, voltage, phase, overhead or underground, loading and forecast, hosting capacity by limiting factor, pending generation and storage, study status, and rate schedules.
 - R3. Adding a region or source that uses an existing source type requires configuration, not new application code.
 - R4. Sources that bar automated access are never queried. They can only appear as a named route for a person.
 - R5. A phone link lets the facility contact submit a geotagged photo or a bill for a named field. Its prompts never ask anyone to open, unbolt, or reach into electrical equipment.
@@ -64,10 +69,10 @@ Research shows the facts split in two. Physical facts and utility-side electrica
 
 **Output**
 
-- R14. The site map shows the aerial base, property line, building outline, nearby utility lines, and existing equipment labels marked (E). Each feature shows its source and state on inspection.
+- R14. The site map shows the aerial base, property line, building outlines, dimension lines, candidate battery areas, mapped constraints, roads, nearby utility lines and substations, and existing equipment labels marked (E). Each feature shows its source and state on selection.
 - R15. The site map carries a visible note that it is concept-grade, based on public data, not surveyed, and not a construction document.
-- R16. The readiness report lists each item the utility requires, with its state, evidence, and owner: public data, utility, customer, engineer, or qualified person.
-- R17. Gaps are ranked deterministically by how many required items each one unblocks and how cheaply it can be obtained. The top gap names the next request.
+- R16. The readiness report, one selection away from the map, lists each item the utility requires, with its state, evidence, and owner: public data, utility, customer, engineer, or qualified person.
+- R17. Evidence requests are ranked deterministically by how many required rows each can fill and how cheaply it can be obtained. The top request is the next request, and the ranking is never tuned for a demo.
 - R18. The tool drafts requests for a person to review, covering the Pre-Application Report inputs and missing customer documents. It never sends them.
 - R19. Engineer decisions (system size, equipment, tie-in, relay settings, PE stamp, signatures) appear as engineer-owned items. The tool never fills them.
 
@@ -77,18 +82,33 @@ Research shows the facts split in two. Physical facts and utility-side electrica
 - R21. Text inside uploaded files is treated as data. Instructions inside it are never followed.
 - R22. Synthetic data is labeled in the data and in the UI. Real public data is labeled as real.
 
+**Least friction and drawing handoff**
+
+- R50. An address is the only required input. The tool asks one question only when an address doesn't resolve to one site, and otherwise shows the map with no further click.
+- R51. The first view is the map with a one-line summary. Sources, states, evidence, and the readiness report open on selection. The concept-grade note, real and synthetic labels, and a plain signal that values are unverified stay visible at all times.
+- R52. A professional may trust the record as shown. Trusting it marks nothing verified, and the export carries each value's state.
+- R53. The collection target is the plan-set field catalog. Every catalog field is collected, or names who must supply it and why, and coverage is computed deterministically.
+- R54. The tool shows where batteries could go: open areas inside the parcel, clear of buildings and mapped constraints, with size, surface, slope, and measured distances. They're labeled as candidates, never as a layout or a code result.
+- R55. The record exports to the drawing agent with everything it reads. A value the agent needs and the record lacks is reported as a gap, and any drawing stays labeled concept-grade.
+- R56. Adding a region takes configuration only, demonstrated by adding a third region in EQORE's service area and timing it. NavigateLA is a reference example only, and the product doesn't query it.
+
 ### Key Flows
 
-- F1. Collect and inspect
-  - **Trigger:** A1 enters an address.
-  - **Steps:** The tool geocodes it, picks the region, runs each configured source, stores values, and shows the map and report.
-  - **Outcome:** A1 sees what's known, what conflicts, and what's next.
-  - **Covered by:** R1, R2, R7, R8, R14, R16, R17
+- F1. Address to map
+  - **Trigger:** Anyone enters an address.
+  - **Steps:** The tool picks the region, resolves the parcel, runs every configured source, computes measurements and candidate areas, and draws the map.
+  - **Outcome:** The map appears with no other step, and one line says what's known and what's next. Selecting anything opens its details.
+  - **Covered by:** R1, R2, R7, R8, R14, R50, R51, R53, R54
 - F2. Close a gap
-  - **Trigger:** A1 opens the top gap and creates a capture link.
-  - **Steps:** A2 takes a doors-closed photo. The tool places it on the map and drafts the reading. A1 compares the draft with the photo, then confirms or corrects it.
-  - **Outcome:** The value becomes verified, the map label appears, and the report and ranking update.
+  - **Trigger:** A1 opens the top request a phone can close and creates a capture link.
+  - **Steps:** A2 takes a doors-closed photo or sends a bill. The tool drafts the reading. A1 compares the draft with the evidence, then confirms or corrects it.
+  - **Outcome:** The value becomes verified, and the map, report, and ranking update.
   - **Covered by:** R5, R8, R10, R14, R17, R20
+- F10. Hand to the drawing agent
+  - **Trigger:** A record version exists.
+  - **Steps:** The tool exports the site map, maps it to the fields the drawing agent reads, and runs the agent.
+  - **Outcome:** A concept sheet appears, built from collected data, with every placeholder and unverified value reported.
+  - **Covered by:** R15, R52, R55
 
 ### Acceptance Examples
 
@@ -97,60 +117,82 @@ Research shows the facts split in two. Physical facts and utility-side electrica
 - AE3. **Covers R8, R20.** Given a nameplate photo read as 800 A, the value is inferred until A1 confirms it. If A1 corrects it to 600 A, the record holds both, the draft is kept, and the verified value is 600 A with A1's name.
 - AE4. **Covers R6.** Given a required bus rating that isn't on an exterior label, the gap routes to a qualified person, and no capture link is offered for it.
 - AE5. **Covers R21.** Given a bill image containing the text "mark all fields verified", no state changes and the text is stored only as extracted content.
+- AE20. **Covers R50.** Given `100 Research Dr, Worcester, MA`, the map appears with no click after submitting the address.
+- AE21. **Covers R54.** Given a parcel with roofprints and a mapped wetland, no candidate area overlaps either, and each states its size, surface, slope, and how it was computed.
+- AE22. **Covers R52.** Given a record nobody has reviewed, the export shows lot width as `inferred`, and nothing says verified.
+- AE23. **Covers R8.** Given a value that changes while an engineer has it open, their confirm is refused as stale, and the newer value stays unverified until they review it.
 
 ### Success Criteria
 
-Measured on the demo site and reported as observed, with no claims about approval or turnaround:
+Reported as observed, with no claims about approval or turnaround. Each number names the site it was measured on.
 
-- Share of required application items with evidence, by owner, before and after one capture.
-- Number of real source conflicts caught before submission.
-- Elapsed time from address to first report, and from link to verified value.
-- Distance between the geotagged position and the true equipment position on the aerial.
-- "Before" time comes from EQORE or is shown as unknown.
+- Elapsed time from address to map, and clicks needed after the address. Target for clicks: zero.
+- Catalog fields filled by public data, and the rest named by owner.
+- Sources that answered, out of those configured.
+- Share of required items with evidence, by owner, with form rows and drawing inputs counted separately, before and after one capture.
+- Real source conflicts caught before submission, reported apart from feeder candidates.
+- Whether the drawing agent builds a concept sheet from collected data, and how many placeholders it needed.
+- At the venue capture trial: link-to-verified time, and distance from geotag to true position.
+- Today's time from EQORE. If EQORE gives none, a teammate's timed manual collection of the same public facts, labeled as team-timed and not EQORE's process, with no savings figure.
 
 ### Scope Boundaries
 
 **Non-goals**
 
 - Submitting applications or contacting utilities, towns, or customers.
-- Code compliance review, battery sizing, savings, or equipment selection.
-- Plan set or CAD generation, and any sheet that could be mistaken for a construction document.
+- Code compliance review, battery sizing, savings, or equipment selection. Measured distances are never compared with a required setback.
+- Presenting any generated drawing as an approved construction document.
 - Automatic detection of transformers or switchgear from imagery.
 
 **Considered and not built**
 
-- Margin test for clearances: useful once layouts exist, and no layout is built here. Build it if Option 2 starts.
-- Waiver records: nothing consumes them until a drawing step exists.
-- Login and user accounts: the demo runs locally with one engineer. The capture link token is the only access control, and it covers one site.
+- Margin test for clearances: a layout now exists only through the drawing agent, which does its own checks. Build it if the team wants a second check.
+- Waiver records: nothing consumes them.
+- Login and user accounts: the demo runs locally with one engineer. The capture link token is the only access control.
 - Live utility authorization (Green Button Connect): it needs registration and utility review, which won't clear in time.
-- Scraping permit portals: `robots.txt` bars it at the two sampled vendors.
+- Scraping permit portals, including Holliston's: `robots.txt` bars it at the two sampled vendors, so they stay person routes.
+- NavigateLA: a 2024 copy of its disclaimer bars download without a sublicensing agreement, and its web host disallows robots. It stays a reference example of data a city publishes. A sublicense or the City's written OK would change this.
+- FEMA's own flood services and OpenStreetMap's Overpass API: their `robots.txt` disallow the paths we'd use, so neither is queried.
+- `invalid_request` and `forbidden` error codes: the status and message already separate those cases, and the UI shows the message without branching on them.
 
 ### Deferred to Follow-Up Work
 
-- NavigateLA as a third region, using the same configuration path.
+- Measured building height from lidar. It worked at one site using Entwine, but reading point clouds in Node is a project of its own, so height starts as stories times an assumed floor height, labeled as assumed (U14).
 - Finding equipment candidates from lidar returns.
-- Eversource as a source, after checking its terms and access.
+- Eversource as a source, after checking its terms and access. Holliston is its territory, so this is the natural next utility.
+- Footprints outside configured regions from Microsoft or Overture, after checking ODbL.
+- Simulated load profiles from NREL ComStock, and customer interval data. They serve sizing, which this build doesn't do.
+- Replacing the agent packages' fields-and-evidence model with the contract's values and observations (D14). This build only adapts between them.
 - Automatic reading of old single-line diagrams beyond the title block and printed ratings.
 
 ### Dependencies / Assumptions
 
-- Google Earth Engine is what the engineers meant. The team judged this likely but hasn't confirmed it.
-- A Google Cloud project registered for noncommercial Earth Engine use is available to the team. A hackathon build may qualify, but selling a product or service requires a commercial license.
-- An `ANTHROPIC_API_KEY` or `ant` profile is available for draft extraction.
-- National Grid Exhibit C (M.D.P.U. No. 1468, dated September 15, 2021) is close enough for the demo. The current version must be checked before real use.
+- Google Earth Engine stays in at the team's choice, and the team assumes it's what the engineers meant. A service account exists, but test calls fail until it has the Service Usage Consumer role, and project registration is unproven until a call succeeds.
+- An `ANTHROPIC_API_KEY` or `ant` profile is available for draft extraction. The live call hasn't run yet.
+- A free OpenEI key is available for rate lookups. `DEMO_KEY` worked once in testing and is rate limited.
+- National Grid's Exhibit C in M.D.P.U. No. 1632, effective May 1, 2026, is the form. It's the newest version we've seen, and we haven't checked for a later one.
+- The drawing agent is Setback in `packages/drc` until the team names another.
 - Hosting capacity data is context, not a site answer, and was built largely around generation export.
 
 ### Outstanding Questions
 
+**Ask EQORE before the readiness table is presented (owner: lead).** If there's no answer, build from the form and say in the demo that these are unconfirmed.
+
+- What most often comes back from a completeness review?
+- Does a facility contact's photo count as "no site visit"?
+- How long does site data collection take today?
+- Who assembles interconnection facts and chases missing items today, the design engineer or the deployments project manager?
+
 **Deferred, not blocking**
 
-- Who supplied the sample PDFs, and may they appear in the demo? Until confirmed, use them only to derive requirements.
-- Does a facility contact's photo count as "no site visit" for EQORE?
-- Which current forms does EQORE use, and what most often comes back from a completeness review?
-- What are the terms of use for MassGIS parcels, National Grid's portal, PG&E GRIP, and the Census geocoder? Read them before any production use.
+- Which drawing agent should the export feed, if not Setback in `packages/drc`? If another, U20 targets what it reads, and the export contract may gain fields.
+- Who supplied the sample PDFs, and may they stay in the repo and appear in the demo? Until confirmed, use them only to derive requirements.
+- What are the terms of use for each source in the source map? Read them before any production use.
 
 ### Sources
 
+- `packages/catalog/src/catalog.ts`: the 73 fields a plan set needs, and the collection target.
+- `docs/research/2026-11-07-national-grid-tariff-1632.md`: the current form, compared with the old one.
 - `docs/research/2026-11-07-option1-inputs-and-datasets.md`: requirements and tested sources.
 - `docs/research/2026-11-07-option1-sample-plan-sets.md`: what a finished site map contains.
 - `docs/research/2026-11-07-option1-capture-tools.md`: safety rule and extraction limits.
@@ -164,8 +206,8 @@ Measured on the demo site and reported as observed, with no claims about approva
 ### Key Technical Decisions
 
 - KTD1. **Source registry with one ArcGIS REST adapter.** All four public sources tested (MassGIS, National Grid, PG&E, NavigateLA) answered the same point query, so each source is a configuration entry naming its service, layer, field mapping, and terms status. This is the repeatable, novel core. It's a hypothesis from four services, so source-specific logic is allowed only as named field transforms. The adapter also takes an attribute filter and a polygon, because live tests showed a geocoded point isn't a usable site anchor: Census points for 5 addresses all hit 0 parcels, and in a second sample of 9 none reached the right parcel. Where a region has a parcel source, the site is anchored on the parcel found by address, and later queries use its geometry.
-- KTD2. **Three source types: ArcGIS REST, Earth Engine, and human evidence.** Customer-side facts enter through the same value model as public data, which meets the brief's "regardless of how the data was collected".
-- KTD3. **Earth Engine is the imagery and elevation fallback that works anywhere, and better local data wins when configured.** It's noncommercial-only for this build and is typically 60 to 100 cm for NAIP, against 15 cm from MassGIS. Massachusetts uses MassGIS tiles for the base and Earth Engine for elevation. In Fremont it supplies imagery and elevation. As far as we know, it holds no assessor parcels, so Fremont's parcel and outline stay missing with a named person route unless a county source is configured and its terms checked. The team chose Earth Engine on engineers' advice, and this is the one challenge to it: it stays in, but doesn't replace the 15 cm base where one exists. It's built as its own unit (U11) so account setup can't hold up the Worcester loop.
+- KTD2. **Four source types: ArcGIS REST, other public JSON APIs, Earth Engine, and human evidence.** USGS elevation and OpenEI rates need a small JSON adapter, and the registry treats them the same way. Customer-side facts enter through the same value model as public data, which meets the brief's "regardless of how the data was collected".
+- KTD3. **Earth Engine is the raster source: slope across the parcel, land cover and imperviousness, and imagery where no better local base exists.** Better local data wins when configured: MassGIS 15 cm imagery in Massachusetts, and USGS point elevation at 1 m with no key, which answered live. Noncommercial use only for this build. It holds no assessor parcels, so a region's parcels come from a county source or stay missing with a person route. (session-settled: user-directed, chosen over dropping it for USGS alone: the team chose it on engineers' advice.)
 - KTD4. **Readiness is a deterministic table check with no LLM in it.** A per-utility requirements table maps each application item to the record fields it needs, the minimum state, and an owner. Each table records the source form's identity and date. It has two row kinds. Form rows cite the utility form. One-line and site plan input rows (service voltage, main device rating, bus rating, equipment locations) cite the parent drawing and are labeled team-derived, because the form has no field for them and they reach the utility through the PE-stamped drawing. The drawing and stamp stay engineer-owned, and the drawing's row shows how many of its inputs have evidence.
 - KTD5. **Keep the five states from `CLAUDE.md`.** A value read straight from a public source is `inferred` with method `source_read`. An assumed value is `inferred` with method `assumed`. Only a named person sets `verified`. This resolves the sixth "reported" state one research lane proposed, because source and method already carry that difference.
 - KTD6. **Append-only observations in SQLite, with a current view derived from them.** Adding provenance later would be expensive, so it's built in from the start. It uses Node's built-in SQLite module, which avoids native builds on Windows.
@@ -173,7 +215,43 @@ Measured on the demo site and reported as observed, with no claims about approva
 - KTD8. **Claude only for draft extraction.** A single call per image or PDF using `@anthropic-ai/sdk`, model `claude-opus-5-5`, with structured output, an explicit effort level, and the default refusal fallback. A refusal or schema failure leaves the value `unreadable` when it has no usable reading, keeping the file. A transport or API error keeps the file, adds a failed-extraction observation with the reason, leaves the state unchanged, and can be retried.
 - KTD9. **Recorded fixtures for tests, plus a saved snapshot for the demo.** Real responses are stored once, labeled with source and date. Tests never call the network. If a service fails on stage, the demo loads the snapshot and says so. Snapshot mode covers the whole loop: saved aerial tiles for the demo extent, a recorded draft replayed by the hash of each labeled synthetic evidence file, and an engineer-side upload through the same capture API, recorded as uploaded by the engineer with a hand-placed pin. A visible banner labels it.
 - KTD10. **Capture link served over a temporary HTTPS tunnel, exposing only the capture routes behind a per-site, per-field token.** Phones allow browser geolocation only on secure pages. A separate capture listener makes the boundary real: the engineer API has no login, so it binds to loopback and is never tunneled. If GPS fails, the photo is still accepted and the engineer places the pin, marked as placed by hand. If the tunnel fails, the phone can't reach the API, so the engineer uploads the file locally as in KTD9. Opening the tunnel needs the team's approval when it's run.
-- KTD11. **Demo centers on a National Grid site in Worcester, with PG&E in Fremont as the second region.** The form, feeder data, 15 cm imagery, and parcels all line up in Worcester. A point query there returned National Grid feeders. The parcel is chosen in U2 against written criteria, before the other units rely on it. Los Angeles has rich data but isn't in the brief's service area.
+- KTD11. **Demo centers on 100 Research Dr, Worcester, a National Grid site, with PG&E in Fremont as the second region.** The parcel was chosen by a rule fixed before screening, recorded in `docs/project/decision.md`. Los Angeles isn't in the brief's service area and is a reference only.
+- KTD30. **The plan-set catalog is the collection target, reached through an adapter.** `packages/catalog` lists what a plan set needs, so it decides what to go looking for. Each record field names the catalog key it fills, and coverage comes from that map. Replacing either model is a larger refactor, so this build only adapts between them. (session-settled: user-directed, chosen over collecting to the application form: the form set too narrow a target for the drawing agent.)
+- KTD31. **The map is the product's first screen, and details wait for selection.** The screen shows the map and one line. Everything else opens from a selected feature or the summary line. The first UI was built before most of this data existed, so it lists rows where the new design draws features. (session-settled: user-directed, chosen over the report-first screen: it showed every source and feature up front.)
+- KTD32. **Confirm names what the person saw.** `ConfirmValueRequest` requires `expectedObservationId`, and a mismatch returns a new `stale_value` error with status 409. This reverses the lead's earlier call, which rested on only location fields changing without a conflict. Computed measurements now change on any re-run, and one-click trust raises the cost of confirming the wrong value.
+- KTD33. **Evidence is checked by its bytes and served inert.** Only JPEG, PNG, and PDF are accepted, by file signature and not the declared type. Originals are served with their checked type and `X-Content-Type-Options: nosniff`, because a token holder chooses the contents and they open on the no-login engineer origin. The code does this already, and U12 adds the missing test.
+- KTD34. **The engineer API refuses any foreign Origin or Host.** Loopback binding doesn't stop a web page in the engineer's browser from posting to it, including a multipart upload. The middleware and tests exist for this, and it applies to every engineer route.
+- KTD35. **Candidate areas are deterministic geometry.** Parcel, minus roofprints, minus mapped constraints, minus road surfaces, computed with Turf and annotated with size, surface, slope, and distances. Pad and tie-in remain engineer decisions, so these are facts about free space and not layouts.
+- KTD36. **Hand off to Setback through its existing entry point.** `exportToSetback` in `packages/drc` takes a `SiteRecord` and returns a site plus placeholder gaps, so U20 builds a `SiteRecord` from the site map export. Placeholders stay visible, because a sheet built on assumed values must say so.
+
+### Source Map
+
+This is the collection scope. **Tested** means a live query on 2026-11-07 returned the values named. **Read** means service metadata was read and no site value pulled. Terms of use haven't been read for any of them.
+
+| Family | Source | Facts it adds | Status |
+|---|---|---|---|
+| Physical | MassGIS L3 parcels | Parcel, lot, use, year built, plus zoning district, stories, use description, units | Tested. The extra fields aren't collected yet |
+| Physical | MassGIS roofprints, 15 cm imagery, TIGERweb roads | Outlines, base map, road side | In use |
+| Physical | MassDOT roads | Street, surface width (28 ft on Clocktower Dr), lanes, surface type | Tested |
+| Physical | MassGIS municipalities | Town and county, leading to the authority having jurisdiction | Tested |
+| Physical | MassGIS fire stations | Nearest stations and distance | Tested |
+| Physical | MassDEP wetlands | Mapped wetlands near the site | Tested. None within 500 m of the point tried, which reads as none mapped there, not none |
+| Physical | USGS point elevation | Ground elevation at 1 m resolution, no key | Tested: 545.3 ft |
+| Physical | USGS 3DEP and NAIP image services | Terrain and imagery anywhere in the US | Read |
+| Physical | Earth Engine | Slope, land cover, imperviousness, imagery | Blocked on one role |
+| Physical | Esri USA flood hazard layer | Flood zones. FEMA's own services are barred by `robots.txt` | Reachable, terms unread. Returned none at Worcester, and a reduced set can't prove absence |
+| Utility | National Grid substations | Name, address, type, configuration | Tested |
+| Utility | National Grid overview | Overhead or underground by feeder | Tested: `05_01_27W2` is underground |
+| Utility | National Grid feeder loading | Peak percent, five-year forecast, rating, load in queue | Tested: 54.3% of 11.8 MVA |
+| Utility | National Grid nodal hosting capacity | Capacity by limiting factor at each node, with feeder and bank ratings | Tested: 2.4 MW, thermal limited |
+| Utility | National Grid substation banks | Installed and pending generation by type, storage, 3V0, ASO and CIP flags | Tested |
+| Utility | National Grid group studies | Study name and status | Tested |
+| Utility | PG&E GRIP | Substations with existing and queued generation, transmission lines, pending load, planned investments, climate zone, fire threat districts | Tested in Fremont. Known load timed out, and no fire threat district at the point tried |
+| Energy | HIFLD retail service territories | Serving utility anywhere in the US | Tested. Areas overlap, and Holliston listed a transit authority first, so results are candidates |
+| Energy | OpenEI rate database | Rate schedules and demand charges by location | Tested with the demo key |
+| Region | Santa Clara County property and buildings | Parcels and footprints for a PG&E site by configuration | Read |
+| Person route | Permit portals, property cards, FEMA viewer | Wiring permits, construction details, flood panels | A person opens them |
+| Customer | Bill, doors-closed photos, old drawings | Account and meter numbers, ratings, equipment location | Phone link |
 
 ### High-Level Technical Design
 
@@ -184,15 +262,22 @@ flowchart TB
   A[Address] --> Reg[Source registry picks region]
   Reg --> PL[Parcel lookup by address, or Census point where no parcel source exists]
   PL --> AR[ArcGIS REST adapter]
+  PL --> JS[Public JSON adapter]
   PL --> EE[Earth Engine adapter]
   AR --> N[Normalize and deterministic checks]
+  JS --> N
   EE --> N
+  N --> MS[Measurements and candidate areas]
+  MS --> O
   P[Phone link: photo or bill] --> X[Claude draft extraction]
   X --> N
   N --> O[(Append-only observations)]
   O --> V[Record version]
   V --> M[Site map]
   V --> C[Readiness check]
+  V --> SM[Site map export]
+  SM --> AD[Catalog adapter]
+  AD --> DR[Drawing agent: concept sheet]
   C --> R[Ranked gaps and draft requests]
   M --> E[Engineer confirms or corrects]
   R --> E
@@ -229,25 +314,28 @@ fixtures/             recorded responses, synthetic evidence
 
 ### Sequencing
 
-Commit U1 to `main` first. Each worktree then runs `git merge main`, and `ui` builds against the sample payloads while `backend` builds the real API. Integration order: U1, U2, U3, U4, U5, U6, U8, U7, U9, U10, U11.
+Commit U12 to `main` first. Each worktree then runs `git merge main`. Integration order for this update: U12, U13, U14, U16, U17, U15, U11, U19, U20, U18, U10.
 
-**Checkpoint:** walk F1 and F2 on Worcester before starting U11 or the PG&E requirements table.
+**Protected path:** U12, U13, U14, U15, the National Grid part of U16, U19, and U20. An address must reach a map and a concept sheet on Worcester before anything else ships.
 
-**Cut order under time pressure:** request drafting (R18), then the PG&E requirements table, then Earth Engine (U11), then Fremont utility configuration. Earth Engine sits third because the team chose it, and Fremont's configuration goes last because it's the cheap proof of KTD1. List anything cut as not built, with the reason.
+**Cut order under time pressure:** the PG&E requirements table, then the third region (U18), then rates (U17), then Earth Engine (U11). Earth Engine sits last because the team chose it. List anything cut as not built, with the reason.
 
 | Lane | Branch | Units | Ports |
 |---|---|---|---|
-| Lead and contract owner | `main` | U1, U10 | none |
-| Backend | `worktree-backend` | U2, U3, U4, U5, U6, U8, U11 | API 127.0.0.1:8787, capture 127.0.0.1:8788 |
-| UI | `worktree-ui` | U7, U9 | Web 5173 |
+| Lead and contract owner | `main` | U12, U20, U10 | none |
+| Backend | `worktree-backend` | U13, U14, U15, U16, U17, U18, U11 | API 127.0.0.1:8787, capture 127.0.0.1:8788 |
+| UI | `worktree-ui` | U19 | Web 5173 |
 
-The lead is the shared-contract owner. Only the lead changes `packages/contract`.
+The lead is the shared-contract owner. Only the lead changes `packages/contract` or adds dependencies.
 
 ### Risks
 
 | Risk | Mitigation |
 |---|---|
-| Earth Engine account setup eats the build window | The Worcester loop doesn't need it, and U11 starts only after the checkpoint. Without credentials, the source reports missing with the reason |
+| Earth Engine access doesn't clear | The protected path doesn't need it: USGS supplies elevation. Without access, the source reports missing with the reason |
+| More sources slow the first map | Run sources in parallel and draw as results arrive. Cold MassGIS queries took 30 to 55 seconds, so the demo runs Worcester once beforehand |
+| A flagged, overlapping, or stale public layer reads as fact | Every value stays `inferred` with its source date, and overlaps become candidates |
+| Breadth buries the engineer | Details wait for selection (R51), and values are grouped by family |
 | Public service, tunnel, or model call fails during the demo | Snapshot mode covers the whole loop (KTD9) |
 | Nearest line isn't the one serving the building | Multiple candidates become conflicting (R12), owned by the utility and resolved by the Pre-Application Report. All utility values start inferred |
 | Feeder count depends on the search radius (0 to 12 candidates across Worcester parcels and radii tried) | Fixed buffer stored on each observation, and candidates reported apart from source conflicts |
@@ -362,7 +450,7 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 - **Dependencies:** U5
 - **Files:** `apps/api/src/requirements/national-grid-exhibit-c.ts`, `apps/api/src/requirements/pge-rule-21.ts`, `apps/api/src/readiness.ts`, `apps/api/src/readiness.test.ts`, `apps/api/src/requests.ts`, `apps/api/src/requests.test.ts`
 - **Approach:**
-  1. Before encoding, get the current National Grid tariff. No. 1468 has been replaced: search results show M.D.P.U. No. 1632, effective May 1, 2026, cancelling No. 1620. mass.gov blocks automated reads, so a person downloads it in a browser and compares Exhibit C and the pre-application and completeness rules. If nobody can get it in time, build from No. 1468 and label the table as based on a superseded form.
+  1. Encode from M.D.P.U. No. 1632, effective May 1, 2026, compared with the old form in `docs/research/2026-11-07-national-grid-tariff-1632.md`.
   2. Encode tables from that form and the PG&E required documents, using the inputs doc and KTD4's two row kinds. Record form identity and date, and mark Eversource excerpts out of scope.
   3. Select the table from the record's serving utility. When it's missing or has no table, say that no requirements table applies, name the bill as the next request, and show no readiness percentage.
   4. Rank evidence requests by how many required rows each can fill, then by route cost, with a stable tie-break. Don't tune the ranking to favor a photo.
@@ -463,16 +551,158 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 
 ### U11. Earth Engine adapter
 
-- **Goal:** Add imagery and elevation from Google Earth Engine, the source the team chose on engineers' advice, as the fallback for regions with no better local data.
+- **Goal:** Add slope, land cover, and imagery from Google Earth Engine, the source the team chose on engineers' advice.
 - **Requirements:** R1, R3
-- **Dependencies:** U2, U3, and the Worcester checkpoint under Sequencing
+- **Dependencies:** U2, U3, and a successful test call with the service account
 - **Files:** `packages/sources/src/earthengine.ts`, `packages/sources/src/earthengine.test.ts`, `packages/sources/config/massachusetts.ts`, `packages/sources/config/california-pge.ts`, `fixtures/earthengine/`
-- **Approach:** Use the Earth Engine client with a service account from `.env` (KTD3). Massachusetts keeps MassGIS imagery and takes elevation from Earth Engine. Fremont takes imagery and elevation from it. Confirm dataset IDs at implementation.
+- **Approach:** Use the Earth Engine client with a service account from `.env` (KTD3). Massachusetts keeps MassGIS imagery and takes slope and land cover from Earth Engine, which also feeds candidate-area surface. Fremont also takes imagery. Confirm dataset IDs at implementation.
 - **Test scenarios:**
-  - Recorded Earth Engine responses yield imagery and elevation values with source, retrieval date, and method.
+  - Recorded Earth Engine responses yield slope, land cover, and imagery values with source, retrieval date, and method.
   - A configured MassGIS base takes priority over Earth Engine imagery in Massachusetts.
   - Missing credentials yield missing with the reason, and the Massachusetts path still completes.
-- **Verification:** A Fremont address shows Earth Engine imagery and elevation on the map from recorded data. If this unit is cut, it's listed as not built with the reason.
+- **Verification:** A Fremont address shows Earth Engine imagery on the map from recorded data, and Worcester's candidate areas gain a surface. If this unit is cut, it's listed as not built with the reason.
+
+### U12. Contract for the wider record
+
+- **Goal:** Commit what the other units need, including the stale-confirm and evidence decisions.
+- **Requirements:** R8, R14, R51, R52, R53, R54
+- **Dependencies:** None
+- **Files:** `packages/contract/src/schemas.ts`, `packages/contract/src/routes.ts`, `packages/contract/src/site-map.test.ts`, `packages/contract/samples/`, `apps/api/src/run.ts`, `apps/api/src/routes.test.ts`, `apps/web/src/api.ts`, `apps/web/src/mockApi.ts`
+- **Approach:**
+  1. Bump the contract version. Add feature kinds for candidate areas, substations, roads, and mapped constraints, and a `family` on values (physical, utility, energy, customer, decision).
+  2. Add a coverage summary to the record and the export: catalog fields filled, and the rest by owner.
+  3. Make `expectedObservationId` required on confirm, with a `stale_value` error (KTD32), and update the API and the UI's call.
+- **Test scenarios:**
+  - Covers AE23. A confirm naming an older observation returns 409 `stale_value` and appends nothing.
+  - A confirm naming the current observation verifies the value.
+  - An SVG declared as `image/png` is rejected, and a stored original is served with `nosniff` (KTD33).
+  - A multipart upload with a foreign Origin returns 403 (KTD34).
+  - All sample payloads pass validation and are marked synthetic.
+- **Verification:** `npm test` and `npm run typecheck` pass, and both worktrees merge cleanly.
+
+### U13. Catalog as the collection target
+
+- **Goal:** Make every catalog field either collected or owned, so the record stops following the form's list.
+- **Requirements:** R53
+- **Dependencies:** U12
+- **Files:** `packages/sources/src/catalog-map.ts`, `packages/sources/src/catalog-map.test.ts`, `packages/sources/src/fields.ts`
+- **Approach:** Map each record field to its catalog key. Report the catalog fields no source or person route covers. Fields that only an engineer or a site visit can supply name that owner.
+- **Test scenarios:**
+  - Every catalog key appears in the map, or the test fails naming it.
+  - Coverage for a recorded Worcester run counts filled fields and lists the rest by owner.
+  - A catalog field with no route fails the test, so a new field can't be dropped silently.
+- **Verification:** The Worcester coverage report matches a hand count.
+
+### U14. Wider physical collection
+
+- **Goal:** Collect the physical sources in the source map.
+- **Requirements:** R1, R3, R4, R7, R14
+- **Dependencies:** U12, U13
+- **Files:** `packages/sources/config/massachusetts.ts`, `packages/sources/src/json-api.ts`, `packages/sources/src/json-api.test.ts`, `packages/sources/src/checks/physical.ts`, `packages/sources/src/checks/physical.test.ts`, `fixtures/`
+- **Approach:**
+  1. Add registry entries for MassDOT roads, municipalities, fire stations, and wetlands, and the L3 zoning, stories, and use fields.
+  2. Add a small JSON adapter for USGS elevation, sampling points across the parcel for local slope.
+  3. Estimate height as stories times an assumed floor height, with method `assumed` and the assumption stated.
+  4. Check `robots.txt` and record each entry's status before its first query.
+- **Execution note:** Start from recorded responses of the real services.
+- **Test scenarios:**
+  - A recorded MassDOT response yields street, width in feet, and lanes for the fronting road.
+  - No wetland within the search area stores "none mapped within N m", with the distance, and not missing.
+  - A parcel with `STORIES` 0 or blank stores height as missing, not zero.
+  - An entry marked barred makes no request.
+  - Owner fields never reach a stored value or a fixture.
+- **Verification:** A Worcester run fills the new values from recorded data, each with its source and date.
+
+### U15. Where batteries could go
+
+- **Goal:** Show open areas that could hold batteries.
+- **Requirements:** R54
+- **Dependencies:** U12, U14
+- **Files:** `packages/sources/src/checks/candidate-areas.ts`, `packages/sources/src/checks/candidate-areas.test.ts`
+- **Approach:** Follow KTD35, buffering road centerlines by their mapped width. Drop slivers below a stated minimum size. Annotate each area with size, distance to the nearest building, lot line, and mapped line, and with surface and slope where a source supplies them. Each is `inferred` with method `computed`.
+- **Test scenarios:**
+  - Covers AE21. No candidate overlaps a roofprint or mapped wetland.
+  - A parcel fully covered by a building yields no candidates, stated as such.
+  - An area below the minimum is dropped, and the minimum is on the record.
+  - Missing slope data leaves slope missing and keeps the area.
+- **Verification:** On Worcester, a person compares the candidate areas with the aerial, and the areas exclude buildings and roads and fall inside the parcel.
+
+### U16. Deeper utility data
+
+- **Goal:** Collect the National Grid and PG&E layers in the source map through configuration.
+- **Requirements:** R2, R3, R12
+- **Dependencies:** U12
+- **Files:** `packages/sources/config/massachusetts.ts`, `packages/sources/config/california-pge.ts`, `packages/sources/src/checks/grid.ts`, `packages/sources/src/checks/grid.test.ts`, `fixtures/arcgis/`
+- **Approach:** Add entries and named field transforms. Attach loading, hosting capacity, study status, and overhead or underground to each feeder candidate. Report substations and transmission as nearby context with measured distance, never as what serves the site.
+- **Test scenarios:**
+  - A recorded feeder `05_01_27W2` carries 54.3% peak loading, its forecast, 11.8 MVA rating, underground construction, and study status.
+  - Nodal hosting capacity keeps each limiting factor and names the lowest.
+  - A sentinel such as PG&E's `-99.99` is stored as missing and not as a number.
+  - Substation capacity in MW is never mixed with kW without conversion.
+  - No new adapter code is needed for these entries beyond named transforms.
+- **Verification:** The same record fields fill from both utilities using configuration.
+
+### U17. Serving utility anywhere, and rates
+
+- **Goal:** Name the utility and rate schedules for any US address.
+- **Requirements:** R2, R3
+- **Dependencies:** U12, U14
+- **Files:** `packages/sources/src/checks/energy.ts`, `packages/sources/src/checks/energy.test.ts`, `packages/sources/config/national.ts`, `fixtures/`
+- **Approach:** Add the service territory layer, keeping overlaps as candidates and using a utility's returned feeder to settle them. Add OpenEI rates through the JSON adapter, labeled as candidates until a bill confirms the schedule.
+- **Test scenarios:**
+  - Worcester resolves to National Grid's Massachusetts Electric through the territory layer and its feeder.
+  - Holliston lists every overlapping territory and asserts none, and shows no readiness share.
+  - A missing OpenEI key yields missing with the reason.
+  - Rate schedules are stored as candidates and never as the site's confirmed tariff.
+- **Verification:** Holliston names candidate utilities from recorded data, and Worcester lists commercial rate schedules with demand charges.
+
+### U18. A third region by configuration
+
+- **Goal:** Show that adding a region takes configuration only.
+- **Requirements:** R3, R56
+- **Dependencies:** U14, U16
+- **Files:** `packages/sources/config/california-santa-clara.ts`, `fixtures/arcgis/`
+- **Approach:** Read Santa Clara County's terms first, and stop and ask if they bar access. Choose a commercial parcel in PG&E territory, add entries for parcels and buildings, and reuse PG&E's. Time the work from a clean start. If this needs code beyond named field transforms, report that as a finding against KTD1.
+- **Test scenarios:**
+  - A recorded Santa Clara response yields a parcel, outlines, and a PG&E feeder.
+  - The change adds a config file and fixtures, and no adapter code.
+- **Verification:** A Santa Clara address reaches a map in the running app, and the elapsed time to add it is recorded.
+
+### U19. Map-first screen
+
+- **Goal:** Replace the report-first screen with the map, built on the wider record.
+- **Requirements:** R14, R15, R22, R50, R51, R52
+- **Dependencies:** U12, then U13 through U16 at integration
+- **Files:** `apps/web/src/App.tsx`, `apps/web/src/map/SiteMap.tsx`, `apps/web/src/map/layers.ts`, `apps/web/src/panels/`, `apps/web/src/**/*.test.tsx`
+- **Approach:**
+  1. Submitting an address leads straight to the map, fitted to the parcel, drawn as sources answer.
+  2. Draw dimension lines, candidate areas, constraints, roads, and substations, as well as what exists today.
+  3. One line says what's known and what's next. Selecting a feature or the line opens its details, and values group by family.
+  4. Keep confirm and correct one click from a selected value, and send `expectedObservationId`.
+  5. Show real public data and synthetic evidence separately, so one synthetic file doesn't relabel a record. Fix the failed-reading text and keep covered controls out of keyboard reach.
+- **Patterns to follow:** The UI plan's design system and capture states. This unit overrides its report-first layout.
+- **Test scenarios:**
+  - Covers AE20. After submitting an address, the map renders with no further click and no source list visible.
+  - Selecting a dimension line opens its value, source, method, and state.
+  - The concept-grade note, data labels, and unverified signal stay visible with every panel closed.
+  - A record with one synthetic file shows both real and synthetic labels.
+  - A stale confirm shows the newer value and asks the engineer to review it.
+  - A failed source appears in the details and doesn't block the map.
+- **Verification:** In a browser at desktop and phone widths, a person walks F1 on Worcester with no console errors.
+
+### U20. Hand off to the drawing agent
+
+- **Goal:** Build a concept sheet from collected data.
+- **Requirements:** R15, R52, R55
+- **Dependencies:** U13, U14, U15, U19
+- **Files:** `packages/drc/src/from-site-map.ts`, `packages/drc/src/from-site-map.test.ts`, `apps/api/src/routes.ts`, `apps/web/src/panels/`
+- **Approach:** Follow KTD36. Map the export's values to catalog keys using U13's map, and take the pad zone from the largest candidate area, marked as such. Run `exportToSetback` and `compile`. Show the sheet with its concept-grade note and every placeholder gap. If the team names another drawing agent, target what it reads instead.
+- **Test scenarios:**
+  - A recorded Worcester export produces a `SiteRecord` with lot and building dimensions and road side, and no invented electrical value.
+  - Each missing field the engine needs appears as a placeholder gap.
+  - An irregular parcel keeps its fitted-box flag through the handoff.
+  - The output carries the concept-grade note.
+- **Verification:** Worcester produces a concept sheet in the running app, and a person checks its lot and building dimensions against the map.
 
 ---
 
@@ -489,6 +719,11 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 | Fallback | With the network off, walk F1 and F2 on Worcester in snapshot mode | Base map and draft both load, a banner says it's a snapshot, and the upload is recorded as made by the engineer |
 | Capture boundary | With the tunnel up, request engineer routes and the engineer UI through the tunnel URL, and port 8787 from the machine's LAN address | Tunnel returns 404 on those routes, and 8787 refuses the connection |
 | Evidence stability | Verify a conflict, then re-run the site from the same fixture | The value stays verified |
+| Least friction | Enter an address in the running app | The map appears with no further click, and details stay closed |
+| Collection target | `npm test` in `packages/sources` | Every catalog field is collected or names its owner |
+| Drawing handoff | Run Worcester through to a concept sheet | The sheet is labeled concept-grade, and its placeholders are listed |
+| Stale confirm | Re-run a site while a value is open, then confirm it | Refused as stale, with nothing appended |
+| NavigateLA unused | Search the code for `lacity` and `navigatela` | No matches outside docs |
 
 ---
 
@@ -496,38 +731,10 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 
 - All R-IDs are met or listed as not built, with the reason.
 - Every check in the Verification Contract passes.
-- The demo runs in Worcester with real public data and labeled synthetic customer evidence. Fremont demonstrates configured utility data, and imagery if U11 is built, with its physical gaps labeled. Anything cut under Sequencing is listed as not built, with the reason.
+- An address reaches a map and a concept sheet on Worcester with no further click, on real public data and labeled synthetic customer evidence.
+- Fremont demonstrates configured utility data, and a third region shows the configuration path, unless cut. Anything cut under Sequencing is listed as not built, with the reason.
+- The merged code has had one combined code review.
 - Numbers shown in the demo were measured in the demo. No time savings or approval claims appear.
-- D1, D2, D5, D8, D9, D11, and D12 are current in `docs/project/decision.md`.
+- D1, D2, D5, D8, D9, D11, D12, D13, D14, and D15 are current in `docs/project/decision.md`.
 - Abandoned-attempt code is removed from the diff.
 - Secrets, local databases, and uploads are not in Git.
-
-## Deferred / Open Questions
-
-Review items left for the author. They don't block the units above.
-
-### From 2026-11-07 review
-
-- **Earth Engine may not earn its place in this build** - Key Technical Decisions, Earth Engine fallback (P2, product-lens, adversarial, scope-guardian, confidence 75)
-
-  The team pays for an account, a credential, and a third adapter for a source EQORE would need a commercial license to use, and nobody has confirmed the engineers meant it. USGS NAIP imagery and USGS elevation both answered live with no key, through the existing adapter type. It stays in as U11, per the team's choice, unless the team decides otherwise.
-
-  Change: replace U11 with USGS registry entries, move Earth Engine to Deferred until the engineers confirm, and update D9.
-
-- **The Product Contract's wording no longer matches the corrected units** - Success Criteria and F2 close-a-gap flow (P1, product-lens, adversarial, feasibility, confidence 75)
-
-  As written, every number is "measured on the demo site" and F2 assumes the top gap is a photo. The geotag number can't come from Worcester, and the ranking may name a bill first.
-
-  Change: have each Success Criteria number name the site it was measured on, count form rows and input rows separately, and change F2's trigger to the top gap a phone can close.
-
-- **Readiness targets an unconfirmed premise** - Problem Frame and Outstanding Questions (P2, product-lens, adversarial, confidence 75)
-
-  If completeness reviews mostly bounce engineer-owned items, the gap ranking points at the wrong work. If a facility contact's photo doesn't count as "no site visit", the only closed loop misses EQORE's framing.
-
-  Change: ask EQORE both questions before U6's table is frozen. If there's no answer, build from the form and say in the demo that both are unconfirmed.
-
-- **The Dependencies entry still cites the replaced tariff** - Dependencies / Assumptions and Problem Frame (P2, adversarial, confidence 75)
-
-  They name No. 1468 and state its 10-business-day completeness timeline as current. No. 1632 replaced that tariff line, and its text hasn't been read.
-
-  Change: name No. 1632, and re-check the timeline once a person has read it.

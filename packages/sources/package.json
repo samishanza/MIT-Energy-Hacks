@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@eqore/contract": "^0.1.0",
+    "@google/earthengine": "^1.7.51",
     "@turf/turf": "^7.4.0",
     "zod": "^4.6.7"
   }

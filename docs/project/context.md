@@ -55,6 +55,7 @@ Living context for the EQORE track. **Last updated:** 2026-11-07
 - 2026-11-07: The team named time to grid connection as the biggest problem, set the demo in Massachusetts or California, and asked for a repeatable collection method and a tech stack. See D2, D9, and D11 in [decision.md](decision.md).
 - 2026-11-07: Plan review found that National Grid's M.D.P.U. No. 1468 has been replaced. Search results show No. 1632, effective May 1, 2026, cancelling No. 1620. Its text hasn't been read, because mass.gov blocks automated reads. Assumption until read: Exhibit C, the 250 kW rule, and the 10-day timeline may have changed.
 - 2026-11-07: The team downloaded No. 1632. The 250 kW rule, report fees, 10-day timelines, and PE-stamped one-line are unchanged. Exhibit C adds one block for new Facility or change to an existing one. See `docs/research/2026-11-07-national-grid-tariff-1632.md`.
+- 2026-11-07: The team set the direction to least friction: an address produces the site map with no other steps, details wait for selection, and the drawing agent builds from the collected data. The team said the first plan's collection scope was too limited. Live tests that day found much more public physical, utility, and rate data than the plan had collected. NavigateLA stays a reference example, and the product doesn't query it.
 
 ---
 
