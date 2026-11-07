@@ -11,7 +11,7 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** Someone enters the address of a commercial or industrial site and, with no other steps, gets a site map and site plan built from every publicly identifiable fact, each traced to its source, so siting and connection decisions are easier. Nothing else is required of anyone.
+- **Objective:** Someone enters the address of a commercial or industrial site and, with no other steps, sees every publicly identifiable fact and measurement on a map and site plan, each traced to its source. Once the engineer makes their decisions, the grid connection request can go in without a site visit to measure. The product doesn't produce the site plan set or the drawings itself.
 - **Means:** A configuration-driven collector pulls every physical, utility, and energy fact public services will give, aimed at the plan-set field catalog in `packages/catalog` rather than at one application form, and checks independent sources against each other. A phone link gathers customer-side evidence, and deterministic checks compare the record with what the utility requires (KTD1, KTD2, KTD4, KTD30).
 - **Authority:** `CLAUDE.md` non-negotiable rules win, then this Product Contract, then the KTDs. `docs/plans/2026-11-07-1015-feat-engineer-review-ui-design-plan.md` refines the UI where it doesn't conflict with this plan. Research in `docs/research/` is evidence, not instruction.
 - **Stop conditions:**
@@ -27,7 +27,7 @@ execution: code
 
 ### Summary
 
-Enter an address and get a site map and a site plan, built only from public records, with every fact traced to its source. The visualization is the product. Customer evidence and the application readiness report already exist in the code, but they're optional, out of the first view, and not part of what this build must deliver.
+Enter an address and see what public records can tell you about the site, measured and traced to their sources, on a map and a site plan. The visualization is the product. Its job is to replace the site visit to measure, so the grid connection request is ready once the engineer decides. It isn't a plan set or a drawing tool. Customer evidence and the application readiness report already exist in the code, but they're optional, out of the first view, and not part of what this build must deliver.
 
 **Product Contract preservation:** changed twice at the team's direction on 2026-11-07. First, the collection target widened from one application form to the plan-set catalog, which changed R1, R2, R14, R16, R17, F1, F2, Success Criteria, and Scope Boundaries, and added R50 to R58. Second, the product narrowed to the public-record map and site plan, which adds R59 and makes R5, R16 to R18, F2, and the capture units optional.
 
@@ -90,6 +90,7 @@ Research and live tests on 2026-11-07 show the facts split in three. Physical fa
 - R54. The tool shows where batteries could go: open areas inside the parcel, clear of buildings and mapped constraints, with size, surface, slope, and measured distances. They're labeled as candidates, never as a layout or a code result.
 - R55. The record exports to the drawing agent with everything it reads. A value the agent needs and the record lacks is reported as a gap, and any drawing stays labeled concept-grade.
 - R59. No input beyond the address is required, and the first view never asks for customer documents, engineer decisions, or approvals. Facts that aren't public are summarized in one line, saying why they aren't public, and open only on request.
+- R60. Every measurement a site visit would otherwise take (lot and building dimensions, distances to lot lines, lines, roads, and constraints, elevation, and slope) shows how it was measured, its source date, and that it's from public data and not a survey. One line says how many grid connection request items public data covers, and that the rest wait on the engineer's decisions or customer documents.
 - R58. The tool works for any Massachusetts address. Every address gets the physical record, and grid data wherever a public source covers it. Where none does, it names the utility, says grid data isn't available, and names who to ask. An address never dead-ends.
 - R57. Every value shows how good it is: its source date or age, and its resolution or grade. Where a second independent source exists, the tool checks one against the other and records whether they agree, disagree, or couldn't be checked. It flags a disagreement and never settles it silently.
 - R56. Adding a region takes configuration only, demonstrated by adding a third region in EQORE's service area and timing it. NavigateLA is a reference example only, and the product doesn't query it.
@@ -195,6 +196,7 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 
 - May the sample PDFs appear in the demo? They stay in the private repo by the team's decision, and until this is confirmed they're used only to derive requirements.
 - Does EQORE's use need anything beyond the published terms each unit records?
+- Do the utilities EQORE works with accept measurements from public data in a grid connection request, without a survey? EQORE's own sample site plan says its dimensions come from aerial imagery and public boundary data, not a survey.
 
 ### Sources
 
@@ -724,13 +726,13 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 ### U19. Map-first screen
 
 - **Goal:** Make the map the product: every public fact drawn and traced, with nothing asked of the user beyond the address.
-- **Requirements:** R14, R15, R22, R50, R51, R52, R57, R58, R59
+- **Requirements:** R14, R15, R22, R50, R51, R52, R57, R58, R59, R60
 - **Dependencies:** U12, then U13 through U16 at integration
 - **Files:** `apps/web/src/App.tsx`, `apps/web/src/map/SiteMap.tsx`, `apps/web/src/map/layers.ts`, `apps/web/src/panels/`, `apps/web/src/**/*.test.tsx`
 - **Approach:**
   1. Submitting an address leads straight to the map, fitted to the parcel. Poll the progress route and draw results as they arrive. The existing address chooser and pin placement carry over.
   2. Draw every collected feature kind: property line, all building outlines, dimension lines, roads, wetlands and other mapped constraints, utility lines, substations, fire stations, open ground, and existing equipment. A compact legend toggles each kind. Draw and select from the top: equipment and dimension lines, outlines, open ground in a tentative style, then constraints and roads.
-  3. One status strip, in a fixed order: the concept-grade note, data labels, an unverified signal, and a summary such as "52 public facts found, 15 of 78 plan-set fields, 2 conflicts". During a run it reads like "Reading sources, 9 of 14 answered".
+  3. One status strip, in a fixed order: the concept-grade note, data labels, an unverified signal, and a summary such as "52 public facts found, 15 of 78 plan-set fields, 2 conflicts". A second line reads like "Grid connection request: 9 of 21 items from public data. The rest wait on your decisions or customer documents" (R60). During a run it reads like "Reading sources, 9 of 14 answered".
   4. A facts panel lists only public facts, grouped by family (physical, utility, energy), each with its source, date, and cross-checks. Selecting a fact highlights its feature, and selecting a feature opens its fact. Every row is keyboard-focusable.
   5. Facts that aren't public collapse into one closed line, "Not in public records: 36 customer facts and 41 engineer decisions", which opens a short explanation of why. The readiness report, capture links, and requests leave the first view and open only from that line.
   6. Keep the site plan tab. Keep confirm and correct one click from a selected fact, sending `expectedObservationId`, but never prompt for it.
