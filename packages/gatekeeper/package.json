@@ -1,0 +1,13 @@
+{
+  "name": "@eqore/gatekeeper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic admission control for agent proposals.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eqore/catalog": "^0.1.0"
+  }
+}
