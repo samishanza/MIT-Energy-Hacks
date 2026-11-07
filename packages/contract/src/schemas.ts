@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Bumped by the contract owner whenever a shape changes, so both worktrees can check they match.
-export const CONTRACT_VERSION = "1";
+export const CONTRACT_VERSION = "2";
 
 export const VALUE_STATES = ["missing", "conflicting", "unreadable", "inferred", "verified"] as const;
 export const ValueStateSchema = z.enum(VALUE_STATES);
@@ -211,7 +211,7 @@ export type Geometry = z.infer<typeof GeometrySchema>;
 
 export const MapFeatureSchema = z.object({
   id: nonBlank,
-  kind: z.enum(["property_line", "building_outline", "utility_line", "existing_equipment", "capture_pin"]),
+  kind: z.enum(["property_line", "building_outline", "utility_line", "existing_equipment", "capture_pin", "dimension_line"]),
   // The value this feature shows, which carries its source and state.
   field: fieldKey,
   geometry: GeometrySchema,
@@ -245,6 +245,8 @@ export const SiteSchema = z.object({
   region: nonBlank,
   location: position.nullable(),
   locationMethod: MethodSchema.nullable(),
+  // A labeled trial of the phone capture, such as one at the venue. Not a customer site.
+  captureTest: z.boolean().optional(),
 });
 export type Site = z.infer<typeof SiteSchema>;
 
@@ -436,6 +438,46 @@ export const ApiErrorSchema = z.object({
   message: nonBlank,
 });
 export type ApiError = z.infer<typeof ApiErrorSchema>;
+
+// Goes out with every export, so the site map can't be read as a construction document downstream.
+export const CONCEPT_GRADE_NOTE = "Concept-grade. Not surveyed. Not a construction document.";
+
+// The generated site map, for an agent or a drawing step. GeoJSON, so any map or CAD tool can read it.
+// Each feature keeps its value's state: consumers can trust what they choose, but can't lose what's unverified.
+export const SiteMapExportSchema = z.object({
+  contractVersion: nonBlank,
+  recordVersionId: nonBlank,
+  version: z.number().int().positive(),
+  generatedAt: isoDateTime,
+  note: z.literal(CONCEPT_GRADE_NOTE),
+  snapshot: z.boolean(),
+  synthetic: z.boolean(),
+  site: SiteSchema,
+  baseMap: BaseMapSchema.nullable(),
+  features: z.object({
+    type: z.literal("FeatureCollection"),
+    features: z.array(
+      z.object({
+        type: z.literal("Feature"),
+        id: nonBlank,
+        geometry: GeometrySchema,
+        properties: z.object({
+          kind: MapFeatureSchema.shape.kind,
+          field: fieldKey,
+          label: z.string().optional(),
+          placedByHand: z.boolean().optional(),
+          state: ValueStateSchema,
+          grade: FitnessGradeSchema.nullable(),
+          owner: OwnerSchema,
+          synthetic: z.boolean(),
+        }),
+      }),
+    ),
+  }),
+  // Every value, including what's missing. Evidence stays on the record version this names.
+  values: z.array(ValueSchema),
+});
+export type SiteMapExport = z.infer<typeof SiteMapExportSchema>;
 
 export const CaptureSampleSchema = z.object({
   synthetic: z.literal(true),

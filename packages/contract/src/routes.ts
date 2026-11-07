@@ -7,6 +7,7 @@ import {
   EvidenceRefSchema,
   ObservedValueSchema,
   ReadinessReportSchema,
+  SiteMapExportSchema,
   RecordVersionSchema,
 } from "./schemas.ts";
 
@@ -91,6 +92,13 @@ export const routes = {
     listener: "engineer",
     request: noBody,
     response: ReadinessReportSchema,
+  }),
+  readSiteMap: route({
+    method: "GET",
+    path: "/api/sites/:siteId/versions/:version/site-map",
+    listener: "engineer",
+    request: noBody,
+    response: SiteMapExportSchema,
   }),
   confirmValue: route({
     method: "POST",
