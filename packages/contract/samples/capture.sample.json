@@ -1,0 +1,34 @@
+{
+  "synthetic": true,
+  "link": {
+    "id": "link-1",
+    "siteId": "sample-site",
+    "field": "meter_number",
+    "url": "https://sample-tunnel.invalid/capture/SAMPLE-TOKEN",
+    "status": "open",
+    "expiresAt": "2026-11-08T11:00:00Z",
+    "uploadsUsed": 0,
+    "maxUploads": 5
+  },
+  "request": {
+    "field": "meter_number",
+    "label": "Meter number",
+    "question": "Please take a photo of a recent electric bill, showing the account and meter numbers.",
+    "accepts": "bill",
+    "safetyText": "Keep all doors and covers closed. Photograph only what you can see from outside. Do not open, unbolt, or reach into electrical equipment.",
+    "aerial": null,
+    "pin": null,
+    "synthetic": true
+  },
+  "metadata": {
+    "latitude": 42.26,
+    "longitude": -71.8,
+    "accuracyMeters": 8,
+    "headingDegrees": 90
+  },
+  "result": {
+    "evidenceFileId": "sample-file-2",
+    "state": "inferred",
+    "positionStatus": "placed"
+  }
+}

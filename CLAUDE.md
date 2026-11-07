@@ -4,7 +4,7 @@ Prototype for the EQORE track at MIT Energy & Climate Hack 2026: make one batter
 
 This is about deploying batteries, not battery-control algorithms. EQORE already has control software.
 
-**Current phase:** Ideation. No bottleneck, product scope, or stack is selected until `docs/project/decision.md` says so. Do not scaffold the app before then.
+**Current phase:** Build, under `docs/plans/2026-11-07-0954-feat-site-data-collection-plan.md`. The bottleneck, scope, and stack are recorded in `docs/project/decision.md`. Only the session on `main` changes `packages/contract` or adds dependencies.
 
 ## Where things live
 

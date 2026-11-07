@@ -1,0 +1,771 @@
+{
+  "id": "sample-site-v2",
+  "contractVersion": "1",
+  "version": 2,
+  "createdAt": "2026-11-07T11:00:00Z",
+  "trigger": "human_action",
+  "snapshot": false,
+  "synthetic": true,
+  "site": {
+    "id": "sample-site",
+    "address": "100 Sample Industrial Way, Sampletown, MA (SYNTHETIC SAMPLE)",
+    "region": "massachusetts",
+    "location": [
+      -71.8,
+      42.26
+    ],
+    "locationMethod": "source_read"
+  },
+  "values": [
+    {
+      "field": "parcel_id",
+      "label": "Parcel ID",
+      "state": "inferred",
+      "grade": "reference",
+      "owner": "public_data",
+      "current": {
+        "type": "text",
+        "value": "SAMPLE-0001"
+      },
+      "candidates": [],
+      "observationIds": [
+        "obs-1"
+      ],
+      "flags": [],
+      "synthetic": true,
+      "method": "source_read"
+    },
+    {
+      "field": "property_line",
+      "label": "Property line",
+      "state": "inferred",
+      "grade": "reference",
+      "owner": "public_data",
+      "current": {
+        "type": "text",
+        "value": "Boundary from sample parcel polygon"
+      },
+      "candidates": [],
+      "observationIds": [
+        "obs-2"
+      ],
+      "flags": [],
+      "synthetic": true,
+      "method": "source_read"
+    },
+    {
+      "field": "lot_size_acres",
+      "label": "Lot size",
+      "state": "conflicting",
+      "grade": "reference",
+      "owner": "public_data",
+      "current": null,
+      "candidates": [
+        {
+          "id": "lot-assessor",
+          "value": {
+            "type": "quantity",
+            "value": 7.3,
+            "unit": "acre"
+          },
+          "observationId": "obs-3",
+          "sourceName": "SYNTHETIC SAMPLE assessor field"
+        },
+        {
+          "id": "lot-polygon",
+          "value": {
+            "type": "quantity",
+            "value": 6.9,
+            "unit": "acre"
+          },
+          "observationId": "obs-4",
+          "sourceName": "SYNTHETIC SAMPLE parcel source"
+        }
+      ],
+      "observationIds": [
+        "obs-3",
+        "obs-4"
+      ],
+      "flags": [],
+      "synthetic": true,
+      "conflictKind": "source_disagreement"
+    },
+    {
+      "field": "building_area_sqft",
+      "label": "Building area",
+      "state": "missing",
+      "grade": null,
+      "owner": "customer",
+      "current": null,
+      "candidates": [],
+      "observationIds": [
+        "obs-5"
+      ],
+      "flags": [],
+      "synthetic": true,
+      "reason": "Source returned 0, which can't be true for a building, so it's stored as missing."
+    },
+    {
+      "field": "serving_utility",
+      "label": "Serving utility",
+      "state": "inferred",
+      "grade": "reference",
+      "owner": "utility",
+      "current": {
+        "type": "text",
+        "value": "Sample Utility"
+      },
+      "candidates": [],
+      "observationIds": [
+        "obs-8"
+      ],
+      "flags": [],
+      "synthetic": true,
+      "method": "source_read"
+    },
+    {
+      "field": "feeder",
+      "label": "Feeder",
+      "state": "conflicting",
+      "grade": "reference",
+      "owner": "utility",
+      "current": null,
+      "candidates": [
+        {
+          "id": "feeder-a",
+          "value": {
+            "type": "text",
+            "value": "SAMPLE-FEEDER-A"
+          },
+          "observationId": "obs-6",
+          "sourceName": "SYNTHETIC SAMPLE utility map",
+          "attributes": {
+            "substation": {
+              "type": "text",
+              "value": "Sample Substation 1"
+            },
+            "voltage": {
+              "type": "quantity",
+              "value": 4.16,
+              "unit": "kV"
+            },
+            "phase": {
+              "type": "quantity",
+              "value": 3,
+              "unit": "phase"
+            },
+            "hosting_capacity": {
+              "type": "quantity",
+              "value": 0.6,
+              "unit": "MW"
+            }
+          }
+        },
+        {
+          "id": "feeder-b",
+          "value": {
+            "type": "text",
+            "value": "SAMPLE-FEEDER-B"
+          },
+          "observationId": "obs-7",
+          "sourceName": "SYNTHETIC SAMPLE utility map",
+          "attributes": {
+            "substation": {
+              "type": "text",
+              "value": "Sample Substation 2"
+            },
+            "voltage": {
+              "type": "quantity",
+              "value": 13.2,
+              "unit": "kV"
+            },
+            "phase": {
+              "type": "quantity",
+              "value": 3,
+              "unit": "phase"
+            },
+            "hosting_capacity": {
+              "type": "quantity",
+              "value": 1.2,
+              "unit": "MW"
+            }
+          }
+        }
+      ],
+      "observationIds": [
+        "obs-6",
+        "obs-7"
+      ],
+      "flags": [],
+      "synthetic": true,
+      "conflictKind": "feeder_candidates",
+      "reason": "Two feeders are near the parcel. The Pre-Application Report settles which one serves it."
+    },
+    {
+      "field": "existing_generation",
+      "label": "Existing generation",
+      "state": "inferred",
+      "grade": "reference",
+      "owner": "customer",
+      "current": {
+        "type": "none"
+      },
+      "candidates": [],
+      "observationIds": [
+        "obs-9"
+      ],
+      "flags": [],
+      "synthetic": true,
+      "method": "person_entered"
+    },
+    {
+      "field": "meter_number",
+      "label": "Meter number",
+      "state": "unreadable",
+      "grade": null,
+      "owner": "customer",
+      "current": null,
+      "candidates": [],
+      "observationIds": [
+        "obs-10"
+      ],
+      "flags": [],
+      "synthetic": true,
+      "reason": "The photo is too blurred to read."
+    },
+    {
+      "field": "main_device_rating",
+      "label": "Main device rating",
+      "state": "verified",
+      "grade": "nameplate",
+      "owner": "engineer",
+      "current": {
+        "type": "quantity",
+        "value": 600,
+        "unit": "A"
+      },
+      "candidates": [],
+      "observationIds": [
+        "obs-11",
+        "obs-12"
+      ],
+      "flags": [],
+      "synthetic": true,
+      "method": "person_entered",
+      "verification": {
+        "verifierName": "Sample Engineer",
+        "verifiedAt": "2026-11-07T11:00:00Z",
+        "evidence": [
+          {
+            "kind": "observation",
+            "observationId": "obs-11"
+          }
+        ]
+      }
+    },
+    {
+      "field": "bus_rating",
+      "label": "Bus rating",
+      "state": "missing",
+      "grade": null,
+      "owner": "qualified_person",
+      "current": null,
+      "candidates": [],
+      "observationIds": [],
+      "flags": [],
+      "synthetic": true,
+      "reason": "Not on an exterior label. Needs a qualified person."
+    },
+    {
+      "field": "system_capacity_kw",
+      "label": "System capacity",
+      "state": "missing",
+      "grade": null,
+      "owner": "engineer",
+      "current": null,
+      "candidates": [],
+      "observationIds": [],
+      "flags": [],
+      "synthetic": true,
+      "reason": "An engineer decision. The tool never fills it."
+    }
+  ],
+  "observations": [
+    {
+      "id": "obs-1",
+      "siteId": "sample-site",
+      "field": "parcel_id",
+      "kind": "reading",
+      "value": {
+        "type": "text",
+        "value": "SAMPLE-0001"
+      },
+      "source": {
+        "id": "sample-parcels",
+        "name": "SYNTHETIC SAMPLE parcel source",
+        "kind": "arcgis_rest",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "source_read",
+      "locator": {
+        "query": "sample query for parcel_id",
+        "attribute": "PARCEL_ID"
+      },
+      "identity": {
+        "sourceId": "sample-parcels",
+        "query": "sample query for parcel_id",
+        "contentHash": "sample-hash-obs-1"
+      },
+      "synthetic": true,
+      "grade": "reference"
+    },
+    {
+      "id": "obs-2",
+      "siteId": "sample-site",
+      "field": "property_line",
+      "kind": "reading",
+      "value": {
+        "type": "text",
+        "value": "Boundary from sample parcel polygon"
+      },
+      "source": {
+        "id": "sample-parcels",
+        "name": "SYNTHETIC SAMPLE parcel source",
+        "kind": "arcgis_rest",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "source_read",
+      "locator": {
+        "query": "sample query for property_line",
+        "attribute": "PROPERTY_LINE"
+      },
+      "identity": {
+        "sourceId": "sample-parcels",
+        "query": "sample query for property_line",
+        "contentHash": "sample-hash-obs-2"
+      },
+      "synthetic": true,
+      "grade": "reference"
+    },
+    {
+      "id": "obs-3",
+      "siteId": "sample-site",
+      "field": "lot_size_acres",
+      "kind": "reading",
+      "value": {
+        "type": "quantity",
+        "value": 7.3,
+        "unit": "acre"
+      },
+      "source": {
+        "id": "sample-assessor",
+        "name": "SYNTHETIC SAMPLE assessor field",
+        "kind": "arcgis_rest",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "source_read",
+      "locator": {
+        "query": "sample query for lot_size_acres",
+        "attribute": "LOT_SIZE_ACRES"
+      },
+      "identity": {
+        "sourceId": "sample-assessor",
+        "query": "sample query for lot_size_acres",
+        "contentHash": "sample-hash-obs-3"
+      },
+      "synthetic": true,
+      "grade": "reference"
+    },
+    {
+      "id": "obs-4",
+      "siteId": "sample-site",
+      "field": "lot_size_acres",
+      "kind": "reading",
+      "value": {
+        "type": "quantity",
+        "value": 6.9,
+        "unit": "acre"
+      },
+      "source": {
+        "id": "sample-parcels",
+        "name": "SYNTHETIC SAMPLE parcel source",
+        "kind": "arcgis_rest",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "computed",
+      "locator": {
+        "query": "sample query for lot_size_acres",
+        "attribute": "LOT_SIZE_ACRES"
+      },
+      "identity": {
+        "sourceId": "sample-parcels",
+        "query": "sample query for lot_size_acres",
+        "contentHash": "sample-hash-obs-4"
+      },
+      "synthetic": true,
+      "grade": "reference"
+    },
+    {
+      "id": "obs-5",
+      "siteId": "sample-site",
+      "field": "building_area_sqft",
+      "kind": "no_value",
+      "value": null,
+      "source": {
+        "id": "sample-assessor",
+        "name": "SYNTHETIC SAMPLE assessor field",
+        "kind": "arcgis_rest",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "source_read",
+      "locator": {
+        "query": "sample query for building_area_sqft",
+        "attribute": "BUILDING_AREA_SQFT"
+      },
+      "identity": {
+        "sourceId": "sample-assessor",
+        "query": "sample query for building_area_sqft",
+        "contentHash": "sample-hash-obs-5"
+      },
+      "synthetic": true,
+      "reason": "Source returned 0, which can't be true for a building, so it's stored as missing."
+    },
+    {
+      "id": "obs-6",
+      "siteId": "sample-site",
+      "field": "feeder",
+      "kind": "reading",
+      "value": {
+        "type": "text",
+        "value": "SAMPLE-FEEDER-A"
+      },
+      "source": {
+        "id": "sample-utility",
+        "name": "SYNTHETIC SAMPLE utility map",
+        "kind": "arcgis_rest",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "source_read",
+      "locator": {
+        "query": "sample query for feeder",
+        "attribute": "FEEDER"
+      },
+      "identity": {
+        "sourceId": "sample-utility",
+        "query": "sample query for feeder",
+        "contentHash": "sample-hash-obs-6"
+      },
+      "synthetic": true,
+      "grade": "reference"
+    },
+    {
+      "id": "obs-7",
+      "siteId": "sample-site",
+      "field": "feeder",
+      "kind": "reading",
+      "value": {
+        "type": "text",
+        "value": "SAMPLE-FEEDER-B"
+      },
+      "source": {
+        "id": "sample-utility",
+        "name": "SYNTHETIC SAMPLE utility map",
+        "kind": "arcgis_rest",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "source_read",
+      "locator": {
+        "query": "sample query for feeder",
+        "attribute": "FEEDER"
+      },
+      "identity": {
+        "sourceId": "sample-utility",
+        "query": "sample query for feeder",
+        "contentHash": "sample-hash-obs-7"
+      },
+      "synthetic": true,
+      "grade": "reference"
+    },
+    {
+      "id": "obs-8",
+      "siteId": "sample-site",
+      "field": "serving_utility",
+      "kind": "reading",
+      "value": {
+        "type": "text",
+        "value": "Sample Utility"
+      },
+      "source": {
+        "id": "sample-utility",
+        "name": "SYNTHETIC SAMPLE utility map",
+        "kind": "arcgis_rest",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "source_read",
+      "locator": {
+        "query": "sample query for serving_utility",
+        "attribute": "SERVING_UTILITY"
+      },
+      "identity": {
+        "sourceId": "sample-utility",
+        "query": "sample query for serving_utility",
+        "contentHash": "sample-hash-obs-8"
+      },
+      "synthetic": true,
+      "grade": "reference"
+    },
+    {
+      "id": "obs-9",
+      "siteId": "sample-site",
+      "field": "existing_generation",
+      "kind": "reading",
+      "value": {
+        "type": "none"
+      },
+      "source": {
+        "id": "sample-engineer",
+        "name": "SYNTHETIC SAMPLE engineer entry",
+        "kind": "human_evidence",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "person_entered",
+      "locator": {
+        "query": "sample query for existing_generation",
+        "attribute": "EXISTING_GENERATION"
+      },
+      "identity": {
+        "sourceId": "sample-engineer",
+        "query": "sample query for existing_generation",
+        "contentHash": "sample-hash-obs-9"
+      },
+      "synthetic": true,
+      "grade": "reference"
+    },
+    {
+      "id": "obs-10",
+      "siteId": "sample-site",
+      "field": "meter_number",
+      "kind": "unreadable",
+      "value": null,
+      "source": {
+        "id": "sample-phone",
+        "name": "SYNTHETIC SAMPLE phone capture",
+        "kind": "human_evidence",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "model_draft",
+      "locator": {
+        "query": "sample query for meter_number",
+        "attribute": "METER_NUMBER"
+      },
+      "identity": {
+        "sourceId": "sample-phone",
+        "query": "sample query for meter_number",
+        "contentHash": "sample-hash-obs-10"
+      },
+      "synthetic": true,
+      "reason": "The photo is too blurred to read."
+    },
+    {
+      "id": "obs-11",
+      "siteId": "sample-site",
+      "field": "main_device_rating",
+      "kind": "reading",
+      "value": {
+        "type": "quantity",
+        "value": 800,
+        "unit": "A"
+      },
+      "source": {
+        "id": "sample-phone",
+        "name": "SYNTHETIC SAMPLE phone capture",
+        "kind": "human_evidence",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "model_draft",
+      "locator": {
+        "imageRegion": {
+          "x": 120,
+          "y": 80,
+          "width": 300,
+          "height": 120
+        },
+        "evidenceFileId": "sample-file-1"
+      },
+      "identity": {
+        "sourceId": "sample-phone",
+        "query": "sample query for main_device_rating",
+        "contentHash": "sample-hash-obs-11"
+      },
+      "synthetic": true,
+      "grade": "nameplate"
+    },
+    {
+      "id": "obs-12",
+      "siteId": "sample-site",
+      "field": "main_device_rating",
+      "kind": "verification",
+      "value": {
+        "type": "quantity",
+        "value": 600,
+        "unit": "A"
+      },
+      "source": {
+        "id": "sample-engineer",
+        "name": "SYNTHETIC SAMPLE engineer entry",
+        "kind": "human_evidence",
+        "dataOrigin": "synthetic"
+      },
+      "retrievedAt": "2026-11-07T10:00:00Z",
+      "sourceDate": "2025-06-01",
+      "method": "person_entered",
+      "locator": {
+        "query": "sample query for main_device_rating",
+        "attribute": "MAIN_DEVICE_RATING"
+      },
+      "identity": {
+        "sourceId": "sample-engineer",
+        "query": "sample query for main_device_rating",
+        "contentHash": "sample-hash-obs-12"
+      },
+      "synthetic": true,
+      "grade": "nameplate",
+      "verification": {
+        "verifierName": "Sample Engineer",
+        "verifiedAt": "2026-11-07T11:00:00Z",
+        "evidence": [
+          {
+            "kind": "observation",
+            "observationId": "obs-11"
+          }
+        ]
+      }
+    }
+  ],
+  "features": [
+    {
+      "id": "f-property",
+      "kind": "property_line",
+      "field": "property_line",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -71.801,
+              42.259
+            ],
+            [
+              -71.799,
+              42.259
+            ],
+            [
+              -71.799,
+              42.261
+            ],
+            [
+              -71.801,
+              42.261
+            ],
+            [
+              -71.801,
+              42.259
+            ]
+          ]
+        ]
+      },
+      "label": "Property line (not surveyed)"
+    },
+    {
+      "id": "f-feeder",
+      "kind": "utility_line",
+      "field": "feeder",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -71.802,
+            42.2585
+          ],
+          [
+            -71.798,
+            42.2585
+          ]
+        ]
+      },
+      "label": "Nearby line"
+    },
+    {
+      "id": "f-gear",
+      "kind": "existing_equipment",
+      "field": "main_device_rating",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -71.8,
+          42.26
+        ]
+      },
+      "label": "(E) MAIN SWITCHBOARD 600 A",
+      "placedByHand": true
+    }
+  ],
+  "baseMap": {
+    "tileUrlTemplate": "/samples/tiles/{z}/{x}/{y}.png",
+    "attribution": "SYNTHETIC SAMPLE base map",
+    "sourceId": "sample-parcels",
+    "sourceDate": "2025-06-01",
+    "maxZoom": 20,
+    "center": [
+      -71.8,
+      42.26
+    ],
+    "zoom": 17
+  },
+  "sourceRuns": [
+    {
+      "sourceId": "sample-parcels",
+      "name": "SYNTHETIC SAMPLE parcel source",
+      "status": "done"
+    },
+    {
+      "sourceId": "sample-utility",
+      "name": "SYNTHETIC SAMPLE utility map",
+      "status": "done"
+    },
+    {
+      "sourceId": "sample-elevation",
+      "name": "SYNTHETIC SAMPLE elevation",
+      "status": "missing",
+      "reason": "No credentials configured."
+    },
+    {
+      "sourceId": "sample-permits",
+      "name": "SYNTHETIC SAMPLE permit portal",
+      "status": "person_only",
+      "reason": "robots.txt bars automated access, so a person has to look it up."
+    }
+  ]
+}

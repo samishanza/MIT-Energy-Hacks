@@ -8,3 +8,21 @@
 
 # Compound Engineering scratch space
 .context/compound-engineering/
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Secrets. Keep credentials out of Git, including service account key files.
+.env
+.env.*
+!.env.example
+*service-account*.json
+*-key.json
+
+# Local databases and uploaded evidence
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+uploads/

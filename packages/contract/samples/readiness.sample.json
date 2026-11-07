@@ -1,0 +1,182 @@
+{
+  "recordVersionId": "sample-site-v2",
+  "synthetic": true,
+  "requirementsTable": {
+    "utility": "Sample Utility",
+    "form": "SYNTHETIC SAMPLE application form",
+    "formDate": "2026-01-01",
+    "superseded": false
+  },
+  "items": [
+    {
+      "id": "parcel",
+      "rowKind": "form",
+      "label": "Facility location",
+      "citation": "Sample form, item 1",
+      "teamDerived": false,
+      "fields": [
+        "parcel_id"
+      ],
+      "minState": "inferred",
+      "owner": "public_data",
+      "status": "has_evidence"
+    },
+    {
+      "id": "feeder",
+      "rowKind": "form",
+      "label": "Circuit and substation",
+      "citation": "Sample pre-application report",
+      "teamDerived": false,
+      "fields": [
+        "feeder"
+      ],
+      "minState": "verified",
+      "owner": "utility",
+      "status": "preview_only"
+    },
+    {
+      "id": "meter",
+      "rowKind": "form",
+      "label": "Meter number",
+      "citation": "Sample form, item 2",
+      "teamDerived": false,
+      "fields": [
+        "meter_number"
+      ],
+      "minState": "verified",
+      "owner": "customer",
+      "status": "needs_evidence"
+    },
+    {
+      "id": "one-line",
+      "rowKind": "form",
+      "label": "PE-stamped one-line diagram",
+      "citation": "Sample form, attachment A",
+      "teamDerived": false,
+      "fields": [
+        "main_device_rating",
+        "bus_rating"
+      ],
+      "minState": "verified",
+      "owner": "engineer",
+      "status": "engineer_owned",
+      "inputsWithEvidence": {
+        "have": 1,
+        "total": 2
+      }
+    },
+    {
+      "id": "main-device",
+      "rowKind": "input",
+      "label": "Main device rating",
+      "citation": "Input to sample attachment A",
+      "teamDerived": true,
+      "fields": [
+        "main_device_rating"
+      ],
+      "minState": "verified",
+      "owner": "engineer",
+      "status": "has_evidence",
+      "parentItemId": "one-line"
+    },
+    {
+      "id": "bus",
+      "rowKind": "input",
+      "label": "Bus rating",
+      "citation": "Input to sample attachment A",
+      "teamDerived": true,
+      "fields": [
+        "bus_rating"
+      ],
+      "minState": "verified",
+      "owner": "qualified_person",
+      "status": "needs_evidence",
+      "parentItemId": "one-line"
+    }
+  ],
+  "gaps": [
+    {
+      "id": "gap-bill",
+      "rank": 1,
+      "request": "Photo or PDF of a recent electric bill",
+      "route": "capture_bill",
+      "owner": "customer",
+      "field": "meter_number",
+      "rowsFilled": [
+        "meter"
+      ],
+      "routeCost": 1,
+      "captureLinkAllowed": true
+    },
+    {
+      "id": "gap-pre-app",
+      "rank": 2,
+      "request": "Pre-Application Report",
+      "route": "pre_application_report",
+      "owner": "utility",
+      "field": "feeder",
+      "rowsFilled": [
+        "feeder"
+      ],
+      "routeCost": 3,
+      "captureLinkAllowed": false,
+      "draftRequest": "DRAFT for a person to review and send. Please provide a Pre-Application Report for the sample site."
+    },
+    {
+      "id": "gap-bus",
+      "rank": 3,
+      "request": "Bus rating from a qualified electrician or PE",
+      "route": "qualified_person",
+      "owner": "qualified_person",
+      "field": "bus_rating",
+      "rowsFilled": [
+        "bus"
+      ],
+      "routeCost": 5,
+      "captureLinkAllowed": false
+    },
+    {
+      "id": "gap-size",
+      "rank": 4,
+      "request": "System capacity decision",
+      "route": "engineer",
+      "owner": "engineer",
+      "field": "system_capacity_kw",
+      "rowsFilled": [],
+      "routeCost": 5,
+      "captureLinkAllowed": false
+    }
+  ],
+  "share": {
+    "formRows": {
+      "withEvidence": 1,
+      "total": 4
+    },
+    "inputRows": {
+      "withEvidence": 1,
+      "total": 2
+    },
+    "byOwner": {
+      "public_data": {
+        "withEvidence": 1,
+        "total": 1
+      },
+      "utility": {
+        "withEvidence": 0,
+        "total": 1
+      },
+      "customer": {
+        "withEvidence": 0,
+        "total": 1
+      },
+      "engineer": {
+        "withEvidence": 1,
+        "total": 2
+      },
+      "qualified_person": {
+        "withEvidence": 0,
+        "total": 1
+      }
+    }
+  }
+}
