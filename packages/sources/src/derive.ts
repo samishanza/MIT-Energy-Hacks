@@ -35,7 +35,7 @@ function candidateFrom(field: string, observation: Observation, attributes: Cand
   };
 }
 
-// Details of one feeder, read from the observations that share its source and object.
+// Details of one feeder, read from any of its utility's layers by the feeder's id.
 function candidateAttributes(reading: Observation, related: Observation[]): Candidate["attributes"] {
   const attributes: NonNullable<Candidate["attributes"]> = {};
   for (const observation of related) {
@@ -44,7 +44,6 @@ function candidateAttributes(reading: Observation, related: Observation[]): Cand
       key &&
       observation.kind === "reading" &&
       observation.value &&
-      observation.source.id === reading.source.id &&
       observation.locator.objectId === reading.locator.objectId
     ) {
       attributes[key] = observation.value;

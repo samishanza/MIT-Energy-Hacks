@@ -28,13 +28,16 @@ class RunDeadlineError extends Error {
   override name = "RunDeadlineError";
 }
 
+// Finding the site before the run starts, so a cold parcel service can't hold a run for minutes.
+export const RESOLVE_DEADLINE_MS = 100_000;
+
 // Past the deadline every unanswered request fails, and each source reports that through its usual path.
-function withRunDeadline(fetchImpl: FetchLike, milliseconds: number) {
+export function withRunDeadline(fetchImpl: FetchLike, milliseconds: number, what = "run") {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      const error = new RunDeadlineError(`No answer before the run's ${Math.round(milliseconds / 1000)}-second deadline`);
+      const error = new RunDeadlineError(`No answer before the ${what}'s ${Math.round(milliseconds / 1000)}-second deadline`);
       controller.abort(error);
       reject(error);
     }, milliseconds);
@@ -132,6 +135,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   for (const source of region.grid) {
     pending(source.entry.id, source.entry.name);
     if (source.lineGeometry) pending(source.lineGeometry.id, source.lineGeometry.name);
+    for (const detail of source.details ?? []) for (const entry of detail.kind === "construction" ? detail.entries : [detail.entry]) pending(entry.id, entry.name);
   }
   if (region.roads && parcel) pending(region.roads.entry.id, region.roads.entry.name);
   for (const layer of region.layers ?? []) pending(layer.entry.id, layer.entry.name);

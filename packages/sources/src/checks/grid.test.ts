@@ -85,3 +85,41 @@ describe("utility-side collection", () => {
     expect(() => convertUnit(1, "kW", "kWh")).toThrow("No conversion");
   });
 });
+
+describe("deeper utility data, joined to each feeder candidate", () => {
+  const attributesOf = async (address: string, region: typeof massachusetts, feeder: string) => {
+    const { value } = await values(address, region);
+    return value("feeder").candidates!.find((candidate) => candidate.value.type === "text" && candidate.value.value === feeder)!.attributes!;
+  };
+
+  it("carries 05_01_27W2's loading, forecast, rating, construction, and study status", async () => {
+    const details = await attributesOf("100 Research Dr, Worcester, MA", massachusetts, "05_01_27W2");
+    expect(details.peak_loading).toEqual({ type: "quantity", value: 54.3, unit: "percent" });
+    expect(details.peak_forecast).toEqual({ type: "text", value: "6.4, 6.4, 7.8, 7.8, 7.8, 7.8 MVA (peak this year, then each of the next five, as the utility forecasts)" });
+    expect(details.rating).toEqual({ type: "quantity", value: 11.8, unit: "MVA" });
+    expect(details.construction).toEqual({ type: "text", value: "Mixed: 57% underground by mapped length" });
+    expect(details.study_status).toEqual({ type: "text", value: "Group Study Impending Accepting Applications" });
+    expect(details.installed_dg).toEqual({ type: "quantity", value: 1.41219, unit: "MW" });
+  });
+
+  it("keeps each nodal limit near the site and names the lowest", async () => {
+    const details = await attributesOf("100 Research Dr, Worcester, MA", massachusetts, "05_01_27W2");
+    expect(details.hosting_capacity_near_site).toEqual({
+      type: "text",
+      value: "2.5 MW, limited by thermal (also over-voltage 10, voltage deviation 10, regulator deviation 10, anti-islanding 10, flicker 20 MW)",
+    });
+  });
+
+  it("reports substations and transmission as nearby context with measured distance, never as what serves the site", async () => {
+    const worcester = await values("100 Research Dr, Worcester, MA", massachusetts);
+    expect(worcester.value("substations_nearby").flags.join(" ")).toContain("doesn't show which substation serves the site");
+    const substation = worcester.collection.features.find((feature) => feature.kind === "substation")!;
+    expect(substation.attributes!.distance_ft).toMatchObject({ unit: "ft" });
+
+    const fremont = await values("47200 Bayside Pkwy, Fremont, CA", californiaPge);
+    expect((fremont.value("transmission_nearby").current as { value: string }).value).toMatch(/^11 mapped transmission lines within 1500 m/);
+    // PG&E publishes its substation DG totals with no unit, so they aren't read as kW or MW.
+    const pgeSubstation = fremont.collection.features.find((feature) => feature.kind === "substation")!;
+    expect(Object.keys(pgeSubstation.attributes!).sort()).toEqual(["distance_ft", "substation_voltage"]);
+  });
+});

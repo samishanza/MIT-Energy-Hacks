@@ -1,6 +1,6 @@
 import type { MapFeature, Observation, SourceRun } from "@eqore/contract";
 import { observe, queryArcgis, toObservations, type ArcgisFeature, type ArcgisResult, type CollectContext, type PolygonGeometry, type SpatialQuery } from "../arcgis.ts";
-import type { ArcgisEntry, RegionConfig } from "../registry.ts";
+import { sourceOf, type ArcgisEntry, type FeederDetail, type RegionConfig } from "../registry.ts";
 import type { GridOutcome } from "./energy.ts";
 
 export type GridAnchor = { parcel: PolygonGeometry } | { longitude: number; latitude: number };
@@ -18,6 +18,64 @@ function queryFor(entry: ArcgisEntry, anchor: GridAnchor, bufferMeters = entry.s
   return "parcel" in anchor
     ? { kind: "polygon", geometry: anchor.parcel, bufferMeters }
     : { kind: "point", longitude: anchor.longitude, latitude: anchor.latitude, bufferMeters };
+}
+
+const quoted = (text: string) => `'${text.replace(/'/g, "''")}'`;
+
+function shareUnderground(detail: Extract<FeederDetail, { kind: "construction" }>, rows: ArcgisFeature[]): string | null {
+  let underground = 0;
+  let total = 0;
+  for (const row of rows) {
+    const length = Number(row.attributes[detail.lengthAttribute]);
+    if (!Number.isFinite(length) || length <= 0) continue;
+    total += length;
+    if (String(row.attributes[detail.constructionAttribute]) === detail.underground) underground += length;
+  }
+  if (total === 0) return null;
+  const percent = Math.round((underground / total) * 100);
+  if (percent === 100) return "Underground";
+  if (percent === 0) return "Overhead";
+  return `Mixed: ${percent}% underground by mapped length`;
+}
+
+// Joins a utility's other layers to each feeder candidate, so loading, rating, construction, and
+// study status travel with the feeder they describe.
+async function collectDetails(details: FeederDetail[], feederIds: string[], anchor: GridAnchor, searchedMeters: number, ctx: CollectContext) {
+  const observations: Observation[] = [];
+  const runs: SourceRun[] = [];
+  if (feederIds.length === 0) return { observations, runs };
+  const ids = new Set(feederIds);
+  await Promise.all(
+    details.map(async (detail) => {
+      const where = `${detail.joinAttribute} IN (${feederIds.map(quoted).join(",")})`;
+      if (detail.kind === "by_feeder") {
+        const result = await queryArcgis(detail.entry, { kind: "attribute", where }, ctx);
+        runs.push(result.run);
+        observations.push(...toObservations(result, ctx, result.features.filter((feature) => ids.has(feature.objectId))));
+        return;
+      }
+      if (detail.kind === "nearest") {
+        const result = await queryArcgis(detail.entry, queryFor(detail.entry, anchor, searchedMeters), ctx);
+        runs.push(result.run);
+        observations.push(...toObservations(result, ctx, result.features.filter((feature) => ids.has(feature.objectId))));
+        return;
+      }
+      const results = await Promise.all(detail.entries.map((entry) => queryArcgis(entry, { kind: "attribute", where }, ctx)));
+      runs.push(...results.map((result) => result.run));
+      const failure = results.find((result) => result.failure)?.failure;
+      const origin = { source: { ...sourceOf(detail.entries[0]!), name: `${detail.entries[0]!.name} (overhead and underground layers)` }, query: results.map((result) => result.query).join(" | "), retrievedAt: results[0]!.retrievedAt };
+      for (const feederId of feederIds) {
+        const rows = results.flatMap((result) => result.features.filter((feature) => String(feature.attributes[detail.joinAttribute]) === feederId));
+        const share = failure ? null : shareUnderground(detail, rows);
+        observations.push(
+          share
+            ? observe(origin, ctx, { field: detail.field, kind: "reading", value: { type: "text", value: share }, attribute: detail.constructionAttribute, objectId: feederId, grade: "reference", reason: "Lengths are as the utility maps them, not surveyed." })
+            : observe(origin, ctx, { field: detail.field, kind: "no_value", value: null, objectId: feederId, reason: failure ?? "No overhead or underground segment is mapped for this feeder." }),
+        );
+      }
+    }),
+  );
+  return { observations, runs };
 }
 
 // Utility-published context for the location queried, not a statement of which line serves the
@@ -49,11 +107,15 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
     }),
   );
 
-  for (const { source, result, lines, searchedMeters, note } of results) {
+  const detailed = await Promise.all(results.map(({ source, result, searchedMeters }) => collectDetails(source.details ?? [], [...new Set(result.features.map((feature) => feature.objectId))], anchor, searchedMeters, ctx)));
+  observations.push(...detailed.flatMap((detail) => detail.observations));
+
+  for (const [index, { source, result, lines, searchedMeters, note }] of results.entries()) {
     runs.push(result.run);
     outcomes.push({ utilityName: source.utilityName, feederFound: result.features.length > 0, widened: Boolean(note), searchedMeters, failure: result.failure, barredReason: source.entry.barred?.reason });
     observations.push(...toObservations(result, ctx, result.features, { note, emptyReason: `${source.utilityName}'s map shows no feeder within ${searchedMeters} m of this site.` }));
     if (lines) runs.push(lines.run);
+    runs.push(...detailed[index]!.runs);
     const feederAttribute = source.entry.fields.find((mapping) => mapping.field === "feeder")?.attribute;
     // Only draw lines the record has a feeder for. The line layer also holds transmission lines.
     const feederIds = new Set(result.features.map((feature) => feature.objectId));
