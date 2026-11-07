@@ -53,6 +53,7 @@ Living context for the EQORE track. **Last updated:** 2026-11-07
 - 2026-11-07: The team stated that the product collects and aggregates the data to create a site map. Option 1 research lanes reported in `docs/research/`.
 - 2026-11-07: The team added two sample Issued for Construction plan sets to `provided resources/` and asked for novelty in how data is collected. Sample 1's site plan says its dimensions come from aerial imagery and public property boundary KMZ data only, not a survey.
 - 2026-11-07: The team named time to grid connection as the biggest problem, set the demo in Massachusetts or California, and asked for a repeatable collection method and a tech stack. See D2, D9, and D11 in [decision.md](decision.md).
+- 2026-11-07: Plan review found that National Grid's M.D.P.U. No. 1468 has been replaced. Search results show No. 1632, effective May 1, 2026, cancelling No. 1620. Its text hasn't been read, because mass.gov blocks automated reads. Assumption until read: Exhibit C, the 250 kW rule, and the 10-day timeline may have changed.
 
 ---
 
