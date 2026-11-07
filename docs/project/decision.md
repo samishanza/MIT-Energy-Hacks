@@ -16,8 +16,19 @@ Open decisions, assumptions, and team choices. EQORE's Challenge Brief and the l
 | D6 | Writing-task isolation: Compound Engineering workers or named Git worktrees | Decided: named worktrees, `worktree-backend` and `worktree-ui` | Lead |
 | D8 | Lead who coordinates implementation | Decided: the session on `main` runs the shared contract, integration, and the demo | Team |
 | D9 | Data collection approach for Option 1: software, hardware, or both, and the repeatable method for populating the database | Decided: software. Physical data from public services and Google Earth Engine, utility-side data from public utility or city services, customer-side data by phone link. Earth Engine is assumed to be what the engineers meant; confirm with them | Team |
-| D11 | Demo state: Massachusetts or California | Decided: National Grid site in Worcester, MA, with PG&E in Fremont, CA as the second region | Lead |
+| D11 | Demo state: Massachusetts or California | Decided: National Grid site in Worcester, MA, with PG&E in Fremont, CA as the second region. Demo parcel below | Lead |
 | D12 | Scope: narrow the target to the interconnection application and the drawings it requires, from signed contract until the application is submitted | Decided at the team's request, not separately reviewed line by line | Team |
+
+## Demo parcel
+
+**100 Research Dr, Worcester, MA**, MassGIS L3 parcel `F_583026_2925576`. It's real public data and isn't a known EQORE project. Keep owner names out of the demo view.
+
+**How it was chosen:** the rule and the 3% lot-size tolerance were fixed before screening. Take Worcester use-code 4xx parcels by highest assessed value, and use the first that meets all the criteria. It's use code 4040 (research and development), has one L3 address match and a National Grid feeder result, and has 6 roofprints centered on the parcel (5 dated 2011, 1 dated 2023-04). L3 lists 471,558 sq ft of building area, built in 1994.
+
+**What it shows, with nothing planted:**
+
+- **Lot size conflict:** L3 states 29.92 acres and the polygon computes to 30.931, a 3.3% gap. That's only just over the tolerance, so don't present it as a large discrepancy.
+- **Feeder candidates:** 4 at the fixed 30 m buffer, reported apart from source conflicts: `05_01_10J323` and `05_01_10J366` (Rena Street, 4.16 kV), `05_01_27W2` and `05_01_27W3` (Bloomingdale, 13.8 kV). The count depends on the buffer: an earlier screen found 3 touching the parcel and 5 at 100 m.
 
 ## Hackathon facts we still need
 
