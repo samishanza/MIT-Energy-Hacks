@@ -7,7 +7,7 @@
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
     "@eqore/contract": "^0.1.0",
-    "@eqore/drc": "^0.1.0"
+    "@eqore/geom": "^0.1.0"
   },
   "peerDependencies": { "react": ">=18" }
 }

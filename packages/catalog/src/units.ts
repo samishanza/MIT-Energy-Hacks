@@ -37,6 +37,13 @@ const TO_CANONICAL: Record<string, { canonical: string; factor: number }> = {
   MPH: { canonical: 'mph', factor: 1 },
   'm/s': { canonical: 'mph', factor: 2.2369363 },
 
+  sqft: { canonical: 'sqft', factor: 1 },
+  ft2: { canonical: 'sqft', factor: 1 },
+  acre: { canonical: 'sqft', factor: 43_560 },
+  acres: { canonical: 'sqft', factor: 43_560 },
+  sqm: { canonical: 'sqft', factor: 10.7639104 },
+  m2: { canonical: 'sqft', factor: 10.7639104 },
+
   '%': { canonical: '%', factor: 1 },
   percent: { canonical: '%', factor: 1 },
   deg: { canonical: 'deg', factor: 1 },

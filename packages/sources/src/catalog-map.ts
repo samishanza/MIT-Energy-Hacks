@@ -52,6 +52,7 @@ export const CATALOG_ROUTES: CatalogRoute[] = [
   row("openings[].kind", "openings_kind", "customer", "customer", "A doors-closed photo of the building shows this."),
   row("openings[].at_ft", "openings_at_ft", "decision", "engineer", "A photo can't measure this, so an old plan set or a site visit does."),
   row("openings[].width_ft", "openings_width_ft", "decision", "engineer", "A photo can't measure this, so an old plan set or a site visit does."),
+  row("pad_zone.candidate_area_sqft", "candidate_areas", "physical", "public_data", "Derived from the parcel and roofprint polygons. A suggestion of where there is room; the owner still approves the pad."),
   row("pad_zone.x_ft", "pad_zone_x_ft", "decision", "engineer", "The tool suggests open areas, and the owner and engineer choose one."),
   row("pad_zone.y_ft", "pad_zone_y_ft", "decision", "engineer", "The tool suggests open areas, and the owner and engineer choose one."),
   row("pad_zone.width_ft", "pad_zone_width_ft", "decision", "engineer", "The tool suggests open areas, and the owner and engineer choose one."),

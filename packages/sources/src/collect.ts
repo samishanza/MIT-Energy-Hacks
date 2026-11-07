@@ -2,12 +2,13 @@ import type { BaseMap, MapFeature, Observation, Site, SourceRun } from "@eqore/c
 import { observe, queryArcgis, type CollectContext, type FetchLike, type PolygonGeometry } from "./arcgis.ts";
 import { queryTerritories, servingUtility } from "./checks/energy.ts";
 import { collectGrid } from "./checks/grid.ts";
+import { padCandidates, type CandidateResult } from "./checks/candidates.ts";
 import { measureSite, type Measurements } from "./checks/measure.ts";
 import { anchorPhysical, collectOutlines } from "./checks/physical.ts";
 import { boxOf, verticesOf } from "./geometry.ts";
 import { collectJson } from "./json-api.ts";
 import { collectLayer } from "./layers.ts";
-import type { NamedRoute, RegionConfig } from "./registry.ts";
+import { sourceOf, type NamedRoute, type RegionConfig } from "./registry.ts";
 import { parseAddress, type SiteAnchor } from "./resolve-site.ts";
 
 export type SiteCollection = {
@@ -96,7 +97,9 @@ async function collectSlope(region: RegionConfig, parcel: PolygonGeometry | null
             method: "computed",
             sourceDate: config.sourceDate,
             grade: "reference",
-            reason: `From ${slope.sampleCount} samples across the parcel at about ${Math.round(slope.demResolutionFt)} ft resolution, not at a chosen pad.`,
+            reason:
+              `From ${slope.sampleCount} samples across the parcel at about ${Math.round(slope.demResolutionFt)} ft resolution, not at a chosen pad.` +
+              (slope.aspectDegrees === undefined ? "" : ` The ground falls toward ${Math.round(slope.aspectDegrees)} degrees from north.`),
           }),
         ],
       };
@@ -190,6 +193,24 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
     );
   }
 
+  // Candidate pad areas are derived here, once, so the record carries them and the
+  // site-plan sheet draws what the record says instead of recomputing its own.
+  let candidates: CandidateResult = { observations: [], features: [] };
+  if (parcel && region.parcels) {
+    candidates = padCandidates(
+      {
+        parcel: parcel.parcel.geometry,
+        outlines: (outlines?.measurable.features ?? []).map((feature) => feature.geometry),
+        origin: {
+          source: sourceOf(region.parcels.entry),
+          query: "derived from the collected parcel and roofprint geometry",
+          retrievedAt: ctx.now(),
+        },
+      },
+      ctx,
+    );
+  }
+
   const unavailable = region.unavailable.flatMap((route) => routeObservations(route, "earth_engine", ctx));
   const personRoutes = region.personRoutes.flatMap((route) => routeObservations(route, "human_evidence", ctx));
   for (const route of region.unavailable) runs.set(route.sourceId, { sourceId: route.sourceId, name: route.name, status: "missing", reason: route.reason });
@@ -200,6 +221,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
     observations: [
       ...collected,
       ...measurements.observations,
+      ...candidates.observations,
       ...layers.flatMap((layer) => layer.observations),
       ...json.flatMap((source) => source.observations),
       ...(slope?.observations ?? []),
@@ -207,7 +229,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...unavailable,
       ...personRoutes,
     ],
-    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...layers.flatMap((layer) => layer.features)],
+    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features)],
     baseMap: physical.baseMap,
     sourceRuns: [...runs.values()],
   };

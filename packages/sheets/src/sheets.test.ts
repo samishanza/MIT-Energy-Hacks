@@ -112,3 +112,48 @@ describe('path building', () => {
     expect(polygonPath({ outer: [] })).toBe('');
   });
 });
+
+describe('overlays', () => {
+  it('reads slope and its fall direction out of the record', async () => {
+    const { aspectFromReason, quantity } = await import('./overlays.tsx');
+    const record = {
+      ...recordWith([]),
+      values: [
+        {
+          field: 'site_slope_pct', label: 'Slope', state: 'inferred', grade: 'reference', owner: 'public_data',
+          current: { type: 'quantity', value: 8.02, unit: 'percent' }, method: 'computed', candidates: [],
+          observationIds: ['o1'], flags: [], synthetic: false,
+          reason: 'From 35 samples across the parcel at about 5 ft resolution, not at a chosen pad. The ground falls toward 259 degrees from north.',
+        },
+      ],
+    } as unknown as RecordVersion;
+
+    expect(quantity(record, 'site_slope_pct')).toBeCloseTo(8.02, 2);
+    expect(aspectFromReason(record)).toBe(259);
+  });
+
+  it('returns no aspect when the record does not state one', async () => {
+    const { aspectFromReason } = await import('./overlays.tsx');
+    expect(aspectFromReason(recordWith([]))).toBeNull();
+  });
+
+  it('draws certainty the way a draughtsman would', async () => {
+    const { strokeForState } = await import('./overlays.tsx');
+    // A confirmed line is solid; everything less certain breaks up, and the least
+    // certain is faintest. A reader should not need the legend to rank them.
+    expect(strokeForState('verified').dash).toBeUndefined();
+    expect(strokeForState('inferred').dash).toBeTruthy();
+    expect(strokeForState('missing').opacity).toBeLessThan(strokeForState('verified').opacity);
+    expect(strokeForState(undefined).opacity).toBeLessThan(1);
+  });
+
+  it('scales line weight with the drawing, so it reads the same at any zoom', async () => {
+    const { strokeForState } = await import('./overlays.tsx');
+    expect(strokeForState('verified', 2).width).toBeCloseTo(strokeForState('verified', 1).width / 2, 6);
+  });
+
+  it('knows 2% is where grading starts', async () => {
+    const { GRADING_THRESHOLD_PCT } = await import('./overlays.tsx');
+    expect(GRADING_THRESHOLD_PCT).toBe(2);
+  });
+});

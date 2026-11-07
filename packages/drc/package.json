@@ -5,14 +5,14 @@
   "type": "module",
   "description": "Reconciliation, design-rule check, per-sheet readiness, value-of-information.",
   "exports": {
-    ".": "./src/index.ts",
-    "./polygon": "./src/polygon.ts"
+    ".": "./src/index.ts"
   },
   "dependencies": {
     "@eqore/catalog": "^0.1.0",
     "@eqore/gatekeeper": "^0.1.0",
     "@eqore/agents": "^0.1.0",
     "@turf/turf": "^7.4.0",
-    "@eqore/contract": "^0.1.0"
+    "@eqore/contract": "^0.1.0",
+    "@eqore/geom": "^0.1.0"
   }
 }

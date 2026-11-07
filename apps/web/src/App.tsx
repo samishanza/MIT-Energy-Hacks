@@ -9,6 +9,7 @@ import { ConfirmPanel } from "./panels/ConfirmPanel";
 import { EvidencePanel } from "./panels/EvidencePanel";
 import { ReadinessPanel } from "./panels/ReadinessPanel";
 import { SitePlanSheet } from "@eqore/sheets";
+import { assessRecord, blockingFactOf } from "@eqore/drc";
 import { ProvenanceTag } from "./ui/marks";
 
 const ACTOR_KEY = "eqore.actorName";
@@ -352,7 +353,7 @@ export function App({ api }: { api: EngineerApi }) {
               </button>
             </div>
             {view === "sheet" ? (
-              <SitePlanSheet record={record} selectedPad={selectedPad} onSelectPad={setSelectedPad} />
+              <SitePlanSheet record={record} selectedPad={selectedPad} onSelectPad={setSelectedPad} blocking={blockingFactOf(assessRecord(record))} />
             ) : (
             <SiteMap
               key={record.site.id}

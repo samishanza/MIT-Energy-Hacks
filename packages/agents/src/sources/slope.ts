@@ -16,7 +16,12 @@
 // USGS 3DEP would be the national equivalent and is what the plan calls for, but it was
 // returning 504s and 500s when this was written, so this uses the in-state LiDAR instead.
 
-import type { FetchLike } from '@eqore/sources';
+/**
+ * Declared here rather than imported from @eqore/sources, so the agent layer does not
+ * depend on the collectors that consume it. packages/sources injects this function
+ * through CollectContext.measureSlope, which is the right direction for the arrow.
+ */
+export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 import type { SourceDoc } from './types.ts';
 
 const DEM_SERVICE =
