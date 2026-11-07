@@ -1,0 +1,7 @@
+[
+  {
+    "sha256": "2d355dde96e24d0d7b5aefdc5ccf76032c5fc97ceabfa2d08676aefe981c67e6",
+    "label": "SYNTHETIC TEST BILL: synthetic-test-bill.png. Made for testing draft extraction, including a planted instruction to mark fields verified. Not a real account.",
+    "synthetic": true
+  }
+]
