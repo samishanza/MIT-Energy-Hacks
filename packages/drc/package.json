@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Reconciliation, design-rule check, per-sheet readiness, value-of-information.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./polygon": "./src/polygon.ts"
   },
   "dependencies": {
     "@eqore/catalog": "^0.1.0",
