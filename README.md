@@ -63,6 +63,25 @@ The second command should print the baseline commit. The third opens a Windows T
 
 Agent team teammates run inside your main terminal. Use the up and down arrows to select one, and Enter to view and message it. There are no split panes on Windows, so we don't use tmux.
 
+### See each agent in its own terminal
+
+A true agent team can't do this on native Windows. Instead, run one separate session per terminal, each in its own worktree. Commit the baseline first, because a worktree contains only committed files.
+
+In VS Code, `Ctrl+Shift+5` splits the terminal. From the repo root, run one command per terminal:
+
+```powershell
+claude --worktree data --name data
+claude --worktree ui --name ui
+claude --name lead
+```
+
+- `--worktree <name>` creates `.claude/worktrees/<name>/` on a branch named `worktree-<name>`, starting from your current commit. The `lead` session stays in the main checkout.
+- Run `/list-agents` to see the other sessions, and message one with a prompt like `Let @ui know the schema changed`.
+- These sessions have no shared task list, so track tasks in the plan file.
+- A worktree separates files and branches only. Agents still share ports, databases, and environment variables, so assign those per agent.
+- Install dependencies in each worktree. To copy gitignored files such as `.env`, list them in a `.worktreeinclude` file.
+- Start every session in the same permission mode. Otherwise messages between them can be held for approval.
+
 ## Handing off
 
 - Change only your task's allowed files. Ask the shared-contract owner to change shared types or schemas.
