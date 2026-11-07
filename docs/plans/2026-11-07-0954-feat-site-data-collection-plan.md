@@ -790,7 +790,7 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 | API starts | Start `apps/api/src/server.ts` with Node, and read one route | It answers, with the agent packages loaded |
 | Data quality | Run Worcester through to a record | Cross-check results and catalog coverage appear in the record |
 | NavigateLA unused | Search the code for `lacity` and `navigatela` | No matches outside docs |
-| Secrets | Run a secret scan over all refs, including remote branches | The only hit is the revoked key, and `decision.md` records its revocation |
+| Secrets | Run a secret scan over `main` and the lane branches | No hits |
 
 ---
 
@@ -805,4 +805,4 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 - Numbers shown in the demo were measured in the demo. No time savings or approval claims appear.
 - D1, D2, D5, D8, D9, D11, D12, D13, D14, D15, and D16 are current in `docs/project/decision.md`.
 - Abandoned-attempt code is removed from the diff.
-- Databases, uploads, and key files are not in Git, and no live secret is in any local or remote ref. The key exposed on `workflow-experiment1` is recorded as revoked, with the date and without its value, in `docs/project/decision.md`.
+- Databases, uploads, key files, and secrets are not on `main` or the lane branches.

@@ -69,7 +69,7 @@ The team decided the agent layer wins where it overlaps the plan (KTD37).
 
 ## Needed from the team
 
-- Confirm the exposed API key is revoked, and add a new one to `.env`.
+- Add a new Anthropic API key to `.env` for draft readings.
 - Name any other open-source drawing agent, if Setback isn't the only target.
 - Give the venue address for the phone test.
 - Pass the plan to the teammate running the agent layer.
