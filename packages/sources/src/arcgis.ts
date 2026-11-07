@@ -39,7 +39,7 @@ export type CollectContext = {
   availableKeys?: string[];
   runDeadlineMs?: number;
   // Lidar slope sampling lives in the agent layer, so the caller passes it in.
-  measureSlope?: (box: { west: number; south: number; east: number; north: number }, fetchImpl: FetchLike) => Promise<{ slopePercent: number; sampleCount: number; demResolutionFt: number } | null>;
+  measureSlope?: (box: { west: number; south: number; east: number; north: number }, fetchImpl: FetchLike) => Promise<{ slopePercent: number; sampleCount: number; demResolutionFt: number; aspectDegrees?: number } | null>;
 };
 
 // Replayed responses carry the time they were really retrieved.

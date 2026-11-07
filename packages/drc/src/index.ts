@@ -11,3 +11,4 @@ export * from "./readiness.ts";
 export * from "./export.ts";
 export * from "./build.ts";
 export * from "./contract.ts";
+export * from "./from-record.ts";

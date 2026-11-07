@@ -79,7 +79,9 @@ async function collectSlope(region: RegionConfig, parcel: PolygonGeometry | null
             method: "computed",
             sourceDate: config.sourceDate,
             grade: "reference",
-            reason: `From ${slope.sampleCount} samples across the parcel at about ${Math.round(slope.demResolutionFt)} ft resolution, not at a chosen pad.`,
+            reason:
+              `From ${slope.sampleCount} samples across the parcel at about ${Math.round(slope.demResolutionFt)} ft resolution, not at a chosen pad.` +
+              (slope.aspectDegrees === undefined ? "" : ` The ground falls toward ${Math.round(slope.aspectDegrees)} degrees from north.`),
           }),
         ],
       };

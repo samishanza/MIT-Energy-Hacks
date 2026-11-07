@@ -10,6 +10,16 @@
 import { useMemo, useState } from 'react';
 import type { RecordVersion } from '@eqore/contract';
 import { polygonPath, sheetGeometry, type PadOptions } from './geometry.ts';
+import {
+  BlockingStamp,
+  ConfidenceKey,
+  SlopeOverlay,
+  aspectFromReason,
+  quantity,
+  strokeForState,
+  valueOf,
+  type BlockingFact,
+} from './overlays.tsx';
 
 const SHEET_W = 1000;
 const SHEET_H = 680;
@@ -22,12 +32,15 @@ export interface SitePlanSheetProps {
   /** Which candidate is highlighted. */
   selectedPad?: number;
   onSelectPad?: (index: number) => void;
+  /** The engine's top decision-critical gap, stamped on the sheet. */
+  blocking?: BlockingFact | null;
 }
 
-export function SitePlanSheet({ record, padOptions, selectedPad = 0, onSelectPad }: SitePlanSheetProps) {
+export function SitePlanSheet({ record, padOptions, selectedPad = 0, onSelectPad, blocking = null }: SitePlanSheetProps) {
   const [showGrid, setShowGrid] = useState(true);
   const geo = useMemo(() => sheetGeometry(record, padOptions ?? {}), [record, padOptions]);
 
+  const slopePct = quantity(record, 'site_slope_pct');
   const buildingBuffer = padOptions?.buildingBufferFt ?? 10;
   const lotSetback = padOptions?.lotSetbackFt ?? 10;
 
@@ -90,19 +103,21 @@ export function SitePlanSheet({ record, padOptions, selectedPad = 0, onSelectPad
               <line key={i} {...l} stroke="#C9D3DA" strokeWidth={1 / s} opacity={0.7} />
             ))}
 
-          {/* lot line */}
-          <path
-            d={polygonPath(geo.lot)}
-            fill="#fff"
-            stroke="#1D2A35"
-            strokeWidth={2.2 / s}
-            strokeDasharray={`${10 / s} ${4 / s} ${2 / s} ${4 / s}`}
-          />
+          {/* lot line, drawn with the certainty of the value behind it */}
+          {(() => {
+            const style = strokeForState(valueOf(record, 'property_line')?.state, s);
+            return (
+              <path d={polygonPath(geo.lot!)} fill="#fff" stroke="#1D2A35" strokeWidth={style.width} strokeDasharray={style.dash} opacity={style.opacity} />
+            );
+          })()}
 
           {/* every structure is a keep-out, not just the largest */}
-          {geo.buildings.map((b, i) => (
-            <path key={i} d={polygonPath(b)} fill="url(#bldgHatch)" stroke="#2F5470" strokeWidth={1.6 / s} />
-          ))}
+          {geo.buildings.map((b, i) => {
+            const style = strokeForState(valueOf(record, 'building_outline')?.state, s);
+            return (
+              <path key={i} d={polygonPath(b)} fill="url(#bldgHatch)" stroke="#2F5470" strokeWidth={style.width} strokeDasharray={style.dash} opacity={style.opacity} />
+            );
+          })}
 
           {/* candidate pad zones: the open ground, then the box that fits in it */}
           {pads.map((p, i) => {
@@ -162,6 +177,8 @@ export function SitePlanSheet({ record, padOptions, selectedPad = 0, onSelectPad
           )}
         </g>
 
+        {slopePct !== null && <SlopeOverlay slopePercent={slopePct} aspectDegrees={aspectFromReason(record)} region={PLAN} />}
+
         <ScaleBar x={PLAN.x} y={PLAN.y + PLAN.h + 20} s={s} step={gridStep} />
         <NorthArrow x={PLAN.x + PLAN.w - 40} y={PLAN.y + PLAN.h + 8} />
 
@@ -176,6 +193,8 @@ export function SitePlanSheet({ record, padOptions, selectedPad = 0, onSelectPad
           lotSetback={lotSetback}
           gridStep={gridStep}
         />
+        <ConfidenceKey x={690} y={SHEET_H - 310} scale={1} />
+        <BlockingStamp x={690} y={SHEET_H - 232} fact={blocking} />
         <TitleBlock x={690} y={SHEET_H - 150} record={record} />
       </svg>
 
@@ -183,6 +202,7 @@ export function SitePlanSheet({ record, padOptions, selectedPad = 0, onSelectPad
         <label>
           <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} /> {gridStep} ft grid
         </label>
+        <span>{geo.padsFromRecord ? 'Pad zones from the record' : 'Pad zones derived here'}</span>
         <span className="sheet__warn">Not for construction. Candidate zones from public geometry.</span>
       </figcaption>
     </figure>
