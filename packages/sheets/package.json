@@ -1,0 +1,13 @@
+{
+  "name": "@eqore/sheets",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Plan-set sheets drawn from the site record. Drawings, not maps.",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@eqore/contract": "^0.1.0",
+    "@eqore/drc": "^0.1.0"
+  },
+  "peerDependencies": { "react": ">=18" }
+}

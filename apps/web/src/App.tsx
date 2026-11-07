@@ -8,6 +8,7 @@ import { SiteMap } from "./map/SiteMap";
 import { ConfirmPanel } from "./panels/ConfirmPanel";
 import { EvidencePanel } from "./panels/EvidencePanel";
 import { ReadinessPanel } from "./panels/ReadinessPanel";
+import { SitePlanSheet } from "@eqore/sheets";
 import { ProvenanceTag } from "./ui/marks";
 
 const ACTOR_KEY = "eqore.actorName";
@@ -80,6 +81,10 @@ export function App({ api }: { api: EngineerApi }) {
   const [confirmField, setConfirmField] = useState<string | null>(null);
   const [placingField, setPlacingField] = useState<string | null>(null);
   const [focusField, setFocusField] = useState<string | null>(null);
+  // The map answers "where is it"; the sheet answers "what can we build". Different
+  // instruments, so they get their own view rather than layers on one canvas.
+  const [view, setView] = useState<"map" | "sheet">("map");
+  const [selectedPad, setSelectedPad] = useState(0);
   const [arrival, setArrival] = useState<string | null>(null);
   const [change, setChange] = useState<string | null>(null);
   const current = useRef<{ record: RecordVersion | null; report: ReadinessReport | null }>({ record, report });
@@ -338,6 +343,17 @@ export function App({ api }: { api: EngineerApi }) {
             }}
           />
           <div className={`map-region${selected.length > 0 ? " dock-open" : ""}`}>
+            <div className="view-tabs" role="tablist" aria-label="Site view">
+              <button type="button" role="tab" aria-selected={view === "map"} className={view === "map" ? "on" : ""} onClick={() => setView("map")}>
+                Map
+              </button>
+              <button type="button" role="tab" aria-selected={view === "sheet"} className={view === "sheet" ? "on" : ""} onClick={() => setView("sheet")}>
+                Site plan
+              </button>
+            </div>
+            {view === "sheet" ? (
+              <SitePlanSheet record={record} selectedPad={selectedPad} onSelectPad={setSelectedPad} />
+            ) : (
             <SiteMap
               key={record.site.id}
               record={record}
@@ -349,6 +365,7 @@ export function App({ api }: { api: EngineerApi }) {
               onCancelPlace={() => setPlacingField(null)}
               focusField={focusField}
             />
+            )}
             {selected.length > 0 ? (
               <EvidencePanel
                 api={api}
