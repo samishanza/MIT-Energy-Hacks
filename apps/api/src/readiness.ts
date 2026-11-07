@@ -25,9 +25,15 @@ function preApplicationLabel(values: Map<string, Value>): string {
 
 function statusOf(row: RequirementRow, values: Map<string, Value>): ReadinessItem["status"] {
   if (row.rowKind === "form" && row.owner === "engineer") return "engineer_owned";
-  const states = row.fields.map((field) => values.get(field)?.state ?? "missing");
+  const rowValues = row.fields.map((field) => values.get(field));
+  const states = rowValues.map((value) => value?.state ?? "missing");
+  if (row.previewOnly) {
+    // Choosing among public candidates isn't the named document. A person has to cite one.
+    const documented = rowValues.every((value) => value?.state === "verified" && value.verification?.evidence.some((reference) => reference.kind === "document"));
+    if (documented) return "has_evidence";
+    return states.some((state) => state !== "missing" && state !== "unreadable") ? "preview_only" : "needs_evidence";
+  }
   if (states.every((state) => meetsMinimum(state, row.minState))) return "has_evidence";
-  if (row.previewOnly && states.some((state) => state === "inferred" || state === "conflicting")) return "preview_only";
   return "needs_evidence";
 }
 
@@ -102,31 +108,43 @@ function countsBy(items: ReadinessItem[]) {
   };
 }
 
-function noTableReport(record: RecordVersion, utility: string | null): ReadinessReport {
+function noTableReason(utility: string | null, state: ValueState | undefined): string {
+  if (utility) return `No requirements table applies yet: the ${utility} table isn't built. The bill is the next request.`;
+  if (state === "conflicting") return "No requirements table applies until a person resolves which utility serves this site.";
+  return "No requirements table applies, because the record has no serving utility. The bill names the utility, so it's the next request.";
+}
+
+function noTableReport(record: RecordVersion, values: Map<string, Value>, utility: string | null): ReadinessReport {
   const bill = EVIDENCE_REQUESTS.find((request) => request.id === "bill")!;
-  const noTableReason = utility
-    ? `No requirements table applies yet: the ${utility} table isn't built. The bill is the next request.`
-    : "No requirements table applies, because the record has no serving utility. The bill names the utility, so it's the next request.";
+  const openBillField = bill.fields.find((field) => values.get(field)?.state !== "verified");
+  const nextGap = openBillField
+    ? {
+        id: bill.id,
+        request: bill.request,
+        route: bill.route,
+        owner: bill.owner,
+        field: openBillField,
+        routeCost: bill.routeCost,
+        captureLinkAllowed: true,
+        draftRequest: draftRequest(bill, record),
+      }
+    : {
+        id: "engineer-serving-utility",
+        request: "Serving utility, from the verified bill",
+        route: "engineer" as const,
+        owner: "engineer" as const,
+        field: "serving_utility",
+        routeCost: 5,
+        captureLinkAllowed: false,
+        draftRequest: engineerDraft("Enter the serving utility from the verified bill", record),
+      };
   return ReadinessReportSchema.parse({
     recordVersionId: record.id,
     synthetic: record.synthetic,
     requirementsTable: null,
-    noTableReason,
+    noTableReason: noTableReason(utility, values.get("serving_utility")?.state),
     items: [],
-    gaps: [
-      {
-        id: bill.id,
-        rank: 1,
-        request: bill.request,
-        route: bill.route,
-        owner: bill.owner,
-        field: bill.fields[0],
-        rowsFilled: [],
-        routeCost: bill.routeCost,
-        captureLinkAllowed: true,
-        draftRequest: draftRequest(bill, record),
-      },
-    ],
+    gaps: [{ ...nextGap, rank: 1, rowsFilled: [] }],
     share: null,
   });
 }
@@ -135,8 +153,8 @@ export function checkReadiness(record: RecordVersion): ReadinessReport {
   const values = new Map(record.values.map((value) => [value.field, value]));
   const utility = values.get("serving_utility")?.current;
   const utilityName = utility?.type === "text" ? utility.value : null;
-  const table = TABLES.find((candidate) => candidate.utility === utilityName);
-  if (!table) return noTableReport(record, utilityName);
+  const table = TABLES.find((candidate) => candidate.utility.toLowerCase() === utilityName?.trim().toLowerCase());
+  if (!table) return noTableReport(record, values, utilityName);
 
   const items = toItems(table, values);
   return ReadinessReportSchema.parse({

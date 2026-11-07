@@ -150,6 +150,39 @@ describe("the readiness check", () => {
     expect(report.gaps.find((gap) => gap.id === "pre-application-report")).toMatchObject({ route: "pre_application_report", owner: "utility", captureLinkAllowed: false });
   });
 
+  it("keeps the Pre-Application Report a preview when a person picks a feeder citing public data, until they cite a document", () => {
+    const feeder = reading("feeder", { type: "text", value: "05_01_27W2" });
+    const pickedFromPublicData = checkReadiness(record([NATIONAL_GRID, feeder, reading("feeder", { type: "text", value: "05_01_27W2" }, { kind: "verification", method: "person_entered", verification: { ...verifiedBy, evidence: [{ kind: "observation", observationId: feeder.id }] } })]));
+    expect(item(pickedFromPublicData, "pre-application-report").status).toBe("preview_only");
+    expect(pickedFromPublicData.gaps.some((gap) => gap.id === "pre-application-report")).toBe(true);
+
+    const fromReport = checkReadiness(record([NATIONAL_GRID, feeder, verified("feeder", { type: "text", value: "05_01_27W2" })]));
+    expect(item(fromReport, "pre-application-report").status).toBe("has_evidence");
+    expect(fromReport.gaps.some((gap) => gap.id === "pre-application-report")).toBe(false);
+  });
+
+  it("selects a table whatever the utility name's case", () => {
+    const report = checkReadiness(record([reading("serving_utility", { type: "text", value: " NATIONAL GRID " })]));
+    expect(report.requirementsTable?.utility).toBe("National Grid");
+  });
+
+  it("asks a person to settle a conflicting utility before any table applies", () => {
+    const report = checkReadiness(record([NATIONAL_GRID, reading("serving_utility", { type: "text", value: "Eversource" })]));
+    expect(report.requirementsTable).toBeNull();
+    expect(report.noTableReason).toContain("resolves which utility");
+  });
+
+  it("stops offering a bill link once the bill's fields are verified and no utility is set", () => {
+    const report = checkReadiness(record([verified("meter_number", { type: "text", value: "M-1" }), verified("account_number", { type: "text", value: "A-1" })]));
+    expect(report.gaps).toHaveLength(1);
+    expect(report.gaps[0]).toMatchObject({ route: "engineer", field: "serving_utility", captureLinkAllowed: false });
+  });
+
+  it("marks a model's unconfirmed reading in a drafted request", () => {
+    const report = checkReadiness(record([NATIONAL_GRID, reading("account_number", { type: "text", value: "A-1" }, { method: "model_draft" })]));
+    expect(report.gaps.find((gap) => gap.id === "pre-application-report")!.draftRequest).toContain("A-1 (unconfirmed draft reading, check before sending)");
+  });
+
   it("keeps engineer-owned items engineer-owned whatever data arrives", () => {
     const report = checkReadiness(record([NATIONAL_GRID, verified("one_line_diagram", { type: "text", value: "SYNTHETIC TEST drawing" }), verified("system_capacity_kw", { type: "quantity", value: 100, unit: "kW" })]));
     expect(item(report, "one-line").status).toBe("engineer_owned");

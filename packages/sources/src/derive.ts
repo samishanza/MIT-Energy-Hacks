@@ -66,6 +66,7 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
   let currentReading: Observation | null = null;
   const candidates: Candidate[] = [];
   const flags = new Set<string>();
+  const failedExtractions = new Set<string>();
   const seen = new Set<string>();
 
   const addCandidate = (observation: Observation) => {
@@ -94,12 +95,13 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
         break;
 
       case "failed_extraction":
-        flags.add(`Extraction failed and can be retried: ${observation.reason ?? "no reason given"}`);
+        failedExtractions.add(`Extraction failed and can be retried: ${observation.reason ?? "no reason given"}`);
         break;
 
       case "reading": {
         // A repeat read is on file but can't change state.
         if (repeat || !observation.value) break;
+        failedExtractions.clear();
         if (observation.reason) flags.add(observation.reason);
         if (state === "missing" || state === "unreadable") {
           state = "inferred";
@@ -142,6 +144,7 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
       }
 
       case "verification":
+        failedExtractions.clear();
         state = "verified";
         current = observation.value;
         method = observation.method;
@@ -167,7 +170,7 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
     observationIds: observations.map((observation) => observation.id),
     verification,
     reason,
-    flags: [...flags],
+    flags: [...flags, ...failedExtractions],
     synthetic: observations.some((observation) => observation.synthetic),
   });
 }

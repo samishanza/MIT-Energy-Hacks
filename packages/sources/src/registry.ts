@@ -46,6 +46,7 @@ export type ParcelLookup = {
   useAttribute: string;
   lotSizeAttribute: string;
   lotUnitsAttribute: string;
+  yearBuiltAttribute: string;
 };
 
 export type BuildingOutlines = {

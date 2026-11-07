@@ -182,7 +182,8 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
     runs.push(anchor.lookup.run);
     observations.push(...toObservations(anchor.lookup, ctx, [parcel]));
     observations.push(...lotSizeObservations(anchor.lookup, region.parcels, parcel, ctx));
-    if (isPolygon(parcel.geometry)) {
+    if (!isPolygon(parcel.geometry)) throw new Error("A parcel anchor needs a polygon");
+    {
       parcelGeometry = parcel.geometry;
       observations.push(
         observe(anchor.lookup, ctx, {
@@ -197,9 +198,6 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
       );
       features.push({ id: "property-line", kind: "property_line", field: "property_line", geometry: parcel.geometry, label: "Property line (not surveyed)" });
       location = centroid(parcel.geometry).geometry.coordinates as [number, number];
-    } else {
-      observations.push(observe(anchor.lookup, ctx, { field: "property_line", kind: "no_value", value: null, objectId: parcel.objectId, reason: "The parcel came back with no polygon" }));
-      location = [0, 0];
     }
     if (anchor.pin) location = [anchor.pin.longitude, anchor.pin.latitude];
   } else {
@@ -215,7 +213,7 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
   observations.push(located.observation);
 
   if (region.buildings && parcelGeometry) {
-    const yearBuilt = anchor.kind === "parcel" ? anchor.parcel.attributes.YEAR_BUILT : null;
+    const yearBuilt = anchor.kind === "parcel" && region.parcels ? anchor.parcel.attributes[region.parcels.yearBuiltAttribute] : null;
     const outlines = await collectOutlines(region.buildings, parcelGeometry, yearBuilt, ctx);
     observations.push(...outlines.observations);
     features.push(...outlines.features);

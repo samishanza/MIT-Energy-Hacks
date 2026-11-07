@@ -7,6 +7,8 @@ export type EvidenceRequest = {
   owner: Gap["owner"];
   // The field a capture link names. Other fields the same evidence can fill follow it.
   fields: [string, ...string[]];
+  // Other fields a draft can read from the same file. They offer no capture link of their own.
+  alsoExtract?: string[];
   // A team estimate of how hard the route is: a bill is easier than a utility report, which takes
   // a fee and up to 10 business days, and a qualified person's visit costs the most.
   routeCost: number;
@@ -25,6 +27,7 @@ export const EVIDENCE_REQUESTS: EvidenceRequest[] = [
     route: "capture_bill",
     owner: "customer",
     fields: ["meter_number", "account_number"],
+    alsoExtract: ["peak_demand_kw", "serving_utility"],
     routeCost: 1,
     question: "Please take a photo of a recent electric bill, showing the account and meter numbers.",
   },
@@ -101,10 +104,12 @@ export const EVIDENCE_REQUESTS: EvidenceRequest[] = [
 const DRAFT_NOTICE = "DRAFT for a person to review and send. Nothing has been sent.";
 
 function known(values: Value[], field: string): string | null {
-  const current = values.find((value) => value.field === field)?.current;
+  const value = values.find((entry) => entry.field === field);
+  const current = value?.current;
   if (!current) return null;
-  if (current.type === "text") return current.value;
-  if (current.type === "quantity") return `${current.value} ${current.unit}`;
+  const note = value?.method === "model_draft" ? " (unconfirmed draft reading, check before sending)" : "";
+  if (current.type === "text") return `${current.value}${note}`;
+  if (current.type === "quantity") return `${current.value} ${current.unit}${note}`;
   return null;
 }
 

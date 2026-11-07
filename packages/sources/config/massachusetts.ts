@@ -13,6 +13,7 @@ export const massachusetts: RegionConfig = {
     useAttribute: "USE_DESC",
     lotSizeAttribute: "LOT_SIZE",
     lotUnitsAttribute: "LOT_UNITS",
+    yearBuiltAttribute: "YEAR_BUILT",
     entry: {
       kind: "arcgis_rest",
       id: "massgis-l3-parcels",

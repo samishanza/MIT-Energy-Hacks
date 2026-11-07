@@ -1,5 +1,5 @@
-import { Hono } from "hono";
-import { routes } from "@eqore/contract";
+import { Hono, type MiddlewareHandler } from "hono";
+import { ENGINEER_PORT, WEB_PORT, routes } from "@eqore/contract";
 import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps } from "./capture.ts";
 import { checkReadiness } from "./readiness.ts";
 import { ApiFailure, confirmValue, correctValue, movePin, resolveConflict, runSite } from "./run.ts";
@@ -26,10 +26,25 @@ function parseVersion(raw: string): number | "latest" {
   return number;
 }
 
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost"].flatMap((host) => [ENGINEER_PORT, WEB_PORT].map((port) => `${host}:${port}`)));
+
+// With no login, binding to loopback doesn't stop a web page in the engineer's browser from posting here,
+// or a rebound DNS name from reaching it, so every request must come from this app's own origin.
+const localOriginOnly: MiddlewareHandler = async (c, next) => {
+  const host = c.req.header("host");
+  const origin = c.req.header("origin");
+  const originHost = origin?.replace(/^https?:\/\//, "");
+  if ((host !== undefined && !LOCAL_HOSTS.has(host)) || (originHost !== undefined && !LOCAL_HOSTS.has(originHost))) {
+    throw new ApiFailure("illegal_transition", 403, "This API only accepts requests from the local app.");
+  }
+  await next();
+};
+
 // The engineer API has no login, and sends no CORS headers. It binds to loopback and is never tunneled.
 export function createEngineerApp(deps: CaptureDeps): Hono {
   const app = new Hono();
   respondToFailures(app);
+  app.use("*", localOriginOnly);
 
   app.post(routes.runSite.path, async (c) => c.json(await runSite(deps, await jsonBody(c.req.raw))));
 

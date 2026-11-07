@@ -13,6 +13,8 @@ import type { CaptureLinkRow } from "./store.ts";
 export const LINK_LIFETIME_MS = 24 * 60 * 60 * 1000;
 export const MAX_UPLOADS = 5;
 export const MAX_FILE_BYTES = 15 * 1024 * 1024;
+// The Claude API takes at most 10 MB of base64 per image, which is about 7.5 MB of file.
+export const MAX_IMAGE_BYTES = 7.5 * 1024 * 1024;
 
 const STANDARD_AMPS = new Set([100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500, 600, 700, 800, 1000, 1200, 1600, 2000, 2500, 3000, 4000, 5000, 6000]);
 
@@ -42,7 +44,7 @@ function requestFor(field: string): EvidenceRequest | undefined {
 }
 
 function fieldsToExtract(request: EvidenceRequest): ExtractionField[] {
-  const names = request.route === "capture_bill" ? [...request.fields, "peak_demand_kw"] : request.fields;
+  const names = [...request.fields, ...(request.alsoExtract ?? [])];
   return EXTRACTION_FIELDS.filter((field) => names.includes(field.field));
 }
 
@@ -50,8 +52,8 @@ function isVerified(record: RecordVersion, field: string): boolean {
   return record.values.find((value) => value.field === field)?.state === "verified";
 }
 
-export function fileTooLarge(): ApiFailure {
-  return new ApiFailure("file_too_large", 413, `The file is over the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit.`);
+export function fileTooLarge(limitBytes = MAX_FILE_BYTES): ApiFailure {
+  return new ApiFailure("file_too_large", 413, `The file is over the ${limitBytes / (1024 * 1024)} MB limit.`);
 }
 
 export function createCaptureLink(deps: CaptureDeps, siteId: string, body: unknown): CaptureLink {
@@ -87,7 +89,7 @@ export function createCaptureLink(deps: CaptureDeps, siteId: string, body: unkno
 }
 
 // Checks a token before anything is stored or any model is called.
-function openLink(deps: CaptureDeps, token: string): { link: CaptureLinkRow; latest: RecordVersion } {
+export function openLink(deps: CaptureDeps, token: string): { link: CaptureLinkRow; latest: RecordVersion } {
   const link = deps.store.captureLinkByTokenHash(sha256(token));
   if (!link) throw new ApiFailure("invalid_token", 404, "This link isn't active.");
   if (Date.parse(deps.now()) > Date.parse(link.expiresAt)) throw new ApiFailure("token_expired", 410, "This link has expired.");
@@ -163,6 +165,36 @@ function normalizeUnit(unit: string | null): string | null {
   return UNIT_NAMES[unit.trim().toLowerCase()] ?? unit.trim();
 }
 
+type ImageSize = { width: number; height: number };
+
+// Read from the file's header, so a region can be stored in the original image's pixels.
+function imageSize(bytes: Uint8Array, contentType: AcceptedType["contentType"]): ImageSize | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (contentType === "image/png") {
+    return bytes.length >= 24 ? { width: view.getUint32(16), height: view.getUint32(20) } : null;
+  }
+  if (contentType !== "image/jpeg") return null;
+  let offset = 2;
+  while (offset + 9 < bytes.length && bytes[offset] === 0xff) {
+    const marker = bytes[offset + 1]!;
+    const isFrameHeader = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+    if (isFrameHeader) return { height: view.getUint16(offset + 5), width: view.getUint16(offset + 7) };
+    offset += 2 + view.getUint16(offset + 2);
+  }
+  return null;
+}
+
+// The model reports a region as fractions, because it may read a downscaled copy of the image.
+function pixelRegion(region: DraftReading["region"], size: ImageSize | null) {
+  if (!region || !size) return undefined;
+  return {
+    x: Math.round(region.x * size.width),
+    y: Math.round(region.y * size.height),
+    width: Math.round(region.width * size.width),
+    height: Math.round(region.height * size.height),
+  };
+}
+
 type Interpreted = { kind: "reading"; value: ObservedValue; flag?: string } | { kind: "unreadable"; reason: string };
 
 function interpret(reading: DraftReading, spec: ExtractionField): Interpreted {
@@ -186,7 +218,7 @@ function interpret(reading: DraftReading, spec: ExtractionField): Interpreted {
 
 type EvidenceFile = { id: string; hash: string; uploadedBy: string; synthetic: boolean };
 
-function draftObservations(file: EvidenceFile, siteId: string, extraction: Extraction, fields: ExtractionField[], primary: string, now: string, positionFlag?: string): Observation[] {
+function draftObservations(file: EvidenceFile, siteId: string, extraction: Extraction, fields: ExtractionField[], primary: string, now: string, size: ImageSize | null, positionFlag?: string): Observation[] {
   const source: Source = {
     id: "capture-draft",
     name: `Claude draft from a file uploaded by ${file.uploadedBy}`,
@@ -195,6 +227,7 @@ function draftObservations(file: EvidenceFile, siteId: string, extraction: Extra
   };
   const make = (field: string, kind: Observation["kind"], value: ObservedValue | null, extra: { reason?: string; reading?: DraftReading; grade?: Observation["grade"] }) => {
     const query = `file ${file.hash.slice(0, 16)}`;
+    const imageRegion = pixelRegion(extra.reading?.region ?? null, size);
     return ObservationSchema.parse({
       id: randomUUID(),
       siteId,
@@ -208,7 +241,7 @@ function draftObservations(file: EvidenceFile, siteId: string, extraction: Extra
       locator: {
         query,
         evidenceFileId: file.id,
-        ...(extra.reading?.region ? { imageRegion: extra.reading.region } : {}),
+        ...(imageRegion ? { imageRegion } : {}),
         ...(extra.reading?.page ? { page: extra.reading.page } : {}),
       },
       identity: { sourceId: source.id, query, contentHash: sha256(JSON.stringify([field, kind, value, extra.reason])) },
@@ -222,41 +255,50 @@ function draftObservations(file: EvidenceFile, siteId: string, extraction: Extra
   if (extraction.kind === "unreadable") return [make(primary, "unreadable", null, { reason: extraction.reason })];
 
   return fields.flatMap((spec) => {
-    const reading = extraction.readings.find((entry) => entry.field === spec.field);
-    if (!reading) {
+    // A bill can show more than one meter. Each reading is kept, and different values become a conflict.
+    const readings = extraction.readings.filter((entry) => entry.field === spec.field);
+    if (readings.length === 0) {
       return spec.field === primary ? [make(spec.field, "unreadable", null, { reason: "The draft didn't report this field." })] : [];
     }
-    const interpreted = interpret(reading, spec);
-    if (interpreted.kind === "unreadable") return [make(spec.field, "unreadable", null, { reason: interpreted.reason, reading })];
-    const reason = [interpreted.flag, spec.field === primary ? positionFlag : undefined].filter(Boolean).join(" ") || undefined;
-    return [make(spec.field, "reading", interpreted.value, { reason, reading, grade: fieldDefinition(spec.field)?.grade })];
+    return readings.map((reading) => {
+      const interpreted = interpret(reading, spec);
+      if (interpreted.kind === "unreadable") return make(spec.field, "unreadable", null, { reason: interpreted.reason, reading });
+      const reason = [interpreted.flag, spec.field === primary ? positionFlag : undefined].filter(Boolean).join(" ") || undefined;
+      return make(spec.field, "reading", interpreted.value, { reason, reading, grade: fieldDefinition(spec.field)?.grade });
+    });
   });
 }
 
-function geotagObservation(file: EvidenceFile, siteId: string, field: string, now: string, outcome: { kind: "reading"; text: string; reason: string } | { kind: "unreadable"; reason: string }): Observation {
+function geotagObservation(file: EvidenceFile, siteId: string, field: string, now: string, placedByHand: boolean, outcome: { kind: "reading"; text: string; reason: string } | { kind: "unreadable"; reason: string }): Observation {
   const query = `geotag ${file.hash.slice(0, 16)}`;
   const reading = outcome.kind === "reading";
+  const source = placedByHand
+    ? { id: "engineer-pin", name: "Map pin placed by the engineer" }
+    : { id: "capture-geotag", name: `Phone position from a file uploaded by ${file.uploadedBy}` };
   return ObservationSchema.parse({
     id: randomUUID(),
     siteId,
     field,
     kind: outcome.kind,
     value: reading ? { type: "text", value: outcome.text } : null,
-    source: { id: "capture-geotag", name: `Phone position from a file uploaded by ${file.uploadedBy}`, kind: "human_evidence", dataOrigin: file.synthetic ? "synthetic" : "real" },
+    source: { ...source, kind: "human_evidence", dataOrigin: file.synthetic ? "synthetic" : "real" },
     retrievedAt: now,
     sourceDate: null,
-    method: "source_read",
+    method: placedByHand ? "hand_placed" : "source_read",
     locator: { query, evidenceFileId: file.id },
-    identity: { sourceId: "capture-geotag", query, contentHash: sha256(reading ? outcome.text : outcome.reason) },
+    // Each upload is a new position report, even at the same spot as an earlier one.
+    identity: { sourceId: source.id, query, contentHash: sha256(JSON.stringify([file.id, reading ? outcome.text : outcome.reason])) },
     grade: reading ? "layout" : undefined,
     reason: outcome.reason,
     synthetic: file.synthetic,
   });
 }
 
-function positionReading(metadata: CaptureMetadata): { kind: "reading"; text: string; reason: string } {
+function positionReading(metadata: CaptureMetadata, placedByHand: boolean): { kind: "reading"; text: string; reason: string } {
+  const text = `${metadata.latitude}, ${metadata.longitude}`;
+  if (placedByHand) return { kind: "reading", text, reason: "Placed by the engineer, using the uploaded file. A person confirms it against the aerial." };
   const accuracy = metadata.accuracyMeters === undefined ? "with no stated accuracy" : `stated accuracy ${Math.round(metadata.accuracyMeters)} m`;
-  return { kind: "reading", text: `${metadata.latitude}, ${metadata.longitude}`, reason: `Phone position, ${accuracy}. A person confirms it against the aerial.` };
+  return { kind: "reading", text, reason: `Phone position, ${accuracy}. A person confirms it against the aerial.` };
 }
 
 type Intake = {
@@ -279,6 +321,7 @@ async function takeEvidence(deps: CaptureDeps, intake: Intake): Promise<CaptureR
   const bytes = new Uint8Array(await file.arrayBuffer());
   const type = sniffType(bytes);
   if (!type) throw new ApiFailure("file_type", 415, "Send a JPEG, PNG, or PDF file.");
+  if (type.contentType !== "application/pdf" && file.size > MAX_IMAGE_BYTES) throw fileTooLarge(MAX_IMAGE_BYTES);
   if (intake.useUpload && !intake.useUpload()) throw new ApiFailure("upload_limit", 429, "This link has reached its upload limit.");
 
   const latest = latestOrFail(deps, siteId);
@@ -304,7 +347,8 @@ async function takeEvidence(deps: CaptureDeps, intake: Intake): Promise<CaptureR
   });
 
   const position: PositionCheck = intake.placedByHand && metadata.latitude !== undefined && metadata.longitude !== undefined ? { status: "placed" } : checkPosition(metadata, latest);
-  const fields = fieldsToExtract(request);
+  // A link answers its own field. It can't reopen a sibling that a person has already verified.
+  const fields = fieldsToExtract(request).filter((spec) => !intake.useUpload || spec.field === field || !isVerified(latest, spec.field));
   const observations: Observation[] = [];
   let state: CaptureResult["state"] = "inferred";
 
@@ -315,24 +359,27 @@ async function takeEvidence(deps: CaptureDeps, intake: Intake): Promise<CaptureR
     } else {
       extraction = await deps.extractor({ bytes, contentType: type.contentType, fields });
     }
-    const drafts = draftObservations(evidence, siteId, extraction, fields, field, now, position.flag);
+    const drafts = draftObservations(evidence, siteId, extraction, fields, field, now, imageSize(bytes, type.contentType), position.flag);
     observations.push(...drafts);
     const primary = drafts.find((observation) => observation.field === field);
     if (extraction.kind === "failed") state = "extraction_failed";
     else if (primary?.kind !== "reading") state = "unreadable";
   } else if (position.status === "placed") {
-    observations.push(geotagObservation(evidence, siteId, field, now, positionReading(metadata)));
+    observations.push(geotagObservation(evidence, siteId, field, now, intake.placedByHand, positionReading(metadata, intake.placedByHand)));
   } else {
     state = "unreadable";
-    observations.push(geotagObservation(evidence, siteId, field, now, { kind: "unreadable", reason: position.flag ?? "The photo came with no position. Place the pin by hand, using the photo." }));
+    observations.push(geotagObservation(evidence, siteId, field, now, false, { kind: "unreadable", reason: position.flag ?? "The photo came with no position. Place the pin by hand, using the photo." }));
   }
 
   deps.store.appendObservations(observations);
+  // The model call can take a while, so this builds on whatever the record holds now.
+  const current = latestOrFail(deps, siteId);
+  // A bill's position says where someone stood, not where any equipment is.
   const features =
-    position.status === "placed"
-      ? withPin(latest.features, { field, label: fieldDefinition(field)?.label ?? field, longitude: metadata.longitude!, latitude: metadata.latitude!, placedByHand: intake.placedByHand })
-      : latest.features;
-  nextVersion(deps, latest, "capture", features);
+    position.status === "placed" && request.route === "capture_photo"
+      ? withPin(current.features, { field, label: fieldDefinition(field)?.label ?? field, longitude: metadata.longitude!, latitude: metadata.latitude!, placedByHand: intake.placedByHand })
+      : current.features;
+  nextVersion(deps, current, "capture", features);
   return CaptureResultSchema.parse({ evidenceFileId: evidence.id, state, positionStatus: position.status });
 }
 

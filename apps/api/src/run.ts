@@ -32,6 +32,7 @@ export type ApiDeps = {
   now: () => string;
   // True when running from recorded data, so the record and its sources say so.
   snapshot?: boolean;
+  retryDelayMs?: number;
 };
 
 type VersionParts = Pick<RecordVersion, "site" | "features" | "baseMap" | "sourceRuns" | "trigger">;
@@ -46,7 +47,7 @@ function labelVerifiedEquipment(features: MapFeature[], values: Value[]): MapFea
   return features.map((feature) => {
     if (feature.kind !== "capture_pin" && feature.kind !== "existing_equipment") return feature;
     const value = values.find((entry) => entry.field === feature.field);
-    if (value?.state !== "verified") return { ...feature, kind: "capture_pin" };
+    if (value?.state !== "verified") return { ...feature, kind: "capture_pin", label: value?.label ?? feature.label };
     return { ...feature, kind: "existing_equipment", label: equipmentLabel(value) };
   });
 }
@@ -91,9 +92,16 @@ export async function runSite(deps: ApiDeps, body: unknown) {
   if (!region) throw new ApiFailure("not_found", 404, "No region is configured for this address. Write it as street, city, state.");
 
   const siteId = siteIdFor(address);
-  const ctx: CollectContext = { siteId, fetch: deps.fetch, now: deps.now };
+  const ctx: CollectContext = { siteId, fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs };
   const resolved = await resolveSite(address, region, ctx, choice);
   if (resolved.status === "needs_choice") return { status: "needs_choice" as const, candidates: resolved.candidates };
+
+  // During an outage, a street-level point would add conflicting readings to a parcel-anchored site that
+  // no later run could clear. The current record stays until the parcel service answers.
+  if (resolved.anchor.kind === "point" && resolved.anchor.parcelLookup?.failure) {
+    const anchored = deps.store.readVersion(siteId, "latest")?.features.some((feature) => feature.kind === "property_line");
+    if (anchored) throw new ApiFailure("source_failed", 502, `The parcel source failed, so the current record was kept. ${resolved.anchor.parcelLookup.failure}`);
+  }
 
   const collection = await collectSite(address, region, resolved.anchor, ctx);
   deps.store.saveSite(collection.site);
@@ -180,6 +188,15 @@ export function confirmValue(deps: ApiDeps, siteId: string, field: string, body:
   if (value.state !== "inferred" || !value.current) {
     throw new ApiFailure("illegal_transition", 409, `Only an inferred value can be confirmed. This one is ${value.state}.`);
   }
+  // A newer location replaces the current one without a conflict, so it could change while a person is
+  // looking at the old one. Citing a reading that no longer matches means they haven't seen this value.
+  if (fieldDefinition(field)?.comparison?.kind === "latest") {
+    const cited = new Set(actor.evidence.flatMap((reference) => (reference.kind === "observation" ? [reference.observationId] : [])));
+    const outdated = latest.observations.some(
+      (observation) => cited.has(observation.id) && observation.field === field && observation.value && JSON.stringify(observation.value) !== JSON.stringify(value.current),
+    );
+    if (outdated) throw new ApiFailure("illegal_transition", 409, "This location changed after the evidence you cited. Review the current one, then confirm it.");
+  }
   appendVerification(deps, value, siteId, actor, value.current);
   return nextVersion(deps, latest, "human_action");
 }
@@ -228,6 +245,7 @@ export function movePin(deps: ApiDeps, siteId: string, body: unknown): RecordVer
     const text = `${latitude}, ${longitude}`;
     const query = `pin ${field}`;
     const synthetic = value.synthetic;
+    const placedAt = deps.now();
     deps.store.appendObservations([
       ObservationSchema.parse({
         id: randomUUID(),
@@ -236,11 +254,12 @@ export function movePin(deps: ApiDeps, siteId: string, body: unknown): RecordVer
         kind: "reading",
         value: { type: "text", value: text },
         source: { id: PERSON_SOURCE_ID, name: `Map pin placed by ${placedBy}`, kind: "human_evidence", dataOrigin: synthetic ? "synthetic" : "real" },
-        retrievedAt: deps.now(),
+        retrievedAt: placedAt,
         sourceDate: null,
         method: "hand_placed",
         locator: { query },
-        identity: { sourceId: PERSON_SOURCE_ID, query, contentHash: sha256(text) },
+        // Placing a pin is an act, not a re-read, so moving back to an earlier spot still takes effect.
+        identity: { sourceId: PERSON_SOURCE_ID, query, contentHash: sha256(JSON.stringify([text, placedBy, placedAt])) },
         grade: "layout",
         synthetic,
       }),

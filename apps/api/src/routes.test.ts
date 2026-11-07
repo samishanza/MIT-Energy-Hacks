@@ -288,6 +288,76 @@ describe("the engineer API", () => {
     expect(body.record.sourceRuns[0]!.status).toBe("snapshot");
   });
 
+  it("takes a pin moved back to an earlier spot, so the value and the map agree", async () => {
+    const { post, run, value } = setup();
+    await run();
+    const move = async (latitude: number) =>
+      RecordVersionSchema.parse(await (await post(`/api/sites/${SITE}/pins`, { field: "meter_location", latitude, longitude: -71.769, placedBy: "A. Engineer" })).json());
+    await move(42.276);
+    await move(42.277);
+    const back = await move(42.276);
+    expect(value(back, "meter_location").current).toEqual({ type: "text", value: "42.276, -71.769" });
+    expect(back.features.find((feature) => feature.id === "pin-meter_location")!.geometry).toEqual({ type: "Point", coordinates: [-71.769, 42.276] });
+  });
+
+  it("refuses to confirm a location that changed after the evidence cited", async () => {
+    const { post, run, value } = setup();
+    await run();
+    const pin = async (latitude: number) =>
+      RecordVersionSchema.parse(await (await post(`/api/sites/${SITE}/pins`, { field: "meter_location", latitude, longitude: -71.769, placedBy: "A. Engineer" })).json());
+    const first = await pin(42.276);
+    const seen = value(first, "meter_location").observationIds.at(-1)!;
+    const moved = await pin(42.277);
+    const confirm = (observationId: string) => post(`/api/sites/${SITE}/values/meter_location/confirm`, { verifierName: "A. Engineer", evidence: [{ kind: "observation", observationId }] });
+
+    const refused = await confirm(seen);
+    expect(refused.status).toBe(409);
+    expect(ApiErrorSchema.parse(await refused.json()).code).toBe("illegal_transition");
+
+    const accepted = await confirm(value(moved, "meter_location").observationIds.at(-1)!);
+    expect(accepted.status).toBe(200);
+  });
+
+  it("keeps the record when the parcel source fails on a re-run, and keeps working once it returns", async () => {
+    const { deps, app, post, run, value } = setup();
+    const first = await run();
+    const before = deps.store.observations(SITE).length;
+    const realFetch = deps.fetch;
+    deps.fetch = async (url, init) => {
+      if (url.includes("Massachusetts_Property_Tax_Parcels")) return new Response(JSON.stringify({ error: { message: "Invalid query parameters." } }));
+      if (url.includes("geocoding.geo.census.gov")) {
+        return new Response(JSON.stringify({ result: { addressMatches: [{ matchedAddress: "100 RESEARCH DR", coordinates: { x: -71.77, y: 42.27 } }] } }));
+      }
+      return realFetch(url, init);
+    };
+    deps.retryDelayMs = 0;
+    const response = await post(routes.runSite.path, { address: ADDRESS });
+    expect(response.status).toBe(502);
+    expect(ApiErrorSchema.parse(await response.json()).code).toBe("source_failed");
+    expect(deps.store.observations(SITE).length).toBe(before);
+
+    deps.fetch = realFetch;
+    const again = await run();
+    expect(value(again, "site_location")).toMatchObject({ state: "inferred", method: "computed" });
+    expect(value(again, "feeder").candidates).toHaveLength(value(first, "feeder").candidates.length);
+    expect((await app.request(`/api/sites/${SITE}/versions/latest`)).status).toBe(200);
+  });
+
+  it("refuses requests from another site or a rebound host, and accepts the local app", async () => {
+    const { app, run } = setup();
+    await run();
+    const confirm = (headers: Record<string, string>) =>
+      app.request(`/api/sites/${SITE}/values/parcel_id/confirm`, { method: "POST", headers, body: JSON.stringify({ verifierName: "Forged", evidence }) });
+
+    expect((await confirm({ "content-type": "text/plain", origin: "https://evil.example" })).status).toBe(403);
+    expect((await confirm({ origin: "null" })).status).toBe(403);
+    expect((await confirm({ host: "attacker.example:8787" })).status).toBe(403);
+    expect((await app.request(`/api/sites/${SITE}/versions/latest`, { headers: { host: "attacker.example:8787" } })).status).toBe(403);
+
+    const local = await confirm({ host: "127.0.0.1:5173", origin: "http://127.0.0.1:5173" });
+    expect(local.status).toBe(200);
+  });
+
   it("sends no CORS headers", async () => {
     const { app } = setup();
     const response = await app.request(`/api/sites/${SITE}/versions/latest`, { headers: { origin: "https://example.invalid" } });

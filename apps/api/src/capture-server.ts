@@ -3,7 +3,7 @@ import { extname, join } from "node:path";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { routes } from "@eqore/contract";
-import { MAX_FILE_BYTES, fileTooLarge, readCaptureRequest, submitCapture, type CaptureDeps } from "./capture.ts";
+import { MAX_FILE_BYTES, fileTooLarge, openLink, readCaptureRequest, submitCapture, type CaptureDeps } from "./capture.ts";
 import { respondToFailures } from "./routes.ts";
 
 const STATIC_TYPES: Record<string, string> = {
@@ -30,6 +30,11 @@ export function createCaptureApp(deps: CaptureDeps, pageDir?: string): Hono {
 
   app.post(
     routes.submitCapture.path,
+    // A request with no live link is turned away before its body is read.
+    async (c, next) => {
+      openLink(deps, c.req.param("token")!);
+      await next();
+    },
     bodyLimit({
       // Room for the file and its form fields. The file's own limit is checked in capture intake.
       maxSize: MAX_FILE_BYTES + 64 * 1024,

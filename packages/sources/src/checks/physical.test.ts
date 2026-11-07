@@ -34,6 +34,65 @@ const parcel = (attributes: Record<string, unknown>) => ({
   geometry: { rings: SQUARE },
 });
 
+describe("site resolution when a lookup can't anchor the site", () => {
+  const census = (matches: { x: number; y: number; matchedAddress: string }[]) =>
+    new Response(JSON.stringify({ result: { addressMatches: matches.map(({ x, y, matchedAddress }) => ({ matchedAddress, coordinates: { x, y } })) } }));
+  const parcelsDown: (geocoder: () => Response | Promise<Response>) => FetchLike = (geocoder) => async (url) =>
+    url.includes("geocoding.geo.census.gov") ? geocoder() : new Response(JSON.stringify({ error: { message: "Invalid query parameters." } }));
+  const fast = (fetch: FetchLike): CollectContext => ({ ...context(fetch), retryDelayMs: 0 });
+
+  it("falls back to a labeled Census point when the parcel service fails, and keeps the failure", async () => {
+    const resolved = await resolveSite("1 Test Way, Worcester, MA", massachusetts, fast(parcelsDown(() => census([{ x: -71.8, y: 42.26, matchedAddress: "1 TEST WAY" }]))));
+    if (resolved.status !== "resolved" || resolved.anchor.kind !== "point") throw new Error("Expected a point anchor");
+    expect(resolved.anchor.method).toBe("geocoded_interpolated");
+    expect(resolved.anchor.parcelLookup?.failure).toContain("Invalid query parameters");
+  });
+
+  it("lists several geocoder matches, then settles on the chosen one", async () => {
+    const two = () => census([{ x: -122, y: 37, matchedAddress: "A" }, { x: -122.1, y: 37.1, matchedAddress: "B" }]);
+    const fetch: FetchLike = async () => two();
+    const listed = await resolveSite("1 Test Way, Fremont, CA", californiaPge, context(fetch));
+    if (listed.status !== "needs_choice") throw new Error("Expected a choice");
+    expect(listed.candidates.map((candidate) => candidate.id)).toEqual(["geocoder:-122,37", "geocoder:-122.1,37.1"]);
+
+    const chosen = await resolveSite("1 Test Way, Fremont, CA", californiaPge, context(fetch), { kind: "candidate", candidateId: "geocoder:-122.1,37.1" });
+    expect(chosen).toMatchObject({ status: "resolved", anchor: { kind: "point", longitude: -122.1, latitude: 37.1 } });
+  });
+
+  it("offers a pin when the geocoder fails too", async () => {
+    const httpError = await resolveSite("1 Test Way, Worcester, MA", massachusetts, fast(parcelsDown(() => new Response("down", { status: 503 }))));
+    expect(httpError).toEqual({ status: "needs_choice", candidates: [] });
+    const unreachable = await resolveSite("1 Test Way, Worcester, MA", massachusetts, fast(parcelsDown(() => { throw new Error("offline"); })));
+    expect(unreachable).toEqual({ status: "needs_choice", candidates: [] });
+  });
+
+  it("anchors on the parcel under a pin, keeping the pin as the location", async () => {
+    const ctx = context(parcelService([parcel({ LOT_SIZE: 7.1 })]));
+    const pinned = await resolveSite("1 Test Way, Worcester, MA", massachusetts, ctx, { kind: "pin", latitude: 42.2605, longitude: -71.799 });
+    if (pinned.status !== "resolved") throw new Error("A pin always resolves");
+    const collection = await collectSite("1 Test Way, Worcester, MA", massachusetts, pinned.anchor, ctx);
+    expect(pinned.anchor.kind).toBe("parcel");
+    expect(collection.site).toMatchObject({ location: [-71.799, 42.2605], locationMethod: "hand_placed" });
+    expect(collection.features.some((feature) => feature.kind === "property_line")).toBe(true);
+  });
+
+  it("uses a Census point rather than an invented location when a parcel has no polygon", async () => {
+    const noShape: FetchLike = async (url) =>
+      url.includes("geocoding.geo.census.gov")
+        ? census([{ x: -71.8, y: 42.26, matchedAddress: "1 TEST WAY" }])
+        : url.includes("Massachusetts_Property_Tax_Parcels")
+          ? new Response(JSON.stringify({ features: [{ attributes: { LOC_ID: "P-1", SITE_ADDR: "1 TEST WAY", CITY: "WORCESTER" } }] }))
+          : new Response(JSON.stringify({ features: [] }));
+    const ctx = context(noShape);
+    const resolved = await resolveSite("1 Test Way, Worcester, MA", massachusetts, ctx);
+    if (resolved.status !== "resolved") throw new Error("Expected a Census point");
+    const collection = await collectSite("1 Test Way, Worcester, MA", massachusetts, resolved.anchor, ctx);
+    expect(collection.site).toMatchObject({ location: [-71.8, 42.26], locationMethod: "geocoded_interpolated" });
+    expect(collection.sourceRuns.find((run) => run.sourceId === "massgis-l3-parcels")!.reason).toContain("no polygon");
+    expect(deriveValues(collection.observations).find((value) => value.field === "parcel_id")!.reason).toContain("no polygon");
+  });
+});
+
 describe("site identity", () => {
   it("gives spellings of one address the same site", () => {
     expect(siteIdFor("100 Research Drive, Worcester, MA 01605")).toBe("100-research-dr-worcester-ma");

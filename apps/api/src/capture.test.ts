@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { ApiErrorSchema, CaptureLinkSchema, CaptureRequestSchema, CaptureResultSchema, DOORS_CLOSED_SAFETY_TEXT, RecordVersionSchema, routes } from "@eqore/contract";
 import { fixtureFetch } from "@eqore/sources";
 import { createCaptureApp } from "./capture-server.ts";
-import { MAX_FILE_BYTES, MAX_UPLOADS, type CaptureDeps, type EvidenceManifestEntry } from "./capture.ts";
+import { MAX_FILE_BYTES, MAX_IMAGE_BYTES, MAX_UPLOADS, type CaptureDeps, type EvidenceManifestEntry } from "./capture.ts";
 import type { DraftReading, Extraction, Extractor } from "./extract.ts";
 import { createEngineerApp } from "./routes.ts";
 import { Store } from "./store.ts";
@@ -15,10 +15,11 @@ const dir = (name: string) => fileURLToPath(new URL(`../../../fixtures/${name}`,
 const recorded = fixtureFetch(dir("arcgis"), dir("geocoder"));
 
 const SITE = "100-research-dr-worcester-ma";
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+// A PNG header stating 1000 by 500 pixels.
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0x03, 0xe8, 0, 0, 0x01, 0xf4]);
 const INSIDE = { latitude: "42.27614", longitude: "-71.76944", accuracyMeters: "8" };
 
-const reading = (field: string, extra: Partial<DraftReading> = {}): DraftReading => ({ field, readable: true, text: "M-1", number: null, unit: null, note: "", page: null, region: { x: 1, y: 2, width: 3, height: 4 }, ...extra });
+const reading = (field: string, extra: Partial<DraftReading> = {}): DraftReading => ({ field, readable: true, text: "M-1", number: null, unit: null, note: "", page: null, region: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 }, ...extra });
 
 async function setup(extraction: Extraction = { kind: "readings", readings: [reading("meter_number"), reading("account_number", { text: "A-1" })] }, overrides: Partial<CaptureDeps> = {}) {
   const calls: unknown[] = [];
@@ -76,14 +77,16 @@ describe("capture intake", () => {
     const record = await t.latest();
     expect(record.trigger).toBe("capture");
     const draft = record.observations.find((observation) => observation.field === "meter_number" && observation.kind === "reading")!;
-    expect(draft.locator).toMatchObject({ evidenceFileId: result.evidenceFileId, imageRegion: { x: 1, y: 2, width: 3, height: 4 } });
+    // The model's fractions, stored in the original image's pixels.
+    expect(draft.locator).toMatchObject({ evidenceFileId: result.evidenceFileId, imageRegion: { x: 100, y: 100, width: 300, height: 200 } });
     expect(record.observations.some((observation) => observation.kind === "verification")).toBe(false);
 
     const file = t.deps.store.evidenceFile(result.evidenceFileId)!;
     expect(file.contentType).toBe("image/png");
     expect(file.sha256).toHaveLength(64);
     expect(new Uint8Array(readFileSync(file.path))).toEqual(PNG);
-    expect(record.features.find((feature) => feature.id === "pin-meter_number")).toMatchObject({ kind: "capture_pin", placedByHand: false });
+    // A bill's position says where someone stood, not where any equipment is.
+    expect(record.features.some((feature) => feature.id === "pin-meter_number")).toBe(false);
   });
 
   it("rejects an invalid token or another field's token and stores nothing", async () => {
@@ -184,7 +187,9 @@ describe("capture intake", () => {
 
     const retried = CaptureResultSchema.parse(await (await t.submit(t.tokenOf(link!.url))).json());
     expect(retried.state).toBe("inferred");
-    expect((await t.value("meter_number")).state).toBe("inferred");
+    const recovered = await t.value("meter_number");
+    expect(recovered.state).toBe("inferred");
+    expect(recovered.flags.join(" ")).not.toContain("Connection reset");
   });
 
   it("changes no state and follows nothing when a file contains instructions", async () => {
@@ -349,17 +354,115 @@ describe("capture intake", () => {
     form.set("file", new File([PNG], "bill.png"));
     form.set("latitude", INSIDE.latitude);
     form.set("longitude", INSIDE.longitude);
-    const response = await t.engineer.request(`/api/sites/${SITE}/values/meter_number/evidence`, { method: "POST", body: form });
+    const response = await t.engineer.request(`/api/sites/${SITE}/values/main_device_rating/evidence`, { method: "POST", body: form });
     const result = CaptureResultSchema.parse(await response.json());
 
     const record = await t.latest();
-    expect(record.features.find((feature) => feature.id === "pin-meter_number")).toMatchObject({ placedByHand: true });
+    expect(record.features.find((feature) => feature.id === "pin-main_device_rating")).toMatchObject({ placedByHand: true });
     expect(record.observations.find((observation) => observation.source.id === "capture-draft")!.source.name).toContain("uploaded by the engineer");
 
     const served = await t.engineer.request(`/api/evidence/${result.evidenceFileId}`);
     expect(served.headers.get("content-type")).toBe("image/png");
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(PNG);
     expect((await t.engineer.request("/api/evidence/none")).status).toBe(404);
+  });
+
+  it("records a location the engineer placed as hand-placed, not as a phone reading", async () => {
+    const t = await setup();
+    const form = new FormData();
+    form.set("file", new File([PNG], "switchboard.png"));
+    form.set("latitude", INSIDE.latitude);
+    form.set("longitude", INSIDE.longitude);
+    await t.engineer.request(`/api/sites/${SITE}/values/switchboard_location/evidence`, { method: "POST", body: form });
+    expect(await t.value("switchboard_location")).toMatchObject({ state: "inferred", method: "hand_placed" });
+    expect((await t.value("switchboard_location")).flags.join(" ")).toContain("Placed by the engineer");
+  });
+
+  it("builds on the current record after a slow model call, so a pin placed meanwhile survives", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((done) => (release = done));
+    let started = () => {};
+    const inCall = new Promise<void>((done) => (started = done));
+    const t = await setup(undefined, {
+      extractor: async () => {
+        started();
+        await gate;
+        return { kind: "readings", readings: [reading("main_device_rating", { text: null, number: 800, unit: "A" })] };
+      },
+    });
+    const { link } = await t.createLink("main_device_rating");
+    const upload = t.submit(t.tokenOf(link!.url));
+    await inCall;
+    await t.engineer.request(`/api/sites/${SITE}/pins`, {
+      method: "POST",
+      body: JSON.stringify({ field: "meter_location", latitude: 42.276, longitude: -71.769, placedBy: "A. Engineer" }),
+    });
+    release();
+    await upload;
+    const features = (await t.latest()).features;
+    expect(features.some((feature) => feature.id === "pin-meter_location")).toBe(true);
+    expect(features.some((feature) => feature.id === "pin-main_device_rating")).toBe(true);
+  });
+
+  it("doesn't let a link reopen a verified sibling, while an engineer's own upload still can", async () => {
+    const t = await setup({ kind: "readings", readings: [reading("meter_number", { text: "M-1" }), reading("account_number", { text: "DIFFERENT" })] });
+    await t.engineer.request(`/api/sites/${SITE}/values/account_number/correct`, {
+      method: "POST",
+      body: JSON.stringify({ verifierName: "A. Engineer", evidence: [{ kind: "document", description: "Bill on file" }], value: { type: "text", value: "A-1" } }),
+    });
+    const { link } = await t.createLink();
+    await t.submit(t.tokenOf(link!.url));
+    expect(await t.value("account_number")).toMatchObject({ state: "verified", current: { type: "text", value: "A-1" } });
+    expect((await t.value("meter_number")).state).toBe("inferred");
+
+    const form = new FormData();
+    form.set("file", new File([PNG], "bill.png"));
+    await t.engineer.request(`/api/sites/${SITE}/values/meter_number/evidence`, { method: "POST", body: form });
+    expect((await t.value("account_number")).state).toBe("conflicting");
+  });
+
+  it("rejects an image too large for the model before using an upload, and still takes a PDF of that size", async () => {
+    const t = await setup({ kind: "readings", readings: [reading("meter_number")] });
+    const { link } = await t.createLink();
+    const token = t.tokenOf(link!.url);
+    const bytes = new Uint8Array(MAX_IMAGE_BYTES + 1);
+    bytes.set(PNG);
+    const image = await t.submit(token, bytes);
+    expect(image.status).toBe(413);
+    expect(await t.code(image)).toBe("file_too_large");
+    expect(t.calls).toHaveLength(0);
+    expect(t.uploads()).toEqual([]);
+
+    bytes.set([0x25, 0x50, 0x44, 0x46]);
+    expect((await t.submit(token, bytes)).status).toBe(200);
+  });
+
+  it("turns away a request with no live link before reading its body", async () => {
+    const t = await setup();
+    const response = await t.capture.request("/capture/not-a-real-token/submit", {
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=x" },
+      body: "this body is not valid multipart",
+    });
+    expect(response.status).toBe(404);
+    expect(await t.code(response)).toBe("invalid_token");
+  });
+
+  it("keeps every meter a bill shows, as a conflict for a person to settle", async () => {
+    const t = await setup({ kind: "readings", readings: [reading("meter_number", { text: "M-1" }), reading("meter_number", { text: "M-2" })] });
+    const { link } = await t.createLink();
+    await t.submit(t.tokenOf(link!.url));
+    const meter = await t.value("meter_number");
+    expect(meter.state).toBe("conflicting");
+    expect(meter.candidates.map((candidate) => candidate.value)).toEqual([{ type: "text", value: "M-1" }, { type: "text", value: "M-2" }]);
+  });
+
+  it("reads the serving utility from a bill as a draft, which then selects the table", async () => {
+    const t = await setup({ kind: "readings", readings: [reading("meter_number"), reading("serving_utility", { text: "National Grid" })] });
+    const { link } = await t.createLink();
+    await t.submit(t.tokenOf(link!.url));
+    // The Worcester record already has National Grid from the feeder service, and the draft agrees.
+    expect(await t.value("serving_utility")).toMatchObject({ state: "inferred", current: { type: "text", value: "National Grid" } });
   });
 
   it("labels a file listed as synthetic, and replays its recorded draft in snapshot mode with no model call", async () => {

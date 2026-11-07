@@ -73,6 +73,16 @@ function parcelCandidate(feature: ArcgisFeature, lookup: ParcelLookup) {
   };
 }
 
+function hasPolygon(parcel: ArcgisFeature): boolean {
+  return parcel.geometry?.type === "Polygon" || parcel.geometry?.type === "MultiPolygon";
+}
+
+// A parcel with no shape can't anchor queries, so it's handled like a failed lookup.
+function withoutUsableParcel(lookup: ArcgisResult): ArcgisResult {
+  const failure = "The parcel came back with no polygon";
+  return { ...lookup, features: [], failure, run: { ...lookup.run, status: "missing", reason: failure } };
+}
+
 async function resolveFromGeocoder(address: string, ctx: CollectContext, choice?: SiteChoice, parcelLookup?: ArcgisResult): Promise<ResolveResult> {
   const geocode = await geocodeAddress(address, ctx);
   const candidates = geocode.matches.map((match) => ({
@@ -97,7 +107,7 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
     if (lookup) {
       const atPin = await queryArcgis(lookup.entry, { kind: "point", ...pin }, ctx);
       const parcels = distinctParcels(atPin.features, lookup);
-      if (parcels.length === 1) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: atPin, pin } };
+      if (parcels.length === 1 && hasPolygon(parcels[0]!)) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: atPin, pin } };
       return { status: "resolved", anchor: { kind: "point", ...pin, method: "hand_placed", parcelLookup: atPin } };
     }
     return { status: "resolved", anchor: { kind: "point", ...pin, method: "hand_placed" } };
@@ -108,6 +118,7 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
   if (choice?.kind === "candidate" && !choice.candidateId.startsWith("geocoder:")) {
     const byId = await queryArcgis(lookup.entry, { kind: "attribute", where: `${lookup.idAttribute}=${quoted(choice.candidateId)}` }, ctx);
     const parcels = distinctParcels(byId.features, lookup);
+    if (parcels.length === 1 && !hasPolygon(parcels[0]!)) return resolveFromGeocoder(address, ctx, undefined, withoutUsableParcel(byId));
     if (parcels.length === 1) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: byId } };
     return { status: "needs_choice", candidates: parcels.map((parcel) => parcelCandidate(parcel, lookup)) };
   }
@@ -123,6 +134,7 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
   if (result.failure) return resolveFromGeocoder(address, ctx, undefined, result);
 
   const parcels = distinctParcels(result.features, lookup);
+  if (parcels.length === 1 && !hasPolygon(parcels[0]!)) return resolveFromGeocoder(address, ctx, undefined, withoutUsableParcel(result));
   if (parcels.length === 1) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: result } };
   return { status: "needs_choice", candidates: parcels.map((parcel) => parcelCandidate(parcel, lookup)) };
 }
