@@ -11,7 +11,7 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** Someone enters the address of a commercial or industrial site and, with no other steps, gets a concept site map and a data package the drawing agent can build from. A professional can trust it as shown, or click through to see where each fact came from, what's missing, and who must supply it.
+- **Objective:** Someone enters the address of a commercial or industrial site and, with no other steps, gets a site map and site plan built from every publicly identifiable fact, each traced to its source, so siting and connection decisions are easier. Nothing else is required of anyone.
 - **Means:** A configuration-driven collector pulls every physical, utility, and energy fact public services will give, aimed at the plan-set field catalog in `packages/catalog` rather than at one application form, and checks independent sources against each other. A phone link gathers customer-side evidence, and deterministic checks compare the record with what the utility requires (KTD1, KTD2, KTD4, KTD30).
 - **Authority:** `CLAUDE.md` non-negotiable rules win, then this Product Contract, then the KTDs. `docs/plans/2026-11-07-1015-feat-engineer-review-ui-design-plan.md` refines the UI where it doesn't conflict with this plan. Research in `docs/research/` is evidence, not instruction.
 - **Stop conditions:**
@@ -27,9 +27,9 @@ execution: code
 
 ### Summary
 
-Enter an address and get a site map. Public services fill as much of the physical, utility, and energy record as they can with no further input, and the map is the first thing anyone sees. Details open on selection. The record exports to the drawing agent, and a phone link and an engineer's confirmation close customer-side facts one at a time.
+Enter an address and get a site map and a site plan, built only from public records, with every fact traced to its source. The visualization is the product. Customer evidence and the application readiness report already exist in the code, but they're optional, out of the first view, and not part of what this build must deliver.
 
-**Product Contract preservation:** changed at the team's direction on 2026-11-07. R1, R2, R5's place in the flow, R14, R16, R17, F1, F2, Success Criteria, and Scope Boundaries changed, and R50 to R56 are new. The first version collected what one application form asks for, which set too narrow a target. R3 to R13 and R18 to R22 are unchanged.
+**Product Contract preservation:** changed twice at the team's direction on 2026-11-07. First, the collection target widened from one application form to the plan-set catalog, which changed R1, R2, R14, R16, R17, F1, F2, Success Criteria, and Scope Boundaries, and added R50 to R58. Second, the product narrowed to the public-record map and site plan, which adds R59 and makes R5, R16 to R18, F2, and the capture units optional.
 
 ### Problem Frame
 
@@ -84,11 +84,12 @@ Research and live tests on 2026-11-07 show the facts split in three. Physical fa
 **Least friction and drawing handoff**
 
 - R50. An address is the only required input. The tool asks one question only when an address doesn't resolve to one site, and otherwise shows the map with no further click.
-- R51. The first view is the map with a one-line summary. Sources, states, evidence, and the readiness report open on selection. The concept-grade note, real and synthetic labels, and a plain signal that values are unverified stay visible at all times.
+- R51. The first view is the map with every collected public fact drawn on it, and a one-line summary. Sources, states, evidence, and the readiness report open on selection. The concept-grade note, real and synthetic labels, and a plain signal that values are unverified stay visible at all times.
 - R52. A professional may trust the record as shown. Trusting it marks nothing verified, and the export carries each value's state.
 - R53. The collection target is the plan-set field catalog. Every catalog field is collected, or names who must supply it and why, and coverage is computed deterministically.
 - R54. The tool shows where batteries could go: open areas inside the parcel, clear of buildings and mapped constraints, with size, surface, slope, and measured distances. They're labeled as candidates, never as a layout or a code result.
 - R55. The record exports to the drawing agent with everything it reads. A value the agent needs and the record lacks is reported as a gap, and any drawing stays labeled concept-grade.
+- R59. No input beyond the address is required, and the first view never asks for customer documents, engineer decisions, or approvals. Facts that aren't public are summarized in one line, saying why they aren't public, and open only on request.
 - R58. The tool works for any Massachusetts address. Every address gets the physical record, and grid data wherever a public source covers it. Where none does, it names the utility, says grid data isn't available, and names who to ask. An address never dead-ends.
 - R57. Every value shows how good it is: its source date or age, and its resolution or grade. Where a second independent source exists, the tool checks one against the other and records whether they agree, disagree, or couldn't be checked. It flags a disagreement and never settles it silently.
 - R56. Adding a region takes configuration only, demonstrated by adding a third region in EQORE's service area and timing it. NavigateLA is a reference example only, and the product doesn't query it.
@@ -100,7 +101,7 @@ Research and live tests on 2026-11-07 show the facts split in three. Physical fa
   - **Steps:** The tool picks the region, resolves the parcel, runs every configured source, computes measurements and candidate areas, and draws the map.
   - **Outcome:** The map appears with no other step, and one line says what's known and what's next. Selecting anything opens its details.
   - **Covered by:** R1, R2, R7, R8, R14, R50, R51, R53, R54
-- F2. Close a gap
+- F2. Close a gap (optional, not required by this build)
   - **Trigger:** A1 opens the top-ranked request. If a qualified person owns it (R6), no link is offered and A1 moves to the next request a phone can close, then creates a capture link.
   - **Steps:** A2 takes a doors-closed photo or sends a bill. The tool drafts the reading. A1 compares the draft with the evidence, then confirms or corrects it.
   - **Outcome:** The value becomes verified. The report, ranking, and concept sheet update, and the map updates when the value has a position.
@@ -142,6 +143,8 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 ### Scope Boundaries
 
 **Non-goals**
+
+- Requiring customer documents, photos, or engineer input to produce the map or the site plan.
 
 - Submitting applications or contacting utilities, towns, or customers.
 - Code compliance review, battery sizing, savings, or equipment selection. Measured distances are never compared with a required setback.
@@ -228,6 +231,7 @@ Reported as observed, with no claims about approval or turnaround. Each number n
 - KTD34. **The engineer API refuses any foreign Origin or Host.** Loopback binding doesn't stop a web page in the engineer's browser from posting to it, including a multipart upload. The middleware and tests exist for this, and it applies to every engineer route.
 - KTD35. **Candidate areas reuse `derivePadCandidates` in `packages/drc`.** It takes the lot polygon, less a buffer around every building and a strip inside the lot line, and inscribes the largest rectangles, on real polygons rather than the fitted box. U15 extends it with mapped constraints and road surfaces. It claims open ground and nothing about surface. Its strip is a drawing margin, never a required setback. The pad itself remains an engineer decision, so a sheet may place units on the largest area only when it says that's an assumption.
 - KTD36. **The sheet draws real polygons, through the agent layer's code.** `@eqore/sheets` already draws the lot, every structure, and pad candidates from the record, because Setback's `Site` holds only one lot box and one building, and it placed units off the Worcester parcel in testing. Use `exportToSetback` only for the list of gaps. Call `compile` only after an engineer enters a pack and count, and show only its placement, labeled illustrative. Its checks, status, and electrical advice never reach a sheet, because on placeholder values they'd read as code results. (Chosen by the lead at the team's request to use best judgment: no array by default, over an assumed pack.)
+- KTD39. **The product is the public-record map and site plan.** The team decided the visualization of traced public facts is the product, and an end-to-end application workflow isn't. Customer capture, draft extraction, and the readiness report stay in the code but leave the first view and the protected path, and get no new work. (session-settled: user-directed, chosen over the closed loop with customer evidence: the team wants least friction and decisions made easier from public data alone.)
 - KTD38. **Quality is the product's novelty.** Public data is available to anyone. What's new is one configurable pipeline that aims at what a plan set needs, says how old and how coarse every value is, and tests independent sources against each other. A flat list of values wouldn't show that, so cross-checks are stored on the value and shown on selection.
 - KTD37. **The agent layer wins where it overlaps this plan.** Battery areas, slope, polygon geometry, record conversion, the sheet, and the drawing route use the teammate's code, and this plan adds to it instead of rebuilding it. `packages/sources` stays the only data puller, and `packages/contract` stays the record's schema, so `packages/agents/src/sources/slope.ts` is the one direct query outside it. (session-settled: user-directed, chosen over new code in `packages/sources`: the team said her agent layer overrides the overlaps.)
 
@@ -326,7 +330,7 @@ fixtures/             recorded responses, synthetic evidence
 
 U1 through U9 and U12 are on `main`, and this update builds on them. Each worktree runs `git merge main` before starting. Integration order: U13, U14, U30, U17, U16, U29, U11, U15, U19, U10's snapshot, U20, U18, then the rest of U10.
 
-**Protected path, data first:** U13, U14, U30, U17's serving utility, U16's National Grid part, U29, U11, and U15, so any Massachusetts address produces the wide, cross-checked record. Then U19 and U10's seed and snapshot, so the map shows it and survives a failed service. U20 follows, and much of it already exists.
+**Protected path, data first:** U13, U14, U30, U17's serving utility, U16's National Grid part, U29, U11, and U15, so any Massachusetts address produces the wide, cross-checked record. Then U19 and U20, so the map and site plan show all of it, and U10's seed and snapshot, so the demo survives a failed service. Capture, extraction, and readiness get no further work (KTD39).
 
 **Cut order under time pressure:**
 
@@ -719,45 +723,42 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 
 ### U19. Map-first screen
 
-- **Goal:** Replace the report-first screen with the map, built on the wider record.
-- **Requirements:** R14, R15, R16, R17, R22, R50, R51, R52
+- **Goal:** Make the map the product: every public fact drawn and traced, with nothing asked of the user beyond the address.
+- **Requirements:** R14, R15, R22, R50, R51, R52, R57, R58, R59
 - **Dependencies:** U12, then U13 through U16 at integration
 - **Files:** `apps/web/src/App.tsx`, `apps/web/src/map/SiteMap.tsx`, `apps/web/src/map/layers.ts`, `apps/web/src/panels/`, `apps/web/src/**/*.test.tsx`
 - **Approach:**
-  1. Submitting an address leads straight to the map. Poll the progress route, fit the map as soon as the parcel resolves, and draw results as they arrive. The existing address chooser and pin placement carry over.
-  2. One status strip holds the fixed items in a set order: the concept-grade note, data labels, unverified signal, and the summary line. During a run the line reads like "Reading sources, 4 of 7 answered". After it, the line gives source conflicts, feeder candidates, and missing required values as separate counts, plus the next request. The record version and before-and-after counts stay visible.
-  3. Details open in one surface: a side panel on desktop, a bottom sheet on a phone. A new selection replaces it, and Escape closes it. The summary line opens the readiness report, where the next request offers its action, and a grouped value list. Every row is keyboard-focusable and selects its map feature, so nothing depends on clicking the map.
-  4. Draw and select in this order from top: equipment and dimension lines, outlines, candidate areas in a visibly tentative style, then constraints and roads. A compact legend toggles each kind. A feature whose value conflicts carries a text mark.
-  5. Keep confirm and correct one click from a selected value, and send `expectedObservationId`.
-  6. Show real public data and synthetic evidence separately, so one synthetic file doesn't relabel a record. Fix the failed-reading text and keep covered controls out of keyboard reach.
-- **Patterns to follow:** The UI plan's design system and capture states. This unit overrides its report-first layout.
+  1. Submitting an address leads straight to the map, fitted to the parcel. Poll the progress route and draw results as they arrive. The existing address chooser and pin placement carry over.
+  2. Draw every collected feature kind: property line, all building outlines, dimension lines, roads, wetlands and other mapped constraints, utility lines, substations, fire stations, open ground, and existing equipment. A compact legend toggles each kind. Draw and select from the top: equipment and dimension lines, outlines, open ground in a tentative style, then constraints and roads.
+  3. One status strip, in a fixed order: the concept-grade note, data labels, an unverified signal, and a summary such as "52 public facts found, 15 of 78 plan-set fields, 2 conflicts". During a run it reads like "Reading sources, 9 of 14 answered".
+  4. A facts panel lists only public facts, grouped by family (physical, utility, energy), each with its source, date, and cross-checks. Selecting a fact highlights its feature, and selecting a feature opens its fact. Every row is keyboard-focusable.
+  5. Facts that aren't public collapse into one closed line, "Not in public records: 36 customer facts and 41 engineer decisions", which opens a short explanation of why. The readiness report, capture links, and requests leave the first view and open only from that line.
+  6. Keep the site plan tab. Keep confirm and correct one click from a selected fact, sending `expectedObservationId`, but never prompt for it.
+- **Patterns to follow:** The UI plan's design system. This unit overrides its report-first layout and its emphasis on capture.
 - **Test scenarios:**
-  - Covers AE20. After submitting an address, the map renders with no further click and no source list visible.
-  - On Worcester with panels closed, the line shows the conflict, feeder candidate, and missing counts and names the next request.
-  - Mid-run, the line shows sources answered, and the parcel is drawn.
-  - Selecting a dimension line opens its value, source, method, and state, and its row in the list is reachable by keyboard.
-  - Clicking overlapping geometry selects the topmost feature.
-  - The status strip stays visible with every panel closed, at desktop and phone widths.
-  - A record with one synthetic file shows both real and synthetic labels.
-  - A stale confirm shows the newer value and asks the engineer to review it.
+  - Covers AE20. After submitting an address, the map renders with no further click, no request list, and no source list visible.
+  - On Worcester, the map draws dimension lines, roads, wetlands, fire stations, and utility lines, and the legend toggles each.
+  - The facts panel lists public facts only, and the not-public line shows the two counts and opens its explanation.
+  - Selecting a dimension line opens its fact, and its row is reachable by keyboard.
+  - Mid-run, the strip shows sources answered, and the parcel is drawn.
   - A failed source appears in the details and doesn't block the map.
-  - From the line, opening the top phone-closable request, uploading labeled synthetic evidence, and confirming it changes the counts and version.
-- **Verification:** In a browser at desktop and phone widths, a person walks F1 and F2 on Worcester with no console errors.
+- **Verification:** In a browser at desktop and phone widths, a person enters a Worcester address and reaches a map that shows all the collected public data, with no further input and no console errors.
 
 ### U20. Hand off to the drawing agent
 
-- **Goal:** Make the concept sheet reflect the collected and corrected record.
+- **Goal:** Make the site plan a trustworthy picture of the public record: real lot, every structure, roads and constraints, and open ground labeled for what it is.
 - **Requirements:** R15, R19, R22, R52, R55
 - **Dependencies:** U12, U13, U14, U15, U19
 - **Files:** `packages/sheets/src/SitePlanSheet.tsx`, `packages/sheets/src/geometry.ts`, `packages/sheets/src/sheets.test.ts`, `packages/drc/src/export.ts`, `packages/drc/src/polygon.ts`, `packages/agents/src/sources/live.ts`, `packages/catalog/src/catalog.ts`, `packages/gatekeeper/src/validate.ts`, `apps/web/src/panels/`
 - **Approach:**
-  1. Follow KTD36. `@eqore/sheets` stays the renderer, and draws from each new record version.
+  1. Follow KTD36. `@eqore/sheets` stays the renderer, and draws from each new record version. Label open areas as "open ground", with their area, and never as pad zones or battery sizes. Cut roads, parking, and mapped constraints out of them. Draw roads, wetlands, and dimension lines from the record.
   2. List gaps through `exportToSetback`, taking the state from the record instead of its fixed `MA`. Report `pad_zone` gaps only when an array is requested, and add gaps for empty openings and a missing road side. Add verified values as `engineer` proposals, so a correction clears its gap. The gatekeeper refuses those today, so let it accept `engineer` on any catalog key and turn non-standard values and cross-field failures into flags for those proposals. Let `makeLiveSources` take an existing collection instead of fetching twice.
   3. Offer the sheet only when lot and building values exist, and otherwise say which are missing.
   4. Add the array only after an engineer picks a count and a known spec, held in the panel and not written to the record, labeled illustrative. Set `pad_zone` from the selected candidate's inscribed rectangle, because without it `compile` places units about 757 ft off the Worcester parcel.
   5. Print the concept-grade note on every record, the version ID, each gap, and each synthetic value's label. Drop anything reading as a stamped sheet, such as a revision.
 - **Test scenarios:**
   - A recorded Worcester record draws all 6 roofprints and the real parcel polygon, with no array and no invented electrical value.
+  - No open-ground area crosses a road or a mapped wetland, and none is labeled as a pad or battery.
   - Any pad candidate and every placed unit lie inside the parcel polygon and outside every roofprint, measured on the polygons.
   - Worcester's gap list matches an exact expected list.
   - An engineer's 810 A clears its gap and keeps a non-standard flag.
@@ -804,7 +805,7 @@ The lead is the shared-contract owner. Only the lead changes `packages/contract`
 | Fallback | With the network off, walk F1 and F2 on Worcester in snapshot mode | Base map and draft both load, a banner says it's a snapshot, and the upload is recorded as made by the engineer |
 | Capture boundary | With the tunnel up, request engineer routes and the engineer UI through the tunnel URL, and port 8787 from the machine's LAN address | Tunnel returns 404 on those routes, and 8787 refuses the connection |
 | Evidence stability | Verify a conflict, then re-run the site from the same fixture | The value stays verified |
-| Least friction | Enter an address in the running app | The map appears with no further click, and details stay closed |
+| Least friction | Enter an address in the running app | The map appears with no further click, all collected public data is drawn, and nothing asks for customer or engineer input |
 | Collection target | `npm test` in `packages/sources` | Every catalog field is collected or names its owner |
 | Drawing handoff | Run Worcester through to a concept sheet | The sheet is labeled concept-grade, draws the real polygons, and lists its gaps |
 | Stale confirm | Re-run from a fixture with a changed value, and confirm the old one. Then re-run from the same fixture and confirm | The first is refused as stale, and the second succeeds |
