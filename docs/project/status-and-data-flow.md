@@ -1,0 +1,74 @@
+# Status and how data is pulled
+
+One place for what exists, how data gets in, and what's left. Written 2026-11-07. The plan is `docs/plans/2026-11-07-0954-feat-site-data-collection-plan.md`, and it's still being corrected after review.
+
+## How data is pulled today
+
+These are REST API calls to public map services, with no web scraping. An address is the only input, and none of these calls needs a key.
+
+| Step | Source | How it's asked | Result at 100 Research Dr, Worcester |
+|---|---|---|---|
+| 1. Pick the region | Address text | Split into street, city, and state, and match a region's config | Massachusetts (National Grid) |
+| 2. Find the parcel | MassGIS L3 parcels | Filter on street and city | `F_583026_2925576`, use code 4040, built 1994. Stated 29.92 acres, polygon 30.93 |
+| 3. Find buildings | MassGIS roofprints | Everything inside the parcel polygon | 6 roofprints, the largest 115,615 sq ft (2011) |
+| 4. Get the base map | MassGIS 2025 imagery | Map tiles, 15 cm | Aerial image |
+| 5. Get grid data | National Grid portal | Hosting capacity and feeder lines within 30 m of the parcel | 4 candidate feeders, on Rena Street and Bloomingdale |
+| 6. Find the road side | Census TIGERweb roads | Roads near the parcel | East |
+| 7. Measure | Computed here, no call | Geometry on the results above | Lot about 1,571 by 1,636 ft, main building 284 by 670 ft, 100 ft to the lot line, 93 ft to the nearest line |
+| 8. Save | Local SQLite | Append only, with source, date, query, and a content hash | Values marked inferred or conflicting. Nothing is verified until a named person says so |
+
+**If an address doesn't find one parcel,** or the region has no parcel source, the Census geocoder gives a street-level point, and the tool asks the person to choose only when it can't tell.
+
+**California:** Fremont uses that Census point and queries PG&E's GRIP map, because no county parcel source is configured yet.
+
+**Customer-side facts** have no public source we found. A phone link takes a doors-closed photo or a bill, Claude drafts a reading, and an engineer confirms or corrects it. The live Claude call hasn't run yet, because no API key is set.
+
+**Earth Engine:** the credential works, and a test call returned 166.13 m at the demo site. No adapter uses it yet.
+
+## What happens after collection
+
+Both paths start from the same collector, `packages/sources`.
+
+```text
+                                  ┌─> apps/api: store, readiness ─> apps/web: map and review (the running demo)
+Address ─> packages/sources ──────┤
+                                  └─> packages/agents ─> gatekeeper ─> drc: reconcile ─> Setback layout
+                                      (not connected to the app yet)
+```
+
+The second path has no drawing renderer on `main`. The only sheet renderer is on `origin/integration`.
+
+## Who's working on what
+
+| Stream | Where | State |
+|---|---|---|
+| Lead | `main`, this checkout | Plan, contract, merges, demo |
+| Backend | `worktree-backend` | Waiting for the final plan |
+| UI | `worktree-ui` | Built on the first contract, waiting for the final plan |
+| Agent layer | Commits straight to GitHub `main` | Added agents, live adapter, slope, pad candidates, contract converter. Not in the plan's lanes yet |
+
+## Overlaps to settle
+
+| Thing | Already exists | Plan had | Direction |
+|---|---|---|---|
+| Battery areas | `derivePadCandidates` in `packages/drc` | New code in `packages/sources` | Reuse the existing code, and add buildings and constraints |
+| Slope | MassGIS lidar in `packages/agents` | USGS sampling and Earth Engine | One rule for which wins, collected in `packages/sources` |
+| Record conversion | `toRecordVersion`, site record to contract | Export to site record | Decide one direction |
+| Drawing input | `makeLiveSources` feeds the agents | Adapter from the export | Decide one route |
+
+## To do, in order
+
+1. Fix 3 type errors from the merge, in `packages/agents/src/sources/live.test.ts`.
+2. Finish plan review, settle the overlaps above, and hand the final plan to each stream.
+3. Contract update: stale confirm, new map feature kinds, value families, coverage, run progress.
+4. Backend: collect to the plan-set catalog, wider physical sources, deeper utility data, utility and rates anywhere, Earth Engine, then a third region.
+5. UI: map-first screen.
+6. Lead: drawing handoff with a renderer, seeded demo and snapshot, combined code review.
+
+## Needed from the team
+
+- Confirm the exposed API key is revoked, and add a new one to `.env`.
+- Say when the repo was public, and decide about the sample PDFs.
+- Name the drawing agent, if it isn't Setback.
+- Give the venue address for the phone test.
+- Bring the agent layer stream into the plan's lanes.
