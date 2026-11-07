@@ -177,19 +177,21 @@ export function measureSite(input: MeasureInputs, ctx: CollectContext): Measurem
       })
       .sort((a, b) => a.gap.feet - b.gap.feet || a.name.localeCompare(b.name));
     const onAddress = roads.find((road) => normalizeStreet(road.name) === street);
-    const chosen = onAddress ?? roads[0];
-    if (chosen) {
-      const others = [...new Set(roads.filter((road) => road.side !== chosen.side && road.feature.attributes[nameAttribute]).map((road) => `${road.name} to the ${road.side}`))];
-      const how = onAddress ? `The side of the lot's box nearest ${chosen.name}, the street in the address.` : `The side of the lot's box nearest ${chosen.name}, the closest mapped road. It isn't the street in the address.`;
+    if (onAddress) {
+      const others = [...new Set(roads.filter((road) => road.side !== onAddress.side && road.feature.attributes[nameAttribute]).map((road) => `${road.name} to the ${road.side}`))];
       record(
         result,
         "road_side",
-        { type: "text", value: chosen.side },
+        { type: "text", value: onAddress.side },
         "side of the lot's box nearest the road",
         datesOf(["parcel", parcelDate], ["road", null]),
-        [how, others.length ? `Also near: ${others.slice(0, 3).join(", ")}.` : ""].filter(Boolean).join(" "),
-        chosen.feature.objectId,
+        [`The side of the lot's box nearest ${onAddress.name}, the street in the address.`, others.length ? `Also near: ${others.slice(0, 3).join(", ")}.` : ""].filter(Boolean).join(" "),
+        onAddress.feature.objectId,
       );
+    } else if (roads[0] && !result.failure) {
+      // A side measured from another road would be stated as the frontage, so it stays missing with what was found.
+      const closest = roads[0];
+      observations.push(observe(result, ctx, { field: "road_side", kind: "no_value", value: null, reason: `The street in the address isn't mapped near this parcel. The closest mapped road is ${closest.name}, to the ${closest.side}, and a person confirms which side the site fronts.` }));
     } else {
       observations.push(observe(result, ctx, { field: "road_side", kind: "no_value", value: null, reason: result.failure ?? `No mapped local road was found within ${result.entry.searchRadiusMeters} m of the parcel.` }));
     }

@@ -135,6 +135,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   for (const source of region.grid) {
     pending(source.entry.id, source.entry.name);
     if (source.lineGeometry) pending(source.lineGeometry.id, source.lineGeometry.name);
+    for (const detail of source.details ?? []) for (const entry of detail.kind === "construction" ? detail.entries : [detail.entry]) pending(entry.id, entry.name);
   }
   if (region.roads && parcel) pending(region.roads.entry.id, region.roads.entry.name);
   for (const layer of region.layers ?? []) pending(layer.entry.id, layer.entry.name);

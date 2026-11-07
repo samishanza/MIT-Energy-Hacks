@@ -115,8 +115,10 @@ export async function runSite(deps: ApiDeps, body: unknown) {
   // A chosen spelling replaces the typed one and isn't a site choice.
   const spelled = request.choice?.kind === "candidate" && request.choice.candidateId.startsWith(ADDRESS_CANDIDATE) ? request.choice.candidateId.slice(ADDRESS_CANDIDATE.length) : null;
   const choice = spelled ? undefined : request.choice;
-  const finding = withRunDeadline(deps.fetch, deps.resolveDeadlineMs ?? RESOLVE_DEADLINE_MS, "site lookup");
-  const firstCtx: CollectContext = { siteId: "", fetch: finding.limited, now: deps.now, retryDelayMs: deps.retryDelayMs };
+  // Only the parcel lookup is limited, so a late parcel service still leaves the geocoded point to fall back on.
+  const finding = withRunDeadline(deps.fetch, deps.resolveDeadlineMs ?? RESOLVE_DEADLINE_MS, "parcel lookup");
+  const findFetch: FetchLike = (url, init) => (new URL(url).hostname === "geocoding.geo.census.gov" ? deps.fetch(url, init) : finding.limited(url, init));
+  const firstCtx: CollectContext = { siteId: "", fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs };
   const canonical = await canonicalAddress(spelled ?? asTyped, firstCtx);
   if (canonical.status === "failed") throw new ApiFailure("source_failed", 502, `The address couldn't be checked. ${canonical.reason}`);
   if (canonical.status === "choose") return { status: "needs_choice" as const, candidates: canonical.candidates };
@@ -129,7 +131,7 @@ export async function runSite(deps: ApiDeps, body: unknown) {
   const ctx: CollectContext = { siteId, fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs, availableKeys: deps.availableKeys, runDeadlineMs: deps.runDeadlineMs, measureSlope };
   setProgress(deps, progressKey, { status: "running", sourceRuns: [], features: [] });
   try {
-    return await collectAndRecord(deps, { address, region, siteId, ctx, choice, progressKey, findFetch: finding.limited });
+    return await collectAndRecord(deps, { address, region, siteId, ctx, choice, progressKey, findFetch });
   } catch (error) {
     setProgress(deps, progressKey, { status: "failed", sourceRuns: [], features: [], reason: (error as Error).message });
     throw error;

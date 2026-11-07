@@ -77,7 +77,16 @@ describe("the engineer API", () => {
       ["massgis-roofprints", "done"],
       ["national-grid-hosting-capacity", "done"],
       ["national-grid-feeder-lines", "done"],
+      ["national-grid-feeder-loading", "done"],
+      ["national-grid-construction-1", "done"],
+      ["national-grid-construction-2", "done"],
+      ["national-grid-construction-4", "done"],
+      ["national-grid-construction-5", "done"],
+      ["national-grid-group-studies", "done"],
+      ["national-grid-nodal-feeders", "done"],
+      ["national-grid-nodal-primary", "done"],
       ["census-tiger-local-roads", "done"],
+      ["national-grid-substations", "done"],
       ["massgis-municipalities", "done"],
       ["massdot-roads", "done"],
       ["massdep-wetlands", "done"],
@@ -397,6 +406,18 @@ describe("the engineer API", () => {
     const down = await createEngineerApp(deps).request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: "nowhere in particular" }) });
     expect(down.status).toBe(502);
     expect(ApiErrorSchema.parse(await down.json()).message).toContain("HTTP 503");
+  });
+
+  it("falls back to the geocoded point when the parcel lookup outlasts its limit, and still finishes", async () => {
+    const { deps, value } = setup();
+    deps.fetch = (url, init) => (url.includes("Property_Tax_Parcels") ? new Promise(() => {}) : recorded(url, init));
+    deps.resolveDeadlineMs = 50;
+    deps.runDeadlineMs = 50;
+    const response = await createEngineerApp(deps).request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: "11 Bartzak Dr, Holliston, MA" }) });
+    const body = RunSiteResponseSchema.parse(await response.json());
+    if (body.status !== "ok") throw new Error("Expected a record");
+    expect(body.record.site.locationMethod).toBe("geocoded_interpolated");
+    expect(value(body.record, "parcel_id").reason).toContain("parcel lookup's 0-second deadline");
   });
 
   it("resolves a pin choice to a site", async () => {
