@@ -1045,6 +1045,10 @@ legend {
   color: var(--ink-soft);
 }
 
+.check-word {
+  text-transform: capitalize;
+}
+
 .check-disagrees {
   color: var(--conflicting);
 }

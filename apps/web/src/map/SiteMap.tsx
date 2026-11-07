@@ -17,6 +17,7 @@ import {
   pointFeatures,
   toFeatureCollection,
   type LayerKey,
+  ZONE_TIERS,
 } from "./layers";
 import { Map as MapLibre, Marker, ScaleControl } from "./maplibre";
 
@@ -39,14 +40,13 @@ export interface SiteMapProps {
 
 const HIT_RADIUS = 6;
 
-// Kinds a site can have that a run may not have collected, named so an empty map isn't read as "none there".
-const EXPECTED: { keys: LayerKey[]; words: string }[] = [
+const MAY_BE_UNCOLLECTED: { keys: LayerKey[]; words: string }[] = [
   { keys: ["roads"], words: "roads" },
   { keys: ["utility"], words: "utility lines" },
   { keys: ["substations"], words: "substations" },
   { keys: ["fire_stations"], words: "fire stations" },
   { keys: ["wetlands"], words: "wetlands" },
-  { keys: ["zone_remote", "zone_near_exposure", "zone_exception", "zone_excluded", "zone_unknown"], words: "eligibility zones" },
+  { keys: ZONE_TIERS.map((tier) => `zone_${tier}` as const), words: "eligibility zones" },
 ];
 
 function pointLabel(feature: MapFeature) {
@@ -145,10 +145,8 @@ export function SiteMap(props: SiteMapProps) {
       setLoaded(false);
       instance.remove();
     };
-    // One map per site. Progress and new versions of the same site update its sources below.
   }, [site.id]);
 
-  // The aerial can arrive after the map, when a run's first results come before its record.
   useEffect(() => {
     const instance = map.current;
     if (!instance || !loaded || !baseMap || instance.getSource(BASE_SOURCE)) return;
@@ -156,22 +154,26 @@ export function SiteMap(props: SiteMapProps) {
     instance.addLayer(BASE_LAYER, FEATURE_LAYERS[0]!.id);
   }, [baseMap, loaded]);
 
-  // Feature state is lost when source data is replaced, so the selection is reapplied here too.
   useEffect(() => {
     const instance = map.current;
     if (!instance || !loaded) return;
     const source = instance.getSource(FEATURE_SOURCE) as { setData?: (data: unknown) => void } | undefined;
     source?.setData?.(toFeatureCollection(visible, heights));
-    const next = visible.filter((f) => !isPoint(f) && isSelected(f)).map((f) => f.id);
+  }, [visible, heights, loaded]);
+
+  // MapLibre drops feature state when source data is replaced, so this runs after every data change too.
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance || !loaded) return;
+    const next = new Set(visible.filter((f) => !isPoint(f) && isSelected(f)).map((f) => f.id));
     for (const id of highlighted.current) {
-      if (!next.includes(id)) instance.setFeatureState({ source: FEATURE_SOURCE, id }, { selected: false });
+      if (!next.has(id)) instance.setFeatureState({ source: FEATURE_SOURCE, id }, { selected: false });
     }
     for (const id of next) instance.setFeatureState({ source: FEATURE_SOURCE, id }, { selected: true });
-    highlighted.current = next;
+    highlighted.current = [...next];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, heights, selectedFields, selectedFeatureId, loaded]);
 
-  // Fit to the parcel once, as soon as it's known, so later results don't move the view.
   const parcel = features.find((feature) => feature.kind === "property_line");
   useEffect(() => {
     if (!loaded || !parcel || fitted.current) return;
@@ -210,7 +212,6 @@ export function SiteMap(props: SiteMapProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, selectedFields, selectedFeatureId, loaded]);
 
-  // The 3D layer starts hidden and the map flat, so nothing moves until the toggle is first used.
   const toggled3D = useRef(false);
   useEffect(() => {
     const instance = map.current;
@@ -221,7 +222,6 @@ export function SiteMap(props: SiteMapProps) {
     instance.easeTo({ pitch: threeD ? 55 : 0, duration: 400 });
   }, [threeD, loaded]);
 
-  // On a phone the dock is a bottom sheet, so the map keeps its full width.
   useEffect(() => {
     const beside = dockOpen && window.innerWidth > 760;
     map.current?.setPadding({ top: 0, bottom: 0, left: 0, right: beside ? 420 : 0 });
@@ -237,9 +237,12 @@ export function SiteMap(props: SiteMapProps) {
   }, [focusKey, loaded]);
 
   const counts = new Map<LayerKey, number>();
-  for (const feature of features) counts.set(layerOf(feature), (counts.get(layerOf(feature)) ?? 0) + 1);
+  for (const feature of features) {
+    const key = layerOf(feature);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
   const present = LAYERS.filter((layer) => counts.has(layer.key));
-  const absent = EXPECTED.filter((expected) => !expected.keys.some((key) => counts.has(key))).map((expected) => expected.words);
+  const absent = MAY_BE_UNCOLLECTED.filter((expected) => !expected.keys.some((key) => counts.has(key))).map((expected) => expected.words);
   const raised = [...heights.values()];
   const flat = features.filter((f) => f.kind === "building_outline").length - raised.length;
   const toggle = (key: LayerKey) =>

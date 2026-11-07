@@ -10,7 +10,6 @@ const SELECTION_COLOR = "#f05a00";
 export const ZONE_TIERS = ["remote", "near_exposure", "exception", "excluded", "unknown"] as const;
 export type ZoneTier = (typeof ZONE_TIERS)[number];
 
-// What the legend toggles. One feature kind can split into several, as constraints do.
 export type LayerKey =
   | "equipment"
   | "dimensions"
@@ -124,7 +123,6 @@ export function boundsOf(features: MapFeature[]): [Position, Position] | null {
   ];
 }
 
-// The middle of a feature's extent, for a label, a link, or a selected item's position.
 export function centerOf(feature: MapFeature): Position {
   if (feature.geometry.type === "Point") return feature.geometry.coordinates;
   if (feature.geometry.type === "LineString") {

@@ -36,6 +36,18 @@ const PROGRESS_MS = 700;
 
 type Candidates = Extract<RunSiteResponse, { status: "needs_choice" }>["candidates"];
 type Selection = { fields: string[]; featureId: string | null };
+
+// A poll that brings nothing new keeps the same object, so the map isn't redrawn every tick.
+function sameProgress(a: RunProgress | null, b: RunProgress): boolean {
+  return (
+    a !== null &&
+    a.site?.id === b.site?.id &&
+    a.features.length === b.features.length &&
+    a.sourceRuns.length === b.sourceRuns.length &&
+    a.features.every((feature, i) => feature.id === b.features[i]!.id) &&
+    a.sourceRuns.every((run, i) => run.status === b.sourceRuns[i]?.status)
+  );
+}
 const NOTHING: Selection = { fields: [], featureId: null };
 
 function ChoosePosition({ onPin }: { onPin: (latitude: number, longitude: number) => void }) {
@@ -110,7 +122,6 @@ export function App({ api }: { api: EngineerApi }) {
   const select = (field: string, featureId?: string) => setSelected({ fields: [field], featureId: featureId ?? null });
 
   // Only the most recent request to show a record may land, however the responses are ordered.
-  // The map shows the record at once; the evidence check follows when it answers.
   const showRequest = useRef(0);
   const show = useCallback(
     async (next: RecordVersion) => {
@@ -187,15 +198,17 @@ export function App({ api }: { api: EngineerApi }) {
     setRunning(true);
     setProgress(null);
     setError(null);
-    // Results are drawn as sources answer. A missed progress read is retried on the next tick.
+    // A missed progress read is retried on the next tick.
     let reading = false;
+    let finished = false;
     const timer = setInterval(() => {
       if (reading) return;
       reading = true;
       void api
         .readRunProgress(request.address)
         .then((next) => {
-          if (next?.status === "running") setProgress(next);
+          if (finished || next?.status !== "running") return;
+          setProgress((shown) => (sameProgress(shown, next) ? shown : next));
         })
         .catch(() => {})
         .finally(() => {
@@ -218,13 +231,13 @@ export function App({ api }: { api: EngineerApi }) {
         setChange(null);
         setExportNote(null);
         setReport(null);
-        await show(response.record).catch(() => {
-          // The map and facts don't need the evidence check. The strip says it's unavailable.
-        });
+        // The map and facts don't need the evidence check. The strip says when it's unavailable.
+        await show(response.record).catch(() => {});
       }
     } catch (failure) {
       failed(failure);
     } finally {
+      finished = true;
       clearInterval(timer);
       setProgress(null);
       setRunning(false);
@@ -294,7 +307,6 @@ export function App({ api }: { api: EngineerApi }) {
     saveActor(name);
   };
 
-  // While a run is going, its first results are drawn before the record exists.
   const live = running && progress?.site ? progress : null;
   const mapSite = live?.site ?? record?.site;
   const dockOpen = !live && selected.fields.length > 0;

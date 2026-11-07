@@ -1,7 +1,7 @@
 import type { MapFeature, Observation, ReadinessReport, RecordVersion, Value } from "@eqore/contract";
 import type { EngineerApi } from "../api";
 import { centerOf, isEquipmentPoint, zoneTier, ZONE_WORDS } from "../map/layers";
-import { formatCurrent, formatValue, locationWords, METHOD_WORDS, observationWord } from "../app/format";
+import { CHECK_WORDS, formatCurrent, formatValue, locationWords, METHOD_WORDS, observationWord } from "../app/format";
 import { googleEarthUrl, streetViewUrl } from "../app/siteLinks";
 import { GradeTag, ProvenanceTag, StateBadge } from "../ui/marks";
 import { ResolveControls } from "./ResolveControls";
@@ -63,7 +63,6 @@ const attributeWords = (name: string) => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-// Facts about the one item selected on the map, such as a wetland's type or a zone's rules.
 function FeatureFacts({ feature }: { feature: MapFeature }) {
   const [longitude, latitude] = centerOf(feature);
   const position: [number, number] = [longitude, latitude];
@@ -99,8 +98,6 @@ function FeatureFacts({ feature }: { feature: MapFeature }) {
   );
 }
 
-const CHECK_WORDS = { agrees: "Agrees", disagrees: "Disagrees", not_checked: "Not checked" } as const;
-
 function ValueEvidence(props: EvidencePanelProps & { value: Value }) {
   const { api, record, report, value, actorName, onActorName, onRecord } = props;
   const onMap = record.features.some((f) => f.field === value.field);
@@ -129,7 +126,7 @@ function ValueEvidence(props: EvidencePanelProps & { value: Value }) {
         <ul className="cross-checks" aria-label="Cross-checks">
           {value.crossChecks.map((check) => (
             <li key={check.label} className={`check-${check.result}`}>
-              <strong>{CHECK_WORDS[check.result]}:</strong> {check.label}
+              <strong className="check-word">{CHECK_WORDS[check.result]}:</strong> {check.label}
               {check.detail ? `. ${check.detail}` : ""}
             </li>
           ))}

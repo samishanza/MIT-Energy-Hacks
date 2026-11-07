@@ -153,7 +153,6 @@ function nextReport(record: RecordVersion, previous: ReadinessReport): Readiness
   });
 }
 
-// Draws the parcel first, then buildings, then everything else, as a real run lands.
 function progressAt(record: RecordVersion, fraction: number): RunProgress {
   const order = (kind: string) => (kind === "property_line" ? 0 : kind === "building_outline" ? 0.3 : 0.6);
   const answered = Math.floor(record.sourceRuns.length * fraction);
@@ -250,7 +249,6 @@ export function createMockApi({ runMs = RUN_MS }: { runMs?: number } = {}): Engi
       if (runStarted === null) return null;
       return progressAt(record, Math.min(1, (Date.now() - runStarted) / runMs));
     },
-    // The backend doesn't export files yet, so this answers as its 404 would.
     async exportFile() {
       return null;
     },

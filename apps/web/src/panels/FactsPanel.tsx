@@ -1,7 +1,7 @@
 import type { RecordVersion, Value } from "@eqore/contract";
 import { useState } from "react";
 import { currentObservation, FAMILY_WORDS, familyOf, isFound, notPublicCounts, PUBLIC_FAMILIES } from "../app/facts";
-import { formatCurrent, GRADE_WORDS, METHOD_WORDS, STATE_WORDS } from "../app/format";
+import { CHECK_WORDS, formatCurrent, GRADE_WORDS, METHOD_WORDS, STATE_WORDS } from "../app/format";
 import { ProvenanceTag } from "../ui/marks";
 
 export interface FactsPanelProps {
@@ -10,8 +10,6 @@ export interface FactsPanelProps {
   onSelect: (field: string) => void;
   onOpenReport: () => void;
 }
-
-const CHECK_WORDS = { agrees: "agrees", disagrees: "disagrees", not_checked: "not checked" } as const;
 
 function FactRow({ record, value, selected, onSelect }: { record: RecordVersion; value: Value; selected: boolean; onSelect: () => void }) {
   const observation = currentObservation(record, value);
@@ -40,7 +38,6 @@ function FactRow({ record, value, selected, onSelect }: { record: RecordVersion;
   );
 }
 
-// Public facts only, grouped by family. Facts that aren't public collapse into one line that opens on request.
 export function FactsPanel({ record, selectedFields, onSelect, onOpenReport }: FactsPanelProps) {
   const [explained, setExplained] = useState(false);
   const notPublic = notPublicCounts(record);

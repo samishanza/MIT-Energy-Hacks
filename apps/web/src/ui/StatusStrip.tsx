@@ -5,20 +5,19 @@ import { ProvenanceTag } from "./marks";
 export interface StatusStripProps {
   record: RecordVersion | null;
   report: ReadinessReport | null;
-  // Set while a run is going, so the strip reports sources answered instead of what was found.
   progress: RunProgress | null;
   running: boolean;
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const counted = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function summary(record: RecordVersion): string {
   const conflicts = conflictCounts(record);
   const parts = [`${factsFound(record)} public facts found`];
   if (record.coverage) parts.push(`${record.coverage.filled} of ${record.coverage.total} plan-set fields`);
-  parts.push(plural(conflicts.source, "source conflict", "source conflicts"));
-  if (conflicts.feeder > 0) parts.push(plural(conflicts.feeder, "field with feeder candidates", "fields with feeder candidates"));
-  if (conflicts.listed > 0) parts.push(plural(conflicts.listed, "field with candidates, not settled", "fields with candidates, not settled"));
+  parts.push(counted(conflicts.source, "source conflict", "source conflicts"));
+  if (conflicts.feeder > 0) parts.push(counted(conflicts.feeder, "field with feeder candidates", "fields with feeder candidates"));
+  if (conflicts.listed > 0) parts.push(counted(conflicts.listed, "field with candidates, not settled", "fields with candidates, not settled"));
   return parts.join(", ");
 }
 
@@ -26,10 +25,9 @@ function unverified(record: RecordVersion): string {
   const verified = verifiedCount(record);
   return verified === 0
     ? "Unverified: no person has checked these values."
-    : `${plural(verified, "value", "values")} verified by a person. Everything else is unverified.`;
+    : `${counted(verified, "value", "values")} verified by a person. Everything else is unverified.`;
 }
 
-// One strip in a fixed order, visible with every panel closed.
 export function StatusStrip({ record, report, progress, running }: StatusStripProps) {
   const hasReal = record ? record.values.some((value) => !value.synthetic && isFound(value)) : false;
   const answered = progress?.sourceRuns.filter((run) => run.status !== "pending").length ?? 0;

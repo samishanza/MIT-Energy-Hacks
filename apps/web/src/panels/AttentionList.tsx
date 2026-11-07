@@ -1,5 +1,5 @@
 import type { RecordVersion } from "@eqore/contract";
-import { attentionItems } from "../app/facts";
+import { attentionItems, type AttentionItem } from "../app/facts";
 
 export interface AttentionListProps {
   record: RecordVersion;
@@ -7,9 +7,53 @@ export interface AttentionListProps {
   onSelect: (field: string) => void;
 }
 
+function Summary({ item }: { item: AttentionItem }) {
+  return (
+    <>
+      <strong>{item.title}</strong>
+      <span>{item.reason}</span>
+    </>
+  );
+}
+
 export function AttentionList({ record, selectedFields, onSelect }: AttentionListProps) {
   const items = attentionItems(record);
   const labelOf = (field: string) => record.values.find((value) => value.field === field)?.label ?? field;
+
+  const body = (item: AttentionItem) => {
+    if (item.field) {
+      const field = item.field;
+      return (
+        <button type="button" className={selectedFields.includes(field) ? "is-selected" : ""} onClick={() => onSelect(field)}>
+          <Summary item={item} />
+        </button>
+      );
+    }
+    if (item.fields) {
+      return (
+        <details>
+          <summary>
+            <Summary item={item} />
+          </summary>
+          <ul className="attention-fields">
+            {item.fields.map((field) => (
+              <li key={field}>
+                <button type="button" onClick={() => onSelect(field)}>
+                  {labelOf(field)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      );
+    }
+    return (
+      <p>
+        <Summary item={item} />
+      </p>
+    );
+  };
+
   return (
     <section className="attention" aria-label="Needs your attention">
       <h2>Needs your attention</h2>
@@ -17,37 +61,7 @@ export function AttentionList({ record, selectedFields, onSelect }: AttentionLis
       <ul>
         {items.map((item) => (
           <li key={item.id} className={`attention-item attention-${item.kind}`}>
-            {item.field ? (
-              <button
-                type="button"
-                className={selectedFields.includes(item.field) ? "is-selected" : ""}
-                onClick={() => onSelect(item.field!)}
-              >
-                <strong>{item.title}</strong>
-                <span>{item.reason}</span>
-              </button>
-            ) : item.fields ? (
-              <details>
-                <summary>
-                  <strong>{item.title}</strong>
-                  <span>{item.reason}</span>
-                </summary>
-                <ul className="attention-fields">
-                  {item.fields.map((field) => (
-                    <li key={field}>
-                      <button type="button" onClick={() => onSelect(field)}>
-                        {labelOf(field)}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            ) : (
-              <p>
-                <strong>{item.title}</strong>
-                <span>{item.reason}</span>
-              </p>
-            )}
+            {body(item)}
           </li>
         ))}
       </ul>

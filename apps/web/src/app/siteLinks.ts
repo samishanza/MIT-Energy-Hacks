@@ -1,4 +1,3 @@
-// Plain links to Google's own pages, so they need no key and nothing is copied into the app.
 type Position = [number, number];
 
 const fixed = (n: number) => n.toFixed(6);

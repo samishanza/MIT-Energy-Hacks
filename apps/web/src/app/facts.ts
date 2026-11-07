@@ -33,7 +33,6 @@ export const isPublicFact = (value: Value) => (PUBLIC_FAMILIES as readonly Famil
 
 export const isFound = (value: Value) => value.state !== "missing";
 
-// The reading a value rests on now, which is what its source and date describe.
 export function currentObservation(record: RecordVersion, value: Value): Observation | undefined {
   const id = value.currentObservationId ?? value.observationIds.at(-1);
   return record.observations.find((observation) => observation.id === id);
@@ -123,7 +122,6 @@ export function attentionItems(record: RecordVersion): AttentionItem[] {
   return items;
 }
 
-// What public data covers on the utility's application, counting form rows and drawing inputs apart.
 export function gridRequestLine(report: ReadinessReport | null): string | null {
   if (!report) return null;
   if (!report.requirementsTable) return `Grid connection request: no requirements table applies. ${report.noTableReason ?? ""}`.trim();
