@@ -4,7 +4,6 @@ import { ProvenanceTag } from "./marks";
 
 export interface StatusStripProps {
   record: RecordVersion | null;
-  report: ReadinessReport | null;
   progress: RunProgress | null;
   running: boolean;
 }
@@ -28,24 +27,19 @@ function unverified(record: RecordVersion): string {
     : `${counted(verified, "value", "values")} verified by a person. Everything else is unverified.`;
 }
 
-export function StatusStrip({ record, report, progress, running }: StatusStripProps) {
+/** One line: what this is, what the data is, and progress while a run is reading sources. */
+export function StatusStrip({ record, progress, running }: StatusStripProps) {
   const hasReal = record ? record.values.some((value) => !value.synthetic && isFound(value)) : false;
   const answered = progress?.sourceRuns.filter((run) => run.status !== "pending").length ?? 0;
-  const grid = record ? gridRequestLine(report) : null;
   return (
     <section className="status-strip" aria-label="Site status">
       <p className="concept-note">{CONCEPT_GRADE_NOTE} Based on public data.</p>
       {record && !running ? (
-        <>
-          <p className="labels">
-            {hasReal ? <ProvenanceTag synthetic={false} /> : null}
-            {record.synthetic ? <ProvenanceTag synthetic /> : null}
-            {record.snapshot ? <span className="tag">Recorded snapshot</span> : null}
-          </p>
-          <p className="unverified">{unverified(record)}</p>
-          <p className="summary">{summary(record)}</p>
-          {grid ? <p className="grid-line">{grid}</p> : <p className="grid-line note">Grid connection request check unavailable.</p>}
-        </>
+        <p className="labels">
+          {hasReal ? <ProvenanceTag synthetic={false} /> : null}
+          {record.synthetic ? <ProvenanceTag synthetic /> : null}
+          {record.snapshot ? <span className="tag">Recorded snapshot</span> : null}
+        </p>
       ) : null}
       {running ? (
         <p className="summary" role="status">
@@ -55,5 +49,19 @@ export function StatusStrip({ record, report, progress, running }: StatusStripPr
         </p>
       ) : null}
     </section>
+  );
+}
+
+/** The record's counts, at the top of the facts menu rather than always on screen. */
+export function RecordSummary({ record, report }: { record: RecordVersion; report: ReadinessReport | null }) {
+  const grid = gridRequestLine(report);
+  return (
+    <div className="record-summary">
+      <p className="summary">
+        Record v{record.version}. {summary(record)}.
+      </p>
+      <p className="unverified">{unverified(record)}</p>
+      <p className="grid-line">{grid ?? "Grid connection request check unavailable."}</p>
+    </div>
   );
 }
