@@ -1,5 +1,6 @@
 import type { Observation, ReadinessReport, RecordVersion, Value } from "@eqore/contract";
 import type { EngineerApi } from "../api";
+import { isEquipmentPoint } from "../map/layers";
 import { formatCurrent, formatValue, locationWords, METHOD_WORDS, observationWord } from "../app/format";
 import { GradeTag, ProvenanceTag, StateBadge } from "../ui/marks";
 import { ResolveControls } from "./ResolveControls";
@@ -44,9 +45,7 @@ function HistoryRow({ observation, api, value }: { observation: Observation; api
 }
 
 function positionWords(record: RecordVersion, field: string): string | null {
-  const point = record.features.find(
-    (f) => f.field === field && (f.kind === "existing_equipment" || f.kind === "capture_pin"),
-  );
+  const point = record.features.find((f) => f.field === field && isEquipmentPoint(f));
   if (!point) return null;
   return point.placedByHand ? "Position: placed by hand" : "Position: phone GPS";
 }

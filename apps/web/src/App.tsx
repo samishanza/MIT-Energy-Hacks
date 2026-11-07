@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import type { EngineerApi, RunSiteRequest, RunSiteResponse } from "./api";
 import { SOURCE_RUN_WORDS } from "./app/format";
 import { isLinkOpen, trackLink, type TrackedLink } from "./app/links";
+import { isEquipmentPoint } from "./map/layers";
 import { SiteMap } from "./map/SiteMap";
 import { ConfirmPanel } from "./panels/ConfirmPanel";
 import { EvidencePanel } from "./panels/EvidencePanel";
@@ -88,11 +89,11 @@ export function App({ api }: { api: EngineerApi }) {
       const nextReport = await api.readReadiness(next.site.id, next.version);
       setRecord(next);
       setReport(nextReport);
+      return nextReport;
     },
     [api],
   );
 
-  // A capture creates a new version, so asking for the latest one is enough to notice it.
   const hasOpenLink = record ? links.some((tracked) => isLinkOpen(tracked, record)) : false;
   const siteId = record?.site.id;
   useEffect(() => {
@@ -121,12 +122,10 @@ export function App({ api }: { api: EngineerApi }) {
     return () => clearInterval(timer);
   }, [api, hasOpenLink, siteId, show]);
 
-  // Shows a person's action on screen as a before and after, measured from this run's own records.
   async function afterAction(next: RecordVersion) {
     const before = current.current;
-    await show(next);
+    const nextReport = await show(next);
     if (!before.record) return;
-    const nextReport = await api.readReadiness(next.site.id, next.version);
     const share = (report: ReadinessReport | null) => report?.share?.formRows;
     const was = share(before.report);
     const now = share(nextReport);
@@ -344,10 +343,7 @@ export function App({ api }: { api: EngineerApi }) {
           actorName={actorName}
           onActorName={updateActor}
           onRecord={(next) => {
-            const hasPoint = next.features.some(
-              (f) => f.field === confirmField && (f.kind === "existing_equipment" || f.kind === "capture_pin"),
-            );
-            // With no position yet, go straight to placing it, so the label can appear.
+            const hasPoint = next.features.some((f) => f.field === confirmField && isEquipmentPoint(f));
             if (hasPoint) setFocusField(confirmField);
             else setPlacingField(confirmField);
             setConfirmField(null);

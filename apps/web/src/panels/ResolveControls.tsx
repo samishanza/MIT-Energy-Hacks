@@ -10,7 +10,6 @@ export interface ResolveControlsProps {
   actorName: string;
   onActorName: (name: string) => void;
   onRecord: (record: RecordVersion) => void;
-  // Evidence already in front of the person, such as the draft beside its photo.
   preselectedEvidence?: string[];
   disabled?: boolean;
 }

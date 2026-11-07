@@ -7,6 +7,7 @@ import {
   type MapFeature,
   type Observation,
   type ObservedValue,
+  type ReadinessItem,
   type ReadinessReport,
   type RecordVersion,
   type Value,
@@ -15,10 +16,9 @@ import readinessSample from "@eqore/contract/samples/readiness.sample.json";
 import recordSample from "@eqore/contract/samples/record.sample.json";
 import { ApiRequestError, type Actor, type EngineerApi } from "./api";
 import { formatValue } from "./app/format";
+import { isEquipmentPoint } from "./map/layers";
 
-// A synthetic stand-in for the engineer API, built from the contract's sample payloads.
-// It runs in the browser, so the UI can be walked before the real API exists.
-// It follows the API's rejection rules, and everything it returns is marked synthetic.
+// A synthetic stand-in for the engineer API, so the UI can be walked before the real API exists.
 
 const SAMPLE_PHOTO = `data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640"><rect width="960" height="640" fill="#4a5157"/><rect x="120" y="80" width="720" height="480" fill="#d8d6ce"/><text x="480" y="170" font-family="sans-serif" font-size="30" text-anchor="middle" fill="#b3261e">SYNTHETIC SAMPLE PHOTO</text><text x="480" y="300" font-family="monospace" font-size="56" text-anchor="middle">800 A 480Y/277 V</text></svg>`,
@@ -39,9 +39,14 @@ function requireActor(actor: Actor) {
   }
 }
 
-function hasEvidence(value: Value | undefined, minState: string) {
+function hasEvidence(value: Value | undefined, minState: ReadinessItem["minState"]) {
   return value?.state === "verified" || (minState !== "verified" && value?.state === minState);
 }
+
+const tally = (rows: ReadinessItem[]) => ({
+  withEvidence: rows.filter((i) => i.status === "has_evidence").length,
+  total: rows.length,
+});
 
 function nextReport(record: RecordVersion, previous: ReadinessReport): ReadinessReport {
   const valueOf = (field: string) => record.values.find((v) => v.field === field);
@@ -57,21 +62,12 @@ function nextReport(record: RecordVersion, previous: ReadinessReport): Readiness
   });
   const withInputs = items.map((item) => {
     if (!item.inputsWithEvidence) return item;
-    const inputs = items.filter((i) => i.parentItemId === item.id);
-    return {
-      ...item,
-      inputsWithEvidence: { have: inputs.filter((i) => i.status === "has_evidence").length, total: inputs.length },
-    };
+    const { withEvidence, total } = tally(items.filter((i) => i.parentItemId === item.id));
+    return { ...item, inputsWithEvidence: { have: withEvidence, total } };
   });
-  const count = (rowKind: "form" | "input") => {
-    const rows = withInputs.filter((i) => i.rowKind === rowKind);
-    return { withEvidence: rows.filter((i) => i.status === "has_evidence").length, total: rows.length };
-  };
+  const count = (rowKind: "form" | "input") => tally(withInputs.filter((i) => i.rowKind === rowKind));
   const byOwner = Object.fromEntries(
-    [...new Set(withInputs.map((i) => i.owner))].map((owner) => {
-      const rows = withInputs.filter((i) => i.owner === owner);
-      return [owner, { withEvidence: rows.filter((i) => i.status === "has_evidence").length, total: rows.length }];
-    }),
+    [...new Set(withInputs.map((i) => i.owner))].map((owner) => [owner, tally(withInputs.filter((i) => i.owner === owner))]),
   );
   return ReadinessReportSchema.parse({
     ...previous,
@@ -196,9 +192,7 @@ export function createMockApi(): EngineerApi {
       if (!value) throw new ApiRequestError("not_found", "That value no longer exists.");
       return commit("human_action", (next) => {
         const coordinates: [number, number] = [request.longitude, request.latitude];
-        const existing = next.features.find(
-          (f) => f.field === request.field && (f.kind === "existing_equipment" || f.kind === "capture_pin"),
-        );
+        const existing = next.features.find((f) => f.field === request.field && isEquipmentPoint(f));
         const feature: MapFeature = existing ?? {
           id: `f-${request.field}`,
           kind: value.state === "verified" ? "existing_equipment" : "capture_pin",

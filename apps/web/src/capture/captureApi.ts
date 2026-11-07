@@ -1,5 +1,4 @@
 import {
-  ApiErrorSchema,
   CaptureRequestSchema,
   CaptureResultSchema,
   routes,
@@ -7,50 +6,33 @@ import {
   type CaptureRequest,
   type CaptureResult,
 } from "@eqore/contract";
+import { ApiRequestError, send, uploadForm, type SendWording } from "../app/http";
 
-export class CaptureApiError extends Error {
-  readonly code: string;
-
-  constructor(code: string, message: string) {
-    super(message);
-    this.code = code;
-  }
-}
+export { ApiRequestError as CaptureApiError };
 
 export interface CaptureApi {
   read(token: string): Promise<CaptureRequest>;
   submit(token: string, file: File, metadata: CaptureMetadata): Promise<CaptureResult>;
 }
 
-const tokenPath = (path: string, token: string) => path.replace(":token", encodeURIComponent(token));
+const WORDING: SendWording = { unreachable: "No connection.", unknownCode: "network", serverName: "server" };
 
-async function send<T>(schema: { parse(data: unknown): T }, path: string, init: RequestInit): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(path, init);
-  } catch {
-    throw new CaptureApiError("network", "No connection.");
-  }
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = ApiErrorSchema.safeParse(body);
-    throw error.success
-      ? new CaptureApiError(error.data.code, error.data.message)
-      : new CaptureApiError("network", `The server returned ${response.status}.`);
-  }
-  return schema.parse(body);
-}
+const tokenPath = (path: string, token: string) => path.replace(":token", encodeURIComponent(token));
 
 export const httpCaptureApi: CaptureApi = {
   // The page and this request share a path, so ask for JSON explicitly.
   read: (token) =>
-    send(CaptureRequestSchema, tokenPath(routes.readCaptureRequest.path, token), {
-      headers: { Accept: "application/json" },
-    }),
-  submit: (token, file, metadata) => {
-    const form = new FormData();
-    form.append("file", file);
-    for (const [name, value] of Object.entries(metadata)) form.append(name, String(value));
-    return send(CaptureResultSchema, tokenPath(routes.submitCapture.path, token), { method: "POST", body: form });
-  },
+    send(
+      CaptureRequestSchema,
+      tokenPath(routes.readCaptureRequest.path, token),
+      { headers: { Accept: "application/json" } },
+      WORDING,
+    ),
+  submit: (token, file, metadata) =>
+    send(
+      CaptureResultSchema,
+      tokenPath(routes.submitCapture.path, token),
+      { method: "POST", body: uploadForm(file, metadata) },
+      WORDING,
+    ),
 };

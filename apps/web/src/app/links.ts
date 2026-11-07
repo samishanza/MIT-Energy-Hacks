@@ -4,7 +4,6 @@ import { shortTime } from "./format";
 export interface TrackedLink {
   link: CaptureLink;
   createdAt: number;
-  // Observations that existed when the link was made, so an arrival can be told apart.
   baseline: string[];
 }
 

@@ -9,6 +9,9 @@ const SELECTION_COLOR = "#f05a00";
 
 export const isPoint = (feature: MapFeature) => feature.geometry.type === "Point";
 
+export const isEquipmentPoint = (feature: MapFeature) =>
+  feature.kind === "existing_equipment" || feature.kind === "capture_pin";
+
 export const pointFeatures = (features: MapFeature[]) => features.filter(isPoint);
 
 export function toFeatureCollection(features: MapFeature[]) {
@@ -38,7 +41,6 @@ export const BASE_LAYER: AddLayerObject = {
   id: "base",
   type: "raster",
   source: BASE_SOURCE,
-  // Faded toward the paper color, so the drawn lines stay legible on top.
   paint: { "raster-opacity": 0.72, "raster-saturation": -0.35 },
 };
 
@@ -87,5 +89,4 @@ export const FEATURE_LAYERS = [
   },
 ] as AddLayerObject[];
 
-// Narrow targets first, so a line on top of the parcel can still be picked.
 export const HIT_LAYERS = ["utility-line", "building-outline", "property-fill"];

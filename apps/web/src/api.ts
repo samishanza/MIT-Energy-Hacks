@@ -1,5 +1,4 @@
 import {
-  ApiErrorSchema,
   CaptureLinkSchema,
   CaptureResultSchema,
   ReadinessReportSchema,
@@ -16,6 +15,9 @@ import {
   type RecordVersion,
   type RunSiteRequestSchema,
 } from "@eqore/contract";
+import { ApiRequestError, send as sendWith, uploadForm } from "./app/http";
+
+export { ApiRequestError };
 
 export type RunSiteRequest = (typeof RunSiteRequestSchema)["_output"];
 export type RunSiteResponse = (typeof RunSiteResponseSchema)["_output"];
@@ -24,15 +26,6 @@ export type MovePinRequest = (typeof MovePinRequestSchema)["_output"];
 export interface Actor {
   verifierName: string;
   evidence: EvidenceRef[];
-}
-
-export class ApiRequestError extends Error {
-  readonly code: string;
-
-  constructor(code: string, message: string) {
-    super(message);
-    this.code = code;
-  }
 }
 
 export interface EngineerApi {
@@ -54,21 +47,8 @@ function fill(path: string, params: Record<string, string | number>): string {
   return path.replace(/:([A-Za-z]+)/g, (_, name: string) => encodeURIComponent(String(params[name])));
 }
 
-async function send<T>(schema: { parse(data: unknown): T }, path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(path, init);
-  } catch {
-    throw new ApiRequestError("network", "The API isn't reachable.");
-  }
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = ApiErrorSchema.safeParse(body);
-    if (error.success) throw new ApiRequestError(error.data.code, error.data.message);
-    throw new ApiRequestError("unknown", `The API returned ${response.status}.`);
-  }
-  return schema.parse(body);
-}
+const send = <T>(schema: { parse(data: unknown): T }, path: string, init?: RequestInit) =>
+  sendWith(schema, path, init, { unreachable: "The API isn't reachable.", unknownCode: "unknown", serverName: "API" });
 
 const postJson = (body: unknown): RequestInit => ({
   method: "POST",
@@ -91,15 +71,11 @@ export const httpApi: EngineerApi = {
   movePin: (siteId, request) => send(RecordVersionSchema, fill(routes.movePin.path, { siteId }), postJson(request)),
   createCaptureLink: (siteId, field) =>
     send(CaptureLinkSchema, fill(routes.createCaptureLink.path, { siteId }), postJson({ field })),
-  uploadEvidence: (siteId, field, file, metadata = {}) => {
-    const form = new FormData();
-    form.append("file", file);
-    for (const [name, value] of Object.entries(metadata)) form.append(name, String(value));
-    return send(CaptureResultSchema, fill(routes.uploadEvidence.path, { siteId, field }), {
+  uploadEvidence: (siteId, field, file, metadata = {}) =>
+    send(CaptureResultSchema, fill(routes.uploadEvidence.path, { siteId, field }), {
       method: "POST",
-      body: form,
-    });
-  },
+      body: uploadForm(file, metadata),
+    }),
   evidenceUrl: (evidenceFileId) => fill(routes.readEvidenceFile.path, { evidenceFileId }),
   evidenceKind: async (evidenceFileId) => {
     const url = fill(routes.readEvidenceFile.path, { evidenceFileId });

@@ -8,7 +8,6 @@ export interface AerialTile {
   top: number;
 }
 
-// The tiles that cover a small view centered on a point, without a map library on the phone.
 export function aerialTiles(base: BaseMap, center: [number, number], width: number, height: number): AerialTile[] {
   const zoom = Math.min(Math.round(base.zoom), base.maxZoom);
   const scale = TILE * 2 ** zoom;

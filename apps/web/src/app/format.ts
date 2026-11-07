@@ -14,7 +14,6 @@ export function formatValue(value: ObservedValue | null | undefined): string {
   }
 }
 
-// What to show where a value would be, which depends on why there isn't one.
 export function formatCurrent(value: Value): string {
   if (value.current) return formatValue(value.current);
   if (value.state === "conflicting") return "Not chosen yet";

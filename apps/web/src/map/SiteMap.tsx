@@ -7,6 +7,7 @@ import {
   FEATURE_LAYERS,
   FEATURE_SOURCE,
   HIT_LAYERS,
+  isEquipmentPoint,
   isPoint,
   pointFeatures,
   toFeatureCollection,
@@ -20,14 +21,13 @@ export interface SiteMapProps {
   dockOpen?: boolean;
   placingField?: string | null;
   onPlace?: (field: string, longitude: number, latitude: number) => void;
-  // A field to bring into view, such as a label that just appeared.
   focusField?: string | null;
 }
 
 const HIT_RADIUS = 6;
 
 function conceptNote(features: MapFeature[]) {
-  const usesPhotos = features.some((f) => f.kind === "capture_pin" || f.kind === "existing_equipment");
+  const usesPhotos = features.some(isEquipmentPoint);
   const basis = usesPhotos ? "public data and customer photos" : "public data";
   return `Concept-grade. Based on ${basis}. Not surveyed. Not a construction document.`;
 }
@@ -111,7 +111,6 @@ export function SiteMap(props: SiteMapProps) {
       instance.remove();
     };
     // One map per site. New versions of the same site update its source below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site.id]);
 
   // Feature state is lost when source data is replaced, so the selection is reapplied here too.
@@ -159,7 +158,7 @@ export function SiteMap(props: SiteMapProps) {
     if (point) map.current?.easeTo({ center: point.geometry.coordinates as [number, number], duration: 600 });
   }, [focusField, features, loaded]);
 
-  const noEquipment = !features.some((f) => f.kind === "existing_equipment" || f.kind === "capture_pin");
+  const noEquipment = !features.some(isEquipmentPoint);
 
   return (
     <div className={`map-frame${placingField ? " is-placing" : ""}`}>

@@ -2,6 +2,7 @@ import type { RecordVersion } from "@eqore/contract";
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import type { EngineerApi } from "../api";
 import { formatCurrent } from "../app/format";
+import { isEquipmentPoint } from "../map/layers";
 import { GradeTag, ProvenanceTag, StateBadge } from "../ui/marks";
 import { ResolveControls } from "./ResolveControls";
 
@@ -31,11 +32,8 @@ export function ConfirmPanel(props: ConfirmPanelProps) {
   const observations = record.observations.filter((o) => o.field === field);
   const latestId = observations.at(-1)?.id;
   const [reviewedId, setReviewedId] = useState(latestId);
-  // What the person is reading stays put until they choose to reload it.
-  const shown = observations.filter((o) => {
-    const reviewedAt = observations.findIndex((other) => other.id === reviewedId);
-    return reviewedAt < 0 || observations.indexOf(o) <= reviewedAt;
-  });
+  const reviewedAt = observations.findIndex((o) => o.id === reviewedId);
+  const shown = reviewedAt < 0 ? observations : observations.slice(0, reviewedAt + 1);
   const draft = shown.filter((o) => o.kind === "reading" && o.method === "model_draft").at(-1);
   const fileObservation = shown.filter((o) => o.locator.evidenceFileId).at(-1);
   const fileId = fileObservation?.locator.evidenceFileId;
@@ -77,9 +75,7 @@ export function ConfirmPanel(props: ConfirmPanelProps) {
     }
   }
 
-  const hasPosition = record.features.some(
-    (f) => f.field === field && (f.kind === "existing_equipment" || f.kind === "capture_pin"),
-  );
+  const hasPosition = record.features.some((f) => f.field === field && isEquipmentPoint(f));
   const waitingOnFile = Boolean(fileId) && fileState !== "loaded";
 
   return (
