@@ -36,6 +36,7 @@ export const SOURCE_PRECEDENCE: Record<SourceKind, number> = {
   parcel: 34,
   code_table: 33,
   tariff_db: 32,
+  gis_footprint: 31,
   hosting_map: 30,
   flood_map: 29,
   lidar_3dep: 28,

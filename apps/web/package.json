@@ -7,7 +7,8 @@
     "dev": "vite",
     "dev:mock": "vite --mode mock",
     "build": "vite build",
-    "build:capture": "vite build --config vite.capture.config.ts"
+    "build:capture": "vite build --config vite.capture.config.ts",
+    "build:mock": "vite build --mode mock"
   },
   "dependencies": {
     "@eqore/contract": "^0.1.0",

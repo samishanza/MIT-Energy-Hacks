@@ -37,6 +37,9 @@ const TO_CANONICAL: Record<string, { canonical: string; factor: number }> = {
   MPH: { canonical: 'mph', factor: 1 },
   'm/s': { canonical: 'mph', factor: 2.2369363 },
 
+  '%': { canonical: '%', factor: 1 },
+  percent: { canonical: '%', factor: 1 },
+  deg: { canonical: 'deg', factor: 1 },
   psf: { canonical: 'psf', factor: 1 },
   PSF: { canonical: 'psf', factor: 1 },
   kPa: { canonical: 'psf', factor: 20.885434 },

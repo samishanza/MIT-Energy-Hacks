@@ -32,16 +32,55 @@ export const imageryAgent: Agent = {
     const aerial = await ctx.sources.aerial(ctx.site);
 
     if (!aerial) {
-      e.miss(
-        'building.width_ft',
-        'building.depth_ft',
-        'building.offset_x_ft',
-        'building.offset_y_ft',
-        'pad_zone.width_ft',
-        'pad_zone.depth_ft',
-        'cable.route_length_ft',
-      );
-      e.note('no usable aerial tile or footprint for this parcel');
+      // No image to read. A GIS footprint layer can still give the extents — different
+      // evidence, different confidence, and no crop, because there is no picture.
+      e.tool('gis.building_structures', { address: ctx.site.address });
+      const fp = await ctx.sources.footprint?.(ctx.site);
+
+      if (fp) {
+        const b = fp.building;
+        const range = (v: number) => rangeFrom(v, fp.toleranceFt);
+        const why =
+          `Bounding box of the ${fp.label} polygon. Vector geometry at reference grade, ` +
+          `not measured off a photo and not a survey, so it is carried +/-${fp.toleranceFt} ft.`;
+        e.propose('building.offset_x_ft', b.offsetXFt, fp, 'gis_footprint', {
+          unit: 'ft', range: range(b.offsetXFt), confidence: 0.7, rationale: why,
+        });
+        e.propose('building.offset_y_ft', b.offsetYFt, fp, 'gis_footprint', {
+          unit: 'ft', range: range(b.offsetYFt), confidence: 0.7, rationale: why,
+        });
+        e.propose('building.width_ft', b.widthFt, fp, 'gis_footprint', {
+          unit: 'ft', range: range(b.widthFt), confidence: 0.75, rationale: why,
+        });
+        e.propose('building.depth_ft', b.depthFt, fp, 'gis_footprint', {
+          unit: 'ft', range: range(b.depthFt), confidence: 0.75, rationale: why,
+        });
+        if (fp.buildingAreaSqft) {
+          const measured = Math.round(b.widthFt * b.depthFt);
+          const published = fp.buildingAreaSqft;
+          const off = Math.abs(measured - published) / Math.max(published, 1);
+          if (off > 0.25) {
+            e.note(
+              `footprint bbox implies ~${measured} sqft but the layer publishes ${published} sqft ` +
+                `(${Math.round(off * 100)}% apart) — the building is not rectangular, or the layers disagree`,
+            );
+          }
+        }
+        // Everything below needs an image or a visit. None of it is in a vector layer.
+        e.miss('pad_zone.width_ft', 'pad_zone.depth_ft', 'cable.route_length_ft', 'site.surface_type');
+        e.note('no aerial image for this parcel; extents came from GIS vectors, pad zone and openings did not');
+      } else {
+        e.miss(
+          'building.width_ft',
+          'building.depth_ft',
+          'building.offset_x_ft',
+          'building.offset_y_ft',
+          'pad_zone.width_ft',
+          'pad_zone.depth_ft',
+          'cable.route_length_ft',
+        );
+        e.note('no usable aerial tile or footprint for this parcel');
+      }
     } else {
       const { crop, gsdFtPerPx: gsd } = aerial;
       const b = aerial.building;

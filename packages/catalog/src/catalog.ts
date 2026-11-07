@@ -379,6 +379,20 @@ export const FIELD_CATALOG: FieldSpec[] = [
     cheapestSource: T0('aerial'),
   },
   {
+    key: 'site.slope_percent',
+    label: 'Ground slope at the pad',
+    unit: '%',
+    bounds: { kind: 'number', min: 0, max: 60 },
+    neededBy: [SHEETS.SITE_PLAN, SHEETS.ELEVATION],
+    allowedAgents: ['imagery'],
+    cheapestSource: T0('lidar_3dep'),
+    fallback: T2('staff_laser'),
+    notes:
+      'Above roughly 2% a pad needs grading or a stepped foundation — real money and a real ' +
+      'schedule item. Nothing in the parcel or footprint layers hints at it, so it has to be ' +
+      'measured off a bare-earth DEM.',
+  },
+  {
     key: 'site.transformer_distance_ft',
     label: 'Distance from pad zone to utility transformer',
     unit: 'ft',

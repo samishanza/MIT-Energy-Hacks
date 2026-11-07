@@ -96,4 +96,6 @@ export async function runDiscovery(
 export * from "./sources/types";
 export * from "./sources/fixture";
 export * from "./sources/site-photos";
+export * from "./sources/live";
+export * from "./sources/slope";
 export * from "./base";

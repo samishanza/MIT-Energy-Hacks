@@ -14,6 +14,8 @@ export type SourceKind =
   | 'lidar_3dep'
   | 'street_level'
   | 'permit_record'
+  /** A vector footprint from a GIS layer. Geometry, not a picture, so no crop. */
+  | 'gis_footprint'
   | 'tariff_db'
   | 'hosting_map'
   | 'code_table'
@@ -49,6 +51,7 @@ export const SOURCE_TIER: Record<SourceKind, Tier> = {
   lidar_3dep: 0,
   street_level: 0,
   permit_record: 0,
+  gis_footprint: 0,
   tariff_db: 0,
   hosting_map: 0,
   code_table: 0,

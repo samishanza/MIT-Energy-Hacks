@@ -18,13 +18,15 @@ export type Wall = 'north' | 'south' | 'east' | 'west';
 
 export interface ParcelRecord extends SourceDoc {
   parcelId: string;
-  owner: string;
+  /** Absent from MassGIS L3: the standardized assessor join is a separate request. */
+  owner?: string;
   address: string;
   lotWidthFt: number;
   lotDepthFt: number;
   /** Parcel polygons are surveyed-ish but not survey grade; this drives the range. */
   toleranceFt: number;
-  zoningDistrict: string;
+  /** Absent from MassGIS L3. A use code is not a zoning district and must not stand in for one. */
+  zoningDistrict?: string;
   roadSide: Wall;
   floodZone?: string;
   /** Owner of the parcel across the nearest property line; named on a stamped site plan. */
@@ -32,7 +34,7 @@ export interface ParcelRecord extends SourceDoc {
 }
 
 export interface AssessorRecord extends SourceDoc {
-  owner: string;
+  owner?: string;
   yearBuilt: number;
   /** Assessor building area often disagrees with the measured footprint. That is signal. */
   buildingAreaSqft: number;
@@ -60,6 +62,29 @@ export interface AerialMeasurement extends SourceDoc {
   exposureFt: number;
   openings: AerialOpening[];
   existingPvKw?: number;
+}
+
+/**
+ * Building and lot extents taken from GIS vector layers rather than measured off a photo.
+ * Reference grade: good enough to lay out a pad, not a survey.
+ */
+export interface FootprintRecord extends SourceDoc {
+  /** Bounding box of the parcel polygon, in feet. */
+  lot: { widthFt: number; depthFt: number };
+  /** Building bbox in feet, offset from the parcel's north-west corner. */
+  building: { offsetXFt: number; offsetYFt: number; widthFt: number; depthFt: number };
+  /** How far off these can be, from the source layer's own accuracy statement. */
+  toleranceFt: number;
+  /** Published area, when the layer carries one. Cross-checks the measured bbox. */
+  buildingAreaSqft?: number;
+  /**
+   * Every other structure on the parcel, largest first, as bboxes in the same frame.
+   *
+   * A commercial parcel routinely carries sheds, canopies and outbuildings alongside the
+   * main plant. Clearances are measured to all of them, and a pad zone has to keep out
+   * of all of them, so dropping them would understate the keep-out and overstate the yard.
+   */
+  otherBuildings: { offsetXFt: number; offsetYFt: number; widthFt: number; depthFt: number }[];
 }
 
 export interface ElevationSample extends SourceDoc {
@@ -176,6 +201,8 @@ export interface SourceClient {
   elevation(site: SiteInput): Promise<ElevationSample | null>;
   streetLevel(site: SiteInput): Promise<StreetLevelObservation | null>;
   hydrants(site: SiteInput): Promise<HydrantRecord | null>;
+  /** Vector extents, where an aerial image read is unavailable. */
+  footprint?(site: SiteInput): Promise<FootprintRecord | null>;
   permitRecords(site: SiteInput): Promise<PermitRecord[]>;
   codeTable(site: SiteInput): Promise<CodeProfile | null>;
   tariff(site: SiteInput): Promise<TariffRecord | null>;
