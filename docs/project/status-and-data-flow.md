@@ -45,7 +45,7 @@ These are REST API calls to public map services, with no web scraping. An addres
 - **Utilities:** the service territory layer names a utility everywhere it has an answer. Territories overlap, so several are candidates until a utility's own map returns a feeder, or the bill names one.
 - **Grid data:** this comes only from National Grid. Eversource's map isn't read, because its terms bar reuse without written permission (D18), so Eversource sites get the utility's name and a person route. Municipal utilities, such as Holyoke and Hudson, have none.
 - **Downtown Worcester:** no feeder is mapped within 30 m of 455 Main St. The search now widens to 150 m and says so on the value. A feeder that far off doesn't settle the utility, so National Grid and Unitil stay candidates there.
-- **Run time:** the first three addresses took 150 to 210 s while the parcel service was cold. The 90-second deadline starts after the parcel resolves, so a cold parcel lookup isn't capped.
+- **Run time:** a third run on 2026-11-07, after U16 added nine National Grid queries a site and U29 added cross-checks, gave the same counts. Per address it took 6 to 39 s (median 13 s), three addresses at a time. An earlier run saw 150 to 210 s while the parcel service was cold, so the parcel lookup now has its own 100-second limit and falls back to the geocoded point.
 
 ## What happens after collection
 
