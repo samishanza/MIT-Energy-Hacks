@@ -3,6 +3,7 @@ import { ENGINEER_PORT, WEB_PORT, routes } from "@eqore/contract";
 import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps } from "./capture.ts";
 import { checkReadiness } from "./readiness.ts";
 import { toSiteMap } from "./site-map.ts";
+import { toDxf, toKml } from "./export-files.ts";
 import { ApiFailure, runProgressKey, confirmValue, correctValue, movePin, resolveConflict, runSite } from "./run.ts";
 
 async function jsonBody(request: Request): Promise<unknown> {
@@ -65,6 +66,17 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
   app.get(routes.readReadiness.path, (c) => c.json(checkReadiness(requestedVersion(c.req.param("siteId")!, c.req.param("version")!))));
 
   app.get(routes.readSiteMap.path, (c) => c.json(toSiteMap(requestedVersion(c.req.param("siteId")!, c.req.param("version")!), deps.now())));
+
+  const download = (text: string, type: string, name: string) =>
+    new Response(text, { headers: { "content-type": type, "content-disposition": `attachment; filename="${name}"` } });
+  app.get(routes.exportDxf.path, (c) => {
+    const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
+    return download(toDxf(record, deps.now()), "application/dxf", `${record.site.id}-v${record.version}.dxf`);
+  });
+  app.get(routes.exportKml.path, (c) => {
+    const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
+    return download(toKml(record, deps.now()), "application/vnd.google-earth.kml+xml", `${record.site.id}-v${record.version}.kml`);
+  });
 
   app.post(routes.confirmValue.path, async (c) =>
     c.json(confirmValue(deps, c.req.param("siteId")!, c.req.param("field")!, await jsonBody(c.req.raw))),
