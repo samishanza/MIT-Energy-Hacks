@@ -36,6 +36,8 @@ export interface SiteMapProps {
   onPlace?: (field: string, longitude: number, latitude: number) => void;
   onCancelPlace?: () => void;
   focusField?: string | null;
+  /** Drafting-style callout per feature id, as the site plan writes them. */
+  featureLabels?: Record<string, string>;
 }
 
 const HIT_RADIUS = 6;
@@ -70,6 +72,7 @@ export function SiteMap(props: SiteMapProps) {
     onPlace,
     onCancelPlace,
     focusField = null,
+    featureLabels,
   } = props;
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibre | null>(null);
@@ -205,12 +208,15 @@ export function SiteMap(props: SiteMapProps) {
       ...visible
         .filter((feature) => feature.kind === "dimension_line" && feature.label)
         .map((feature) => mark(feature, feature.label!, "callout callout-dimension", centerOf(feature))),
+      ...visible
+        .filter((feature) => !isPoint(feature) && featureLabels?.[feature.id])
+        .map((feature) => mark(feature, featureLabels![feature.id]!, `callout callout-drafting callout-${layerOf(feature)}`, centerOf(feature))),
     ];
     return () => {
       for (const marker of markers) marker.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, selectedFields, selectedFeatureId, loaded]);
+  }, [visible, selectedFields, selectedFeatureId, loaded, featureLabels]);
 
   const toggled3D = useRef(false);
   useEffect(() => {

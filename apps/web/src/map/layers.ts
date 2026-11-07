@@ -228,7 +228,7 @@ export const FEATURE_LAYERS = [
     type: "line",
     source: FEATURE_SOURCE,
     filter: onLayer("roads"),
-    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#6f767b"], "line-width": 5, "line-opacity": 0.8 },
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#ffffff"], "line-width": 2, "line-opacity": 0.9, "line-dasharray": [6, 1.5, 1.5, 1.5] },
   },
   {
     id: "constraint-fill",
@@ -277,7 +277,7 @@ export const FEATURE_LAYERS = [
     type: "line",
     source: FEATURE_SOURCE,
     filter: onLayer("lot"),
-    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#1c2326"], "line-width": 2, "line-dasharray": [6, 2] },
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#1c2326"], "line-width": 2.5, "line-dasharray": [8, 1.5, 1.5, 1.5, 1.5, 1.5] },
   },
   {
     id: "building-fill",
@@ -310,7 +310,7 @@ export const FEATURE_LAYERS = [
     type: "line",
     source: FEATURE_SOURCE,
     filter: onLayer("utility"),
-    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#6a3fc2"], "line-width": ["case", selected, 4, 2.5] },
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#b5121b"], "line-width": ["case", selected, 4, 2.5] },
   },
   {
     id: "dimension-line",

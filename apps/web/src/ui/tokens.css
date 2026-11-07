@@ -12,7 +12,7 @@
   --unreadable: #8a5a00;
   --inferred: #1f5fa8;
   --verified: #1e7a46;
-  --utility: #6a3fc2;
+  --utility: #b5121b;
   --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --mono: Consolas, "SF Mono", ui-monospace, Menlo, monospace;
   color-scheme: light;
@@ -1394,4 +1394,32 @@ legend {
     width: auto;
     max-height: 60vh;
   }
+}
+
+/* Drafting-style callouts on the map, worded as the site plan words them. */
+.callout-drafting {
+  border: 1px solid var(--ink);
+  background: rgb(255 255 255 / 92%);
+  font: 600 10.5px/1.25 Arial, Helvetica, sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.callout-drafting.callout-utility {
+  border-color: #b5121b;
+  color: #b5121b;
+}
+
+.callout-drafting.callout-wetlands {
+  border-color: #1f5f86;
+  color: #1f5f86;
+}
+
+.callout-drafting.callout-roads {
+  border: 0;
+  background: transparent;
+  color: var(--white);
+  text-shadow: 0 0 3px #000, 0 0 2px #000;
+  letter-spacing: 0.12em;
 }

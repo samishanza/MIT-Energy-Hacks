@@ -1,13 +1,12 @@
 import type { ReadinessReport, RecordVersion, RunProgress } from "@eqore/contract";
-import { useCallback, useRef, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
 import type { EngineerApi, ExportFormat, RunSiteRequest, RunSiteResponse } from "./api";
 import { attentionItems, factsFound } from "./app/facts";
 import { SiteMap } from "./map/SiteMap";
 import { AttentionList } from "./panels/AttentionList";
 import { EvidencePanel } from "./panels/EvidencePanel";
 import { FactsPanel } from "./panels/FactsPanel";
-import { SitePlanSheet } from "@eqore/sheets";
-import { assessRecord, blockingFactOf } from "@eqore/drc";
+import { EngineeringSitePlan, featureLabels } from "@eqore/sheets";
 import { Menu } from "./ui/Menu";
 import { RecordSummary, StatusStrip } from "./ui/StatusStrip";
 
@@ -105,7 +104,6 @@ export function App({ api }: { api: EngineerApi }) {
   // The map answers "where is it"; the sheet answers "what can we build". Different
   // instruments, so they get their own view rather than layers on one canvas.
   const [view, setView] = useState<"map" | "sheet">("map");
-  const [selectedPad, setSelectedPad] = useState(0);
   const [change, setChange] = useState<string | null>(null);
   const [exportNote, setExportNote] = useState<string | null>(null);
   const current = useRef<{ record: RecordVersion | null; report: ReadinessReport | null }>({ record, report });
@@ -238,6 +236,7 @@ export function App({ api }: { api: EngineerApi }) {
   const live = running && progress?.site ? progress : null;
   const mapSite = live?.site ?? record?.site;
   const dockOpen = !live && selected.fields.length > 0;
+  const labels = useMemo(() => (record && !live ? featureLabels(record) : undefined), [record, live]);
   const pick = (close: () => void) => (field: string) => {
     select(field);
     close();
@@ -363,7 +362,7 @@ export function App({ api }: { api: EngineerApi }) {
               </button>
             </div>
             {view === "sheet" && record && !live ? (
-              <SitePlanSheet record={record} selectedPad={selectedPad} onSelectPad={setSelectedPad} blocking={blockingFactOf(assessRecord(record))} />
+              <EngineeringSitePlan record={record} />
             ) : (
               <SiteMap
                 key={mapSite.id}
@@ -380,6 +379,7 @@ export function App({ api }: { api: EngineerApi }) {
                 onPlace={(field, longitude, latitude) => void place(field, longitude, latitude)}
                 onCancelPlace={() => setPlacingField(null)}
                 focusField={focusField}
+                featureLabels={labels}
               />
             )}
             {dockOpen && record ? (
