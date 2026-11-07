@@ -52,12 +52,13 @@ describe('live Massachusetts sources, against recorded real responses', () => {
     expect(parcel!.lotDepthFt).toBeGreaterThan(50);
   });
 
-  it('refuses to supply an owner or a zoning district, because MassGIS L3 has neither', async () => {
+  it('refuses to supply an owner, and passes the collector\'s zoning district and road side', async () => {
     const { site, sources } = await makeLiveSources({ address: HOLLISTON, fetch: recorded, now });
     const parcel = await sources.parcel(site);
     expect(parcel!.owner).toBeUndefined();
-    // A use code is not a zoning district, and must not be passed off as one.
-    expect(parcel!.zoningDistrict).toBeUndefined();
+    expect(parcel!.zoningDistrict).toBe('I');
+    // West, from the mapped road. It was once fixed at south whatever the site.
+    expect(parcel!.roadSide).toBe('west');
   });
 
   it('returns vector extents rather than pretending to read an aerial photo', async () => {

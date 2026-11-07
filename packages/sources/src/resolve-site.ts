@@ -38,17 +38,55 @@ const STREET_WORDS: Record<string, string> = {
   TERRACE: "TER",
 };
 
-export type ParsedAddress = { street: string; city: string };
+const STATE_NAMES: Record<string, string> = {
+  ALABAMA: "AL", ALASKA: "AK", ARIZONA: "AZ", ARKANSAS: "AR", CALIFORNIA: "CA", COLORADO: "CO", CONNECTICUT: "CT", DELAWARE: "DE",
+  FLORIDA: "FL", GEORGIA: "GA", HAWAII: "HI", IDAHO: "ID", ILLINOIS: "IL", INDIANA: "IN", IOWA: "IA", KANSAS: "KS", KENTUCKY: "KY",
+  LOUISIANA: "LA", MAINE: "ME", MARYLAND: "MD", MASSACHUSETTS: "MA", MICHIGAN: "MI", MINNESOTA: "MN", MISSISSIPPI: "MS", MISSOURI: "MO",
+  MONTANA: "MT", NEBRASKA: "NE", NEVADA: "NV", "NEW HAMPSHIRE": "NH", "NEW JERSEY": "NJ", "NEW MEXICO": "NM", "NEW YORK": "NY",
+  "NORTH CAROLINA": "NC", "NORTH DAKOTA": "ND", OHIO: "OH", OKLAHOMA: "OK", OREGON: "OR", PENNSYLVANIA: "PA", "RHODE ISLAND": "RI",
+  "SOUTH CAROLINA": "SC", "SOUTH DAKOTA": "SD", TENNESSEE: "TN", TEXAS: "TX", UTAH: "UT", VERMONT: "VT", VIRGINIA: "VA", WASHINGTON: "WA",
+  "WEST VIRGINIA": "WV", WISCONSIN: "WI", WYOMING: "WY", "DISTRICT OF COLUMBIA": "DC",
+};
+const STATE_CODES = new Set(Object.values(STATE_NAMES));
 
-// Written the way assessors write it: 100 Research Drive, Worcester becomes 100 RESEARCH DR, WORCESTER.
-export function parseAddress(address: string): ParsedAddress | null {
-  const [street, city] = address.split(",").map((part) => part.trim());
-  if (!street || !city) return null;
-  // Only the last word is a street type, so 12 Court St and 167 West Boylston Dr keep their names.
-  const words = street.toUpperCase().replace(/[.#]/g, "").split(/\s+/);
+export type ParsedAddress = { street: string; city: string; state?: string };
+
+// Only the last word is a street type, so 12 Court St and 167 West Boylston Dr keep their names.
+export function normalizeStreet(street: string): string {
+  const words = street.trim().toUpperCase().replace(/[.#]/g, "").split(/\s+/);
   const last = words.at(-1)!;
   words[words.length - 1] = STREET_WORDS[last] ?? last;
-  return { street: words.join(" "), city: city.toUpperCase() };
+  return words.join(" ");
+}
+
+// Takes a state off the end of the text, as a code or a name, with any ZIP code after it.
+function splitState(text: string): { rest: string; state?: string } {
+  const withoutZip = text.trim().replace(/[\s,]+\d{5}(?:-\d{4})?$/, "").replace(/[\s,]+(?:USA?|UNITED STATES)$/i, "");
+  const upper = withoutZip.toUpperCase();
+  for (const name of Object.keys(STATE_NAMES)) {
+    if (upper.endsWith(` ${name}`) || upper.endsWith(`,${name}`)) return { rest: withoutZip.slice(0, -name.length).replace(/[\s,]+$/, ""), state: STATE_NAMES[name] };
+  }
+  const code = /[\s,]([A-Za-z]{2})$/.exec(withoutZip)?.[1]?.toUpperCase();
+  if (code && STATE_CODES.has(code)) return { rest: withoutZip.slice(0, -2).replace(/[\s,]+$/, ""), state: code };
+  return { rest: withoutZip };
+}
+
+// Written the way assessors write it: 100 Research Drive, Worcester becomes 100 RESEARCH DR, WORCESTER.
+// Text with no comma between street and city doesn't parse, and canonicalAddress sends it to the geocoder.
+export function parseAddress(address: string): ParsedAddress | null {
+  const { rest, state } = splitState(address);
+  const [street, city] = rest.split(",").map((part) => part.trim());
+  if (!street || !city) return null;
+  return { street: normalizeStreet(street), city: city.toUpperCase(), ...(state ? { state } : {}) };
+}
+
+// Any common spelling becomes one the rest of the pipeline reads. Null means a person has to help.
+export async function canonicalAddress(address: string, ctx: CollectContext): Promise<string | null> {
+  if (parseAddress(address)?.state) return address;
+  const { matches } = await geocodeAddress(address, ctx);
+  if (matches.length !== 1) return null;
+  const matched = matches[0]!.matchedAddress;
+  return parseAddress(matched)?.state ? matched : null;
 }
 
 function quoted(text: string): string {

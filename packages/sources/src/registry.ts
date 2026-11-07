@@ -1,4 +1,6 @@
-import type { FitnessGrade, ObservedValue, Source } from "@eqore/contract";
+import type { FitnessGrade, MapFeature, ObservedValue, Source } from "@eqore/contract";
+import type { JsonSource } from "./json-api.ts";
+import { parseAddress } from "./resolve-site.ts";
 
 // How a date in a source's attributes is written.
 export type SourceDateFormat = "fiscal_year" | "yyyymmdd" | "epoch_ms" | "text";
@@ -15,6 +17,8 @@ export type FieldMapping = {
   sourceUnit?: string;
   // For quantities that can't truly be zero, such as a building's area.
   zeroIsMissing?: boolean;
+  // Text a source uses to mean it has no value, such as a surface type of 0.
+  blankValues?: string[];
 };
 
 export type ArcgisEntry = {
@@ -47,6 +51,7 @@ export type ParcelLookup = {
   lotSizeAttribute: string;
   lotUnitsAttribute: string;
   yearBuiltAttribute: string;
+  storiesAttribute?: string;
 };
 
 export type BuildingOutlines = {
@@ -87,14 +92,47 @@ export type NamedRoute = {
   reason: string;
 };
 
+// One layer a region collects, which needs no code to add.
+export type LayerSource = {
+  entry: ArcgisEntry;
+  mode:
+    | {
+        // One answer for the site, read through the entry's field table.
+        kind: "one";
+        pick: "first" | "address_street" | "all_distinct";
+        streetAttribute?: string;
+        emptyReason?: string;
+      }
+    | {
+        // Many nearby items, stored as one summary reading plus a map feature for each item.
+        kind: "items";
+        field: string;
+        noun: string;
+        plural: string;
+        nameAttribute: string;
+        feature: MapFeature["kind"];
+        limit: number;
+        // Whether an empty search means none are mapped here, or says nothing either way.
+        absent: "none_mapped" | "unknown";
+        note?: string;
+      };
+};
+
+export type LidarSlope = { source: Source; sourceDate: string };
+
 export type RegionConfig = {
   id: string;
   name: string;
   states: string[];
+  // A region naming cities wins over one covering its whole state.
+  cities?: string[];
   parcels?: ParcelLookup;
   buildings?: BuildingOutlines;
   grid: GridSource[];
   roads?: RoadSource;
+  layers?: LayerSource[];
+  jsonSources?: JsonSource[];
+  lidarSlope?: LidarSlope;
   imagery?: ImageryConfig;
   // Sources with no working adapter yet. They report missing with the reason.
   unavailable: NamedRoute[];
@@ -102,9 +140,11 @@ export type RegionConfig = {
 };
 
 export function selectRegion(address: string, regions: RegionConfig[]): RegionConfig | null {
-  const state = /,\s*([A-Za-z]{2})(?:\s+\d{5}(?:-\d{4})?)?\s*$/.exec(address.trim())?.[1]?.toUpperCase();
-  if (!state) return null;
-  return regions.find((region) => region.states.includes(state)) ?? null;
+  const parsed = parseAddress(address);
+  if (!parsed?.state) return null;
+  const inState = regions.filter((region) => region.states.includes(parsed.state!));
+  const inCity = inState.find((region) => region.cities?.some((city) => city.toUpperCase() === parsed.city));
+  return inCity ?? inState.find((region) => !region.cities) ?? null;
 }
 
 export function sourceOf(entry: ArcgisEntry): Source {

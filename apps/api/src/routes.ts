@@ -3,7 +3,7 @@ import { ENGINEER_PORT, WEB_PORT, routes } from "@eqore/contract";
 import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps } from "./capture.ts";
 import { checkReadiness } from "./readiness.ts";
 import { toSiteMap } from "./site-map.ts";
-import { ApiFailure, confirmValue, correctValue, movePin, resolveConflict, runSite } from "./run.ts";
+import { ApiFailure, runProgressKey, confirmValue, correctValue, movePin, resolveConflict, runSite } from "./run.ts";
 
 async function jsonBody(request: Request): Promise<unknown> {
   try {
@@ -48,6 +48,12 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
   app.use("*", localOriginOnly);
 
   app.post(routes.runSite.path, async (c) => c.json(await runSite(deps, await jsonBody(c.req.raw))));
+
+  app.get(routes.readRunProgress.path, (c) => {
+    const progress = deps.progress?.get(runProgressKey(c.req.query("address") ?? ""));
+    if (!progress) throw new ApiFailure("not_found", 404, "No run for that address");
+    return c.json(progress);
+  });
 
   const requestedVersion = (siteId: string, version: string) => {
     const record = deps.store.readVersion(siteId, parseVersion(version));

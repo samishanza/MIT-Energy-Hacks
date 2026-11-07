@@ -1,7 +1,10 @@
 import type { RegionConfig } from "../src/registry.ts";
 import { censusLocalRoads } from "./census-roads.ts";
+import { usgsPointElevation } from "./national.ts";
 
 const MASSGIS = "https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services";
+const CREDIT = 'Credit: "MassGIS (Bureau of Geographic Information), Commonwealth of Massachusetts EOTSS".';
+const HOST_ROBOTS = "The ArcGIS Online host answered robots.txt with 403, so no rule was read.";
 
 export const massachusetts: RegionConfig = {
   id: "massachusetts",
@@ -15,6 +18,7 @@ export const massachusetts: RegionConfig = {
     lotSizeAttribute: "LOT_SIZE",
     lotUnitsAttribute: "LOT_UNITS",
     yearBuiltAttribute: "YEAR_BUILT",
+    storiesAttribute: "STORIES",
     entry: {
       kind: "arcgis_rest",
       id: "massgis-l3-parcels",
@@ -22,16 +26,20 @@ export const massachusetts: RegionConfig = {
       serviceUrl: `${MASSGIS}/Massachusetts_Property_Tax_Parcels/FeatureServer`,
       layer: 0,
       searchRadiusMeters: 0,
-      licenseNote: "MassGIS public data. Terms not yet read for production use. Reference grade, not a survey.",
+      licenseNote: `MassGIS: a representation of property boundaries, not an authoritative source; the registries of deeds and a licensed surveyor are. ${HOST_ROBOTS} ${CREDIT}`,
       robotsChecked: "2026-11-07",
       objectIdAttribute: "LOC_ID",
       sourceDate: { attribute: "FY", format: "fiscal_year" },
-      outFields: ["LOC_ID", "MAP_PAR_ID", "SITE_ADDR", "CITY", "ZIP", "USE_CODE", "USE_DESC", "LOT_SIZE", "LOT_UNITS", "BLD_AREA", "YEAR_BUILT", "FY"],
+      // Owner fields are left out on purpose, so they never reach a stored value or a recording.
+      outFields: ["LOC_ID", "MAP_PAR_ID", "SITE_ADDR", "CITY", "ZIP", "USE_CODE", "USE_DESC", "LOT_SIZE", "LOT_UNITS", "BLD_AREA", "YEAR_BUILT", "FY", "ZONING", "STORIES"],
       fields: [
         { field: "parcel_id", attribute: "LOC_ID", type: "text", grade: "reference" },
         { field: "use_code", attribute: "USE_CODE", type: "text", grade: "reference" },
         { field: "building_area_sqft", attribute: "BLD_AREA", type: "quantity", unit: "sqft", zeroIsMissing: true, grade: "reference" },
         { field: "year_built", attribute: "YEAR_BUILT", type: "quantity", unit: "year", zeroIsMissing: true, grade: "reference" },
+        { field: "zoning_district", attribute: "ZONING", type: "text", grade: "reference" },
+        { field: "building_stories", attribute: "STORIES", type: "quantity", unit: "stories", zeroIsMissing: true, grade: "reference" },
+        { field: "use_description", attribute: "USE_DESC", type: "text", grade: "reference" },
       ],
     },
   },
@@ -45,7 +53,7 @@ export const massachusetts: RegionConfig = {
       serviceUrl: `${MASSGIS}/Building_Structures/FeatureServer`,
       layer: 0,
       searchRadiusMeters: 0,
-      licenseNote: "MassGIS public data. Terms not yet read for production use. Reference grade, no height.",
+      licenseNote: `MassGIS and City of Boston, with no license text on the item. Reference grade, with no height. ${HOST_ROBOTS} ${CREDIT}`,
       robotsChecked: "2026-11-07",
       objectIdAttribute: "STRUCT_ID",
       sourceDate: { attribute: "SOURCEDATE", format: "yyyymmdd" },
@@ -64,7 +72,7 @@ export const massachusetts: RegionConfig = {
         serviceUrl: "https://systemdataportal.nationalgrid.com/arcgis/rest/services/MASDP/MASDP_Feeders/MapServer",
         layer: 0,
         searchRadiusMeters: 30,
-        licenseNote: "National Grid public portal, no key. Terms not yet read. Line positions are schematic context, not a survey.",
+        licenseNote: "National Grid public portal, no key. No terms were found on the portal or service, and robots.txt returned 404. Line positions are schematic context, not a survey.",
         robotsChecked: "2026-11-07",
         objectIdAttribute: "Master_CDF",
         outFields: ["Master_CDF"],
@@ -79,7 +87,7 @@ export const massachusetts: RegionConfig = {
         layer: 0,
         // The feeder count depends on this distance, so it's fixed here and stored on each observation.
         searchRadiusMeters: 30,
-        licenseNote: "National Grid public portal, no key. Terms not yet read. Utility-published context for the location queried, not a site answer.",
+        licenseNote: "National Grid public portal, no key. No terms were found on the portal or service, and robots.txt returned 404. Utility-published context for the location queried, not a site answer.",
         robotsChecked: "2026-11-07",
         objectIdAttribute: "Master_CDF",
         sourceDate: { attribute: "Updated_Date", format: "epoch_ms" },
@@ -96,6 +104,114 @@ export const massachusetts: RegionConfig = {
     },
   ],
   roads: censusLocalRoads,
+  layers: [
+    {
+      mode: { kind: "one", pick: "first" },
+      entry: {
+        kind: "arcgis_rest",
+        id: "massgis-municipalities",
+        name: "MassGIS municipalities",
+        serviceUrl: `${MASSGIS}/Massachusetts_Municipalities/FeatureServer`,
+        layer: 1,
+        searchRadiusMeters: 0,
+        licenseNote: `MassGIS: public records; authoritative boundaries come only from a licensed surveyor. ${HOST_ROBOTS} ${CREDIT}`,
+        robotsChecked: "2026-11-07",
+        objectIdAttribute: "OBJECTID",
+        outFields: ["OBJECTID", "TOWN", "COUNTY"],
+        fields: [
+          { field: "municipality", attribute: "TOWN", type: "text", grade: "reference" },
+          { field: "county", attribute: "COUNTY", type: "text", grade: "reference" },
+        ],
+      },
+    },
+    {
+      mode: { kind: "one", pick: "address_street", streetAttribute: "STREETNAME", emptyReason: "MassDOT maps no road within 50 m of this parcel." },
+      entry: {
+        kind: "arcgis_rest",
+        id: "massdot-roads",
+        name: "MassGIS-MassDOT roads",
+        serviceUrl: `${MASSGIS}/MassDOTRoads_gdb/FeatureServer`,
+        layer: 0,
+        searchRadiusMeters: 50,
+        licenseNote: `MassDOT and MassGIS: "a public resource and may be used by anyone for their purposes", and not a legal description. ${HOST_ROBOTS} ${CREDIT}`,
+        robotsChecked: "2026-11-07",
+        objectIdAttribute: "OBJECTID",
+        outFields: ["OBJECTID", "STREETNAME", "NUM_LANES", "SURFACE_TP", "SURFACE_WD"],
+        fields: [
+          { field: "road_name", attribute: "STREETNAME", type: "text", grade: "reference" },
+          { field: "road_width_ft", attribute: "SURFACE_WD", type: "quantity", unit: "ft", zeroIsMissing: true, grade: "reference" },
+          { field: "road_lanes", attribute: "NUM_LANES", type: "quantity", unit: "lanes", zeroIsMissing: true, grade: "reference" },
+          { field: "road_surface_type", attribute: "SURFACE_TP", type: "text", blankValues: ["0"], grade: "reference" },
+        ],
+      },
+    },
+    {
+      mode: { kind: "items", field: "wetlands_nearby", noun: "mapped wetland area", plural: "mapped wetland areas", nameAttribute: "IT_VALDESC", feature: "constraint", limit: 10, absent: "none_mapped", note: "Photo-interpreted, for planning only, and not a delineation under the Wetlands Protection Act." },
+      entry: {
+        kind: "arcgis_rest",
+        id: "massdep-wetlands",
+        name: "MassDEP wetlands",
+        serviceUrl: `${MASSGIS}/DEP_Wetlands/FeatureServer`,
+        layer: 1,
+        searchRadiusMeters: 500,
+        licenseNote: `MassDEP and MassGIS: "for planning purposes only", determined by photographic interpretation, and not delineations under M.G.L. c. 131 s. 40. ${HOST_ROBOTS} ${CREDIT}`,
+        robotsChecked: "2026-11-07",
+        objectIdAttribute: "OBJECTID",
+        outFields: ["OBJECTID", "IT_VALDESC", "AREAACRES"],
+        fields: [
+          { field: "wetland_type", attribute: "IT_VALDESC", type: "text", grade: "reference" },
+          { field: "wetland_acres", attribute: "AREAACRES", type: "quantity", unit: "acre", grade: "reference" },
+        ],
+      },
+    },
+    {
+      mode: { kind: "items", field: "fire_stations_nearby", noun: "fire station", plural: "fire stations", nameAttribute: "NAME", feature: "constraint", limit: 3, absent: "unknown" },
+      entry: {
+        kind: "arcgis_rest",
+        id: "massgis-fire-stations",
+        name: "MassGIS fire stations",
+        serviceUrl: `${MASSGIS}/Fire_Stations/FeatureServer`,
+        layer: 0,
+        searchRadiusMeters: 8000,
+        licenseNote: `MEMA and MassGIS, with no license text on the item. ${HOST_ROBOTS} ${CREDIT}`,
+        robotsChecked: "2026-11-07",
+        objectIdAttribute: "OBJECTID",
+        outFields: ["OBJECTID", "NAME", "ADDRESS", "CITY"],
+        fields: [
+          { field: "address", attribute: "ADDRESS", type: "text", grade: "reference" },
+          { field: "city", attribute: "CITY", type: "text", grade: "reference" },
+        ],
+      },
+    },
+    {
+      mode: { kind: "one", pick: "all_distinct", emptyReason: "This reduced set leaves out some zones, including minimal hazard, so an empty result doesn't show the site is out of a flood zone." },
+      entry: {
+        kind: "arcgis_rest",
+        id: "esri-usa-flood-hazard",
+        name: "Esri USA flood hazard areas (from FEMA)",
+        serviceUrl: "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Flood_Hazard_Reduced_Set_gdb/FeatureServer",
+        layer: 0,
+        searchRadiusMeters: 0,
+        licenseNote: "Source: FEMA, Esri. The item is licensed under the Esri Master License Agreement, whose full text wasn't read, so check it before production use. FEMA's own services bar robots. A person confirms against the current FIRM panel.",
+        robotsChecked: "2026-11-07",
+        objectIdAttribute: "OBJECTID",
+        outFields: ["OBJECTID", "FLD_ZONE"],
+        fields: [{ field: "flood_zone", attribute: "FLD_ZONE", type: "text", grade: "reference" }],
+      },
+    },
+  ],
+  jsonSources: [usgsPointElevation],
+  lidarSlope: {
+    sourceDate: "2013 to 2021",
+    source: {
+      id: "massgis-lidar-dem",
+      name: "MassGIS lidar elevation",
+      kind: "arcgis_rest",
+      dataOrigin: "real",
+      url: "https://arcgisserver.digital.mass.gov/arcgisserver/rest/services/LiDAR/DEM_lidar_2013to2021_32bitFloat/ImageServer",
+      licenseNote: "MassGIS. Its host returned 502 for robots.txt, so no rule could be read, and no terms were found on the service. Mixed vintage, 2013 to 2021.",
+    },
+  },
   imagery: {
     id: "massgis-imagery-2025",
     name: "MassGIS 2025 aerial imagery",
@@ -111,9 +227,9 @@ export const massachusetts: RegionConfig = {
   unavailable: [
     {
       sourceId: "earth-engine",
-      name: "Google Earth Engine elevation",
-      fields: ["elevation_m"],
-      reason: "The Earth Engine adapter isn't built yet, so elevation is missing.",
+      name: "Google Earth Engine land cover",
+      fields: ["land_cover"],
+      reason: "The Earth Engine adapter isn't built yet, so land cover is missing.",
     },
   ],
   personRoutes: [],

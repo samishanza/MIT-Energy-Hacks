@@ -27,6 +27,7 @@ const deps: CaptureDeps = {
   uploadDir: resolve(process.env.UPLOAD_DIR ?? "./uploads"),
   capturePublicUrl: process.env.CAPTURE_PUBLIC_URL || `http://${LOOPBACK_HOST}:${CAPTURE_PORT}`,
   extractor: createClaudeExtractor(),
+  progress: new Map(),
   evidenceManifest: loadEvidenceManifest(inRepo("fixtures/evidence/manifest.json")),
 };
 

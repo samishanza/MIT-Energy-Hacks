@@ -163,6 +163,7 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
   return ValueSchema.parse({
     field: definition.field,
     label: definition.label,
+    family: definition.family,
     state,
     grade,
     owner: definition.owner,

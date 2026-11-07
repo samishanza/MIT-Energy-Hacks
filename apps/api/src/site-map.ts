@@ -37,5 +37,6 @@ export function toSiteMap(record: RecordVersion, generatedAt: string): SiteMapEx
       }),
     },
     values: record.values,
+    coverage: record.coverage,
   });
 }

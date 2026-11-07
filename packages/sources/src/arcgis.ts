@@ -35,6 +35,11 @@ export type CollectContext = {
   now: () => string;
   newId?: () => string;
   retryDelayMs?: number;
+  // Names of the API keys the live fetch can supply. The keys themselves never come through here.
+  availableKeys?: string[];
+  runDeadlineMs?: number;
+  // Lidar slope sampling lives in the agent layer, so the caller passes it in.
+  measureSlope?: (box: { west: number; south: number; east: number; north: number }, fetchImpl: FetchLike) => Promise<{ slopePercent: number; sampleCount: number; demResolutionFt: number } | null>;
 };
 
 // Replayed responses carry the time they were really retrieved.
@@ -290,7 +295,7 @@ export function observe(origin: ArcgisResult | ObservationOrigin, ctx: CollectCo
   });
 }
 
-function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { value: ObservedValue } | { reason: string } {
+export function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { value: ObservedValue } | { reason: string } {
   if (mapping.constant) return { value: mapping.constant };
   const attribute = mapping.attribute!;
   const raw = feature.attributes[attribute];
@@ -306,7 +311,9 @@ function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { value: Ob
     const unit = mapping.unit!;
     return { value: { type: "quantity", value: convertUnit(number, mapping.sourceUnit ?? unit, unit), unit } };
   }
-  return { value: { type: "text", value: String(raw).trim() } };
+  const text = String(raw).trim();
+  if (mapping.blankValues?.includes(text)) return { reason: `${attribute} is ${text} in the source, which means it has no value` };
+  return { value: { type: "text", value: text } };
 }
 
 // Maps features to observations through the entry's field table, with no source-specific code.
