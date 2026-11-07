@@ -25,6 +25,8 @@ These are REST API calls to public map services, with no web scraping. An addres
 
 **Earth Engine:** the credential works, and a test call returned 166.13 m at the demo site. No adapter uses it yet.
 
+**Slope:** the agent layer queries MassGIS lidar directly, and that isn't wired into the app yet.
+
 ## What happens after collection
 
 Both paths start from the same collector, `packages/sources`.
@@ -45,30 +47,33 @@ The second path has no drawing renderer on `main`. The only sheet renderer is on
 | Lead | `main`, this checkout | Plan, contract, merges, demo |
 | Backend | `worktree-backend` | Waiting for the final plan |
 | UI | `worktree-ui` | Built on the first contract, waiting for the final plan |
-| Agent layer | Commits straight to GitHub `main` | Added agents, live adapter, slope, pad candidates, contract converter. Not in the plan's lanes yet |
+| Agent layer, a teammate | Commits straight to GitHub `main` | Added agents, live adapter, slope, pad candidates, contract converter. Now owns battery areas and the drawing handoff in the plan |
 
-## Overlaps to settle
+## Overlaps, decided
 
-| Thing | Already exists | Plan had | Direction |
-|---|---|---|---|
-| Battery areas | `derivePadCandidates` in `packages/drc` | New code in `packages/sources` | Reuse the existing code, and add buildings and constraints |
-| Slope | MassGIS lidar in `packages/agents` | USGS sampling and Earth Engine | One rule for which wins, collected in `packages/sources` |
-| Record conversion | `toRecordVersion`, site record to contract | Export to site record | Decide one direction |
-| Drawing input | `makeLiveSources` feeds the agents | Adapter from the export | Decide one route |
+The team decided the agent layer wins where it overlaps the plan (KTD37).
+
+| Thing | Use | Plan adds |
+|---|---|---|
+| Battery areas | `derivePadCandidates` in `packages/drc` | Every roofprint, constraints, and roads as inputs |
+| Slope | MassGIS lidar in `packages/agents` | Earth Engine slope outside Massachusetts |
+| Record conversion | `toRecordVersion` | Coverage built on its missing values |
+| Drawing route | `makeLiveSources`, `reconcile`, `exportToSetback`, `compile` | Reuses collected data, takes engineer values, keeps only placement, and adds a renderer |
 
 ## To do, in order
 
 1. Fix 3 type errors from the merge, in `packages/agents/src/sources/live.test.ts`.
-2. Finish plan review, settle the overlaps above, and hand the final plan to each stream.
+2. Finish plan review and hand the final plan to each stream.
 3. Contract update: stale confirm, new map feature kinds, value families, coverage, run progress.
 4. Backend: collect to the plan-set catalog, wider physical sources, deeper utility data, utility and rates anywhere, Earth Engine, then a third region.
 5. UI: map-first screen.
-6. Lead: drawing handoff with a renderer, seeded demo and snapshot, combined code review.
+6. Agent layer: battery areas, and the drawing handoff with a renderer.
+7. Lead: seeded demo and snapshot, combined code review.
 
 ## Needed from the team
 
 - Confirm the exposed API key is revoked, and add a new one to `.env`.
 - Say when the repo was public, and decide about the sample PDFs.
-- Name the drawing agent, if it isn't Setback.
+- Name any other open-source drawing agent, if Setback isn't the only target.
 - Give the venue address for the phone test.
-- Bring the agent layer stream into the plan's lanes.
+- Pass the plan to the teammate running the agent layer.
