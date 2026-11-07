@@ -77,6 +77,14 @@ export interface FootprintRecord extends SourceDoc {
   toleranceFt: number;
   /** Published area, when the layer carries one. Cross-checks the measured bbox. */
   buildingAreaSqft?: number;
+  /**
+   * Every other structure on the parcel, largest first, as bboxes in the same frame.
+   *
+   * A commercial parcel routinely carries sheds, canopies and outbuildings alongside the
+   * main plant. Clearances are measured to all of them, and a pad zone has to keep out
+   * of all of them, so dropping them would understate the keep-out and overstate the yard.
+   */
+  otherBuildings: { offsetXFt: number; offsetYFt: number; widthFt: number; depthFt: number }[];
 }
 
 export interface ElevationSample extends SourceDoc {

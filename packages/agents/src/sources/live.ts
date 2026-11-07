@@ -114,6 +114,26 @@ function readText(obs: Observation[], field: string): string | null {
 const featureOf = (features: MapFeature[], kind: MapFeature['kind']) =>
   features.find((f) => f.kind === kind) ?? null;
 
+/**
+ * Roofprints for a parcel, largest first.
+ *
+ * ArcGIS does not guarantee feature order, so taking the first one is taking an
+ * arbitrary structure. On a 59-acre industrial parcel that meant reporting a 10 x 36 ft
+ * shed as the building, roughly 500x too small by area, with nothing to indicate it was
+ * wrong. Sorting by footprint area makes the primary structure the primary structure.
+ */
+export function buildingsByArea(features: MapFeature[]): { bounds: LonLatBox; areaFt2: number }[] {
+  return features
+    .filter((f) => f.kind === 'building_outline')
+    .flatMap((f) => {
+      const b = boundsOf(f.geometry);
+      if (!b) return [];
+      const { widthFt, depthFt } = boxSizeFt(b);
+      return [{ bounds: b, areaFt2: widthFt * depthFt }];
+    })
+    .sort((a, b) => b.areaFt2 - a.areaFt2);
+}
+
 // ------------------------------------------------------------------- adapter
 
 export interface LiveOptions {
@@ -180,9 +200,9 @@ export async function makeLiveSources(opts: LiveOptions): Promise<LiveSources> {
   const { observations, features } = collection;
 
   const parcelFeature = featureOf(features, 'property_line');
-  const buildingFeature = featureOf(features, 'building_outline');
   const lotBounds = parcelFeature ? boundsOf(parcelFeature.geometry) : null;
-  const buildingBounds = buildingFeature ? boundsOf(buildingFeature.geometry) : null;
+  const allBuildings = buildingsByArea(features);
+  const buildingBounds = allBuildings[0]?.bounds ?? null;
 
   const site: SiteInput = {
     siteId: collection.site.id,
@@ -231,7 +251,7 @@ export async function makeLiveSources(opts: LiveOptions): Promise<LiveSources> {
     lotBounds && buildingBounds
       ? {
           ref: 'massgis://building-structures',
-          label: 'MassGIS building structures (roofprints)',
+          label: `MassGIS building structures (roofprints), largest of ${allBuildings.length} on the parcel`,
           lot: boxSizeFt(lotBounds),
           building: {
             offsetXFt: offsetFt(lotBounds, buildingBounds).xFt,
@@ -241,6 +261,12 @@ export async function makeLiveSources(opts: LiveOptions): Promise<LiveSources> {
           },
           toleranceFt: 10,
           buildingAreaSqft: buildingAreaSqft ?? undefined,
+          otherBuildings: allBuildings.slice(1).map((b) => ({
+            offsetXFt: offsetFt(lotBounds, b.bounds).xFt,
+            offsetYFt: offsetFt(lotBounds, b.bounds).yFt,
+            widthFt: boxSizeFt(b.bounds).widthFt,
+            depthFt: boxSizeFt(b.bounds).depthFt,
+          })),
         }
       : null;
 
