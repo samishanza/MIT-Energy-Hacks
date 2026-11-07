@@ -10,3 +10,4 @@ export * from "./reconcile";
 export * from "./readiness";
 export * from "./export";
 export * from "./build";
+export * from "./contract";
