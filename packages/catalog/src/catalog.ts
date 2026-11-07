@@ -370,6 +370,20 @@ export const FIELD_CATALOG: FieldSpec[] = [
     setbackPath: 'padZone.h',
   },
   {
+    key: 'pad_zone.candidate_area_sqft',
+    label: 'Largest candidate pad area',
+    unit: 'sqft',
+    bounds: { kind: 'number', min: 0, max: 50_000_000 },
+    neededBy: [SHEETS.SITE_PLAN],
+    allowedAgents: ['imagery'],
+    cheapestSource: T0('parcel'),
+    notes:
+      'Open ground clear of every structure and the lot-line setback, derived from the ' +
+      'parcel and roofprint polygons. A suggestion, not an approval: it says where there ' +
+      'is room, not that the ground is paved, level or unobstructed. The owner still ' +
+      'approves the pad zone itself.',
+  },
+  {
     key: 'site.road_side',
     label: 'Side of the lot fronting the public way',
     bounds: { kind: 'enum', values: ['north', 'south', 'east', 'west'] },

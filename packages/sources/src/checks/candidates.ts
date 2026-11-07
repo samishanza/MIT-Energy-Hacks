@@ -6,6 +6,11 @@
 // record start disagreeing without anyone noticing. This moves the derivation here, so
 // the sheet draws what the record says rather than second-guessing it.
 //
+// Note what this deliberately does NOT write: pad_zone_width_ft and the rest. Those
+// fields mean the pad zone the owner APPROVED, and this only suggests where open ground
+// is. Filling an approval slot with a suggestion is exactly the move the record exists to
+// prevent, so the suggestion stays in its own field and the engineer still chooses.
+//
 // What it computes is OPEN GROUND: the lot, less a keep-out around every structure, less
 // the strip inside the lot line. That is a different claim from paved, level and
 // unobstructed, and the observation says so in its reason rather than leaving a reader to
@@ -113,21 +118,9 @@ export function padCandidates(input: CandidateInputs, ctx: CollectContext, optio
         field: "candidate_areas",
         kind: "reading",
         value: { type: "quantity", value: Math.round(largest.areaSqft), unit: "sqft" },
-        attribute: "largest open area clear of the structures and the lot-line setback",
-        reason,
-      }),
-      observe(input.origin, ctx, {
-        field: "pad_zone_width_ft",
-        kind: "reading",
-        value: { type: "quantity", value: largest.rect.w, unit: "ft" },
-        attribute: `largest axis-aligned box inside the open area, on a ${settings.stepFt} ft grid`,
-        reason,
-      }),
-      observe(input.origin, ctx, {
-        field: "pad_zone_depth_ft",
-        kind: "reading",
-        value: { type: "quantity", value: largest.rect.h, unit: "ft" },
-        attribute: `largest axis-aligned box inside the open area, on a ${settings.stepFt} ft grid`,
+        attribute:
+          `largest open area clear of the structures and the lot-line setback; its biggest ` +
+          `axis-aligned box is ${largest.rect.w.toFixed(0)} x ${largest.rect.h.toFixed(0)} ft`,
         reason,
       }),
     ],
