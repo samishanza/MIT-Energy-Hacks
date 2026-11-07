@@ -1,0 +1,117 @@
+import type { RegionConfig } from "../src/registry.ts";
+
+const MASSGIS = "https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services";
+
+export const massachusetts: RegionConfig = {
+  id: "massachusetts",
+  name: "Massachusetts (National Grid)",
+  states: ["MA"],
+  parcels: {
+    addressAttribute: "SITE_ADDR",
+    cityAttribute: "CITY",
+    idAttribute: "LOC_ID",
+    useAttribute: "USE_DESC",
+    lotSizeAttribute: "LOT_SIZE",
+    lotUnitsAttribute: "LOT_UNITS",
+    entry: {
+      kind: "arcgis_rest",
+      id: "massgis-l3-parcels",
+      name: "MassGIS L3 property tax parcels",
+      serviceUrl: `${MASSGIS}/Massachusetts_Property_Tax_Parcels/FeatureServer`,
+      layer: 0,
+      searchRadiusMeters: 0,
+      licenseNote: "MassGIS public data. Terms not yet read for production use. Reference grade, not a survey.",
+      robotsChecked: "2026-11-07",
+      objectIdAttribute: "LOC_ID",
+      sourceDate: { attribute: "FY", format: "fiscal_year" },
+      outFields: ["LOC_ID", "MAP_PAR_ID", "SITE_ADDR", "CITY", "ZIP", "USE_CODE", "USE_DESC", "LOT_SIZE", "LOT_UNITS", "BLD_AREA", "YEAR_BUILT", "FY"],
+      fields: [
+        { field: "parcel_id", attribute: "LOC_ID", type: "text", grade: "reference" },
+        { field: "use_code", attribute: "USE_CODE", type: "text", grade: "reference" },
+        { field: "building_area_sqft", attribute: "BLD_AREA", type: "quantity", unit: "sqft", zeroIsMissing: true, grade: "reference" },
+        { field: "year_built", attribute: "YEAR_BUILT", type: "quantity", unit: "year", zeroIsMissing: true, grade: "reference" },
+      ],
+    },
+  },
+  buildings: {
+    idAttribute: "STRUCT_ID",
+    sourceDateAttribute: "SOURCEDATE",
+    entry: {
+      kind: "arcgis_rest",
+      id: "massgis-roofprints",
+      name: "MassGIS building structures (roofprints)",
+      serviceUrl: `${MASSGIS}/Building_Structures/FeatureServer`,
+      layer: 0,
+      searchRadiusMeters: 0,
+      licenseNote: "MassGIS public data. Terms not yet read for production use. Reference grade, no height.",
+      robotsChecked: "2026-11-07",
+      objectIdAttribute: "STRUCT_ID",
+      sourceDate: { attribute: "SOURCEDATE", format: "yyyymmdd" },
+      outFields: ["STRUCT_ID", "SOURCEDATE", "AREA_SQ_FT"],
+      fields: [],
+    },
+  },
+  grid: [
+    {
+      utilityName: "National Grid",
+      // The hosting capacity layer returns no geometry, so the lines come from the feeder layer.
+      lineGeometry: {
+        kind: "arcgis_rest",
+        id: "national-grid-feeder-lines",
+        name: "National Grid MA System Data Portal, feeder lines",
+        serviceUrl: "https://systemdataportal.nationalgrid.com/arcgis/rest/services/MASDP/MASDP_Feeders/MapServer",
+        layer: 0,
+        searchRadiusMeters: 30,
+        licenseNote: "National Grid public portal, no key. Terms not yet read. Line positions are schematic context, not a survey.",
+        robotsChecked: "2026-11-07",
+        objectIdAttribute: "Master_CDF",
+        outFields: ["Master_CDF"],
+        groupByAttribute: "Master_CDF",
+        fields: [],
+      },
+      entry: {
+        kind: "arcgis_rest",
+        id: "national-grid-hosting-capacity",
+        name: "National Grid MA System Data Portal, 3-phase feeders",
+        serviceUrl: "https://systemdataportal.nationalgrid.com/arcgis/rest/services/MASDP/MASDP_HostingCapacity/MapServer",
+        layer: 0,
+        // The feeder count depends on this distance, so it's fixed here and stored on each observation.
+        searchRadiusMeters: 30,
+        licenseNote: "National Grid public portal, no key. Terms not yet read. Utility-published context for the location queried, not a site answer.",
+        robotsChecked: "2026-11-07",
+        objectIdAttribute: "Master_CDF",
+        sourceDate: { attribute: "Updated_Date", format: "epoch_ms" },
+        outFields: ["Master_CDF", "Substation", "Operating_Voltage_kV", "HC_Available_MW", "Updated_Date"],
+        groupByAttribute: "Master_CDF",
+        fields: [
+          { field: "feeder", attribute: "Master_CDF", type: "text", grade: "reference" },
+          { field: "feeder_substation", attribute: "Substation", type: "text", grade: "reference" },
+          { field: "feeder_voltage", attribute: "Operating_Voltage_kV", type: "quantity", unit: "kV", grade: "reference" },
+          { field: "feeder_phase", constant: { type: "quantity", value: 3, unit: "phase" }, grade: "reference" },
+          { field: "feeder_hosting_capacity", attribute: "HC_Available_MW", type: "quantity", unit: "MW", grade: "reference" },
+        ],
+      },
+    },
+  ],
+  imagery: {
+    id: "massgis-imagery-2025",
+    name: "MassGIS 2025 aerial imagery",
+    serviceUrl: "https://tiles.arcgis.com/tiles/hGdibHYSPO59RG1h/arcgis/rest/services/Massachusetts_Aerial_Imagery_2025/MapServer",
+    tileUrlTemplate:
+      "https://tiles.arcgis.com/tiles/hGdibHYSPO59RG1h/arcgis/rest/services/Massachusetts_Aerial_Imagery_2025/MapServer/tile/{z}/{y}/{x}",
+    attribution: "MassGIS 2025 aerial imagery",
+    sourceDate: "2025",
+    maxZoom: 20,
+    licenseNote: "MassGIS: no restrictions apply, but conditions may have changed since the flight, and it isn't for critical use without checking.",
+    description: "MassGIS 2025 aerial imagery, 15 cm, flown March to April 2025",
+  },
+  unavailable: [
+    {
+      sourceId: "earth-engine",
+      name: "Google Earth Engine elevation",
+      fields: ["elevation_m"],
+      reason: "The Earth Engine adapter isn't built yet, so elevation is missing.",
+    },
+  ],
+  personRoutes: [],
+};

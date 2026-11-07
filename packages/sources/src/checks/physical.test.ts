@@ -1,0 +1,131 @@
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import type { Value } from "@eqore/contract";
+import { californiaPge, massachusetts, type CollectContext, type FetchLike } from "../index.ts";
+import { collectSite } from "../collect.ts";
+import { deriveValues } from "../derive.ts";
+import { fixtureFetch } from "../fixtures.ts";
+import { resolveSite } from "../resolve-site.ts";
+
+const dir = (name: string) => fileURLToPath(new URL(`../../../../fixtures/${name}`, import.meta.url));
+const recorded = fixtureFetch(dir("arcgis"), dir("geocoder"));
+const context = (fetch: FetchLike = recorded): CollectContext => ({ siteId: "test-site", fetch, now: () => "2026-11-07T20:00:00.000Z" });
+
+async function physicalValues(address: string, region = massachusetts, fetch: FetchLike = recorded) {
+  const ctx = context(fetch);
+  const resolved = await resolveSite(address, region, ctx);
+  if (resolved.status !== "resolved") throw new Error(`Expected one match for ${address}`);
+  const collection = await collectSite(address, region, resolved.anchor, ctx);
+  const values = deriveValues(collection.observations);
+  const value = (field: string): Value => values.find((entry) => entry.field === field)!;
+  return { collection, value };
+}
+
+// A stand-in parcel service, for lot sizes and addresses no recording covers.
+function parcelService(features: unknown[]): FetchLike {
+  return async (url, init) =>
+    url.includes("Massachusetts_Property_Tax_Parcels") ? new Response(JSON.stringify({ features })) : recorded(url, init);
+}
+
+// About 7.0 acres: a square of 168.3 m on each side, near latitude 42.
+const SQUARE = [[[-71.8, 42.26], [-71.8, 42.261516], [-71.797962, 42.261516], [-71.797962, 42.26], [-71.8, 42.26]]];
+const parcel = (attributes: Record<string, unknown>) => ({
+  attributes: { LOC_ID: "P-1", SITE_ADDR: "1 TEST WAY", CITY: "WORCESTER", USE_DESC: "Test parcel", LOT_UNITS: "Acres", BLD_AREA: 1000, ...attributes },
+  geometry: { rings: SQUARE },
+});
+
+describe("physical collection", () => {
+  it("shows 11 Bartzak Dr's zero building area as missing and its lot size as conflicting with both values", async () => {
+    const { value } = await physicalValues("11 Bartzak Dr, Holliston, MA");
+
+    expect(value("building_area_sqft").state).toBe("missing");
+    expect(value("building_area_sqft").reason).toContain("BLD_AREA is 0");
+
+    const lotSize = value("lot_size_acres");
+    expect(lotSize.state).toBe("conflicting");
+    expect(lotSize.conflictKind).toBe("source_disagreement");
+    const sizes = lotSize.candidates.map((candidate) => (candidate.value.type === "quantity" ? candidate.value.value : null));
+    expect(sizes[0]).toBe(7.339);
+    expect(sizes[1]).toBeCloseTo(6.96, 1);
+  });
+
+  it("keeps a single inferred lot size when the two are within tolerance", async () => {
+    const { value } = await physicalValues("1 Test Way, Worcester, MA", massachusetts, parcelService([parcel({ LOT_SIZE: 7.1 })]));
+    const lotSize = value("lot_size_acres");
+    expect(lotSize.state).toBe("inferred");
+    expect(lotSize.current).toEqual({ type: "quantity", value: 7.1, unit: "acre" });
+  });
+
+  it("gives a 2011 roofprint that source date and reference grade", async () => {
+    const { collection, value } = await physicalValues("11 Bartzak Dr, Holliston, MA");
+    const outline = collection.observations.find((observation) => observation.field === "building_outline")!;
+    expect(outline.sourceDate).toBe("2011");
+    expect(outline.grade).toBe("reference");
+    expect(value("building_outline").grade).toBe("reference");
+    expect(collection.features.some((feature) => feature.kind === "building_outline")).toBe(true);
+  });
+
+  it("flags a roofprint older than the building it outlines", async () => {
+    const roofprints: FetchLike = async (url, init) => {
+      if (url.includes("Massachusetts_Property_Tax_Parcels")) return new Response(JSON.stringify({ features: [parcel({ LOT_SIZE: 7.1, YEAR_BUILT: 2020 })] }));
+      if (url.includes("Building_Structures")) {
+        const small = [[[-71.7995, 42.2605], [-71.7995, 42.2607], [-71.7992, 42.2607], [-71.7992, 42.2605], [-71.7995, 42.2605]]];
+        return new Response(JSON.stringify({ features: [{ attributes: { STRUCT_ID: "S-1", SOURCEDATE: 20110000 }, geometry: { rings: small } }] }));
+      }
+      return recorded(url, init);
+    };
+    const { value } = await physicalValues("1 Test Way, Worcester, MA", massachusetts, roofprints);
+    expect(value("building_outline").flags.join(" ")).toContain("before the 2020 year built");
+  });
+
+  it("anchors on the parcel found by address, because the Census point misses it", async () => {
+    let geocoderCalls = 0;
+    const counting: FetchLike = async (url, init) => {
+      if (url.includes("geocoding.geo.census.gov")) geocoderCalls += 1;
+      return recorded(url, init);
+    };
+    const resolved = await resolveSite("11 Bartzak Drive, Holliston, MA", massachusetts, context(counting));
+
+    expect(resolved.status).toBe("resolved");
+    if (resolved.status !== "resolved" || resolved.anchor.kind !== "parcel") throw new Error("Expected a parcel anchor");
+    expect(resolved.anchor.parcel.objectId).toBe("M_206064_886636");
+    expect(geocoderCalls).toBe(0);
+  });
+
+  it("lists every candidate and stores no site values when an address matches several parcels", async () => {
+    const two = parcelService([parcel({ LOC_ID: "P-1" }), parcel({ LOC_ID: "P-2" })]);
+    const resolved = await resolveSite("1 Test Way, Worcester, MA", massachusetts, context(two));
+    expect(resolved).toMatchObject({ status: "needs_choice" });
+    if (resolved.status === "needs_choice") expect(resolved.candidates.map((candidate) => candidate.id)).toEqual(["P-1", "P-2"]);
+  });
+
+  it("settles on the chosen candidate once the engineer picks one", async () => {
+    const one = parcelService([parcel({ LOC_ID: "P-2" })]);
+    const resolved = await resolveSite("1 Test Way, Worcester, MA", massachusetts, context(one), { kind: "candidate", candidateId: "P-2" });
+    expect(resolved.status).toBe("resolved");
+  });
+
+  it("offers a map pin when an address has no match, and records that method", async () => {
+    const none = parcelService([]);
+    const unmatched = await resolveSite("999 Nowhere Rd, Worcester, MA", massachusetts, context(none));
+    expect(unmatched).toEqual({ status: "needs_choice", candidates: [] });
+
+    const ctx = context(none);
+    const pinned = await resolveSite("999 Nowhere Rd, Worcester, MA", massachusetts, ctx, { kind: "pin", latitude: 42.27, longitude: -71.8 });
+    if (pinned.status !== "resolved") throw new Error("A pin always resolves");
+    const collection = await collectSite("999 Nowhere Rd, Worcester, MA", massachusetts, pinned.anchor, ctx);
+    expect(collection.site.locationMethod).toBe("hand_placed");
+    const location = deriveValues(collection.observations).find((value) => value.field === "site_location")!;
+    expect(location).toMatchObject({ state: "inferred", method: "hand_placed" });
+  });
+
+  it("records a Fremont site's parcel and outline as missing, with a person route", async () => {
+    const { collection, value } = await physicalValues("47200 Bayside Pkwy, Fremont, CA", californiaPge);
+    expect(value("parcel_id").state).toBe("missing");
+    expect(value("building_outline").state).toBe("missing");
+    expect(value("parcel_id").reason).toContain("A person looks this up");
+    expect(collection.sourceRuns.find((run) => run.sourceId === "alameda-county-assessor")!.status).toBe("person_only");
+    expect(collection.site.locationMethod).toBe("geocoded_interpolated");
+    expect(value("site_location").flags.join(" ")).toContain("interpolated");
+  });
+});
