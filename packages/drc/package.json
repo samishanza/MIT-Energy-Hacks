@@ -1,0 +1,15 @@
+{
+  "name": "@eqore/drc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reconciliation, design-rule check, per-sheet readiness, value-of-information.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eqore/catalog": "^0.1.0",
+    "@eqore/gatekeeper": "^0.1.0",
+    "@eqore/agents": "^0.1.0"
+  }
+}

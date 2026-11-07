@@ -1,0 +1,10 @@
+{
+  "name": "@eqore/catalog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The field catalog: what a plan set requires, where it lives, who may write it.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
