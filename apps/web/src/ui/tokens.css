@@ -675,11 +675,18 @@ legend {
   top: 10px;
   left: 50%;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   transform: translateX(-50%);
   padding: 6px 12px;
   background: var(--select);
   color: var(--white);
   font-weight: 700;
+}
+
+.place-prompt p {
+  margin: 0;
 }
 
 /* Confirm takeover */

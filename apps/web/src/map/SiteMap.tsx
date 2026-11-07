@@ -21,6 +21,7 @@ export interface SiteMapProps {
   dockOpen?: boolean;
   placingField?: string | null;
   onPlace?: (field: string, longitude: number, latitude: number) => void;
+  onCancelPlace?: () => void;
   focusField?: string | null;
 }
 
@@ -37,7 +38,7 @@ function pointLabel(feature: MapFeature) {
 }
 
 export function SiteMap(props: SiteMapProps) {
-  const { record, selectedFields, onSelect, dockOpen = false, placingField = null, onPlace, focusField = null } = props;
+  const { record, selectedFields, onSelect, dockOpen = false, placingField = null, onPlace, onCancelPlace, focusField = null } = props;
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibre | null>(null);
   const highlighted = useRef<string[]>([]);
@@ -152,11 +153,14 @@ export function SiteMap(props: SiteMapProps) {
     map.current?.setPadding({ top: 0, bottom: 0, left: 0, right: dockOpen ? 420 : 0 });
   }, [dockOpen, loaded]);
 
+  const focusPoint = focusField ? pointFeatures(features).find((f) => f.field === focusField) : undefined;
+  const focusKey = focusPoint?.geometry.coordinates.join(",");
   useEffect(() => {
-    if (!loaded || !focusField) return;
-    const point = pointFeatures(features).find((f) => f.field === focusField);
-    if (point) map.current?.easeTo({ center: point.geometry.coordinates as [number, number], duration: 600 });
-  }, [focusField, features, loaded]);
+    if (!loaded || !focusPoint) return;
+    map.current?.easeTo({ center: focusPoint.geometry.coordinates as [number, number], duration: 600 });
+    // Eases when the target moves, not on every new version of the record.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey, loaded]);
 
   const noEquipment = !features.some(isEquipmentPoint);
 
@@ -166,7 +170,14 @@ export function SiteMap(props: SiteMapProps) {
       <div className="map-north" aria-label="North is up">
         N ↑
       </div>
-      {placingField ? <p className="place-prompt">Click the map to place this equipment. It's recorded as placed by hand.</p> : null}
+      {placingField ? (
+        <div className="place-prompt">
+          <p>Click the map to place this equipment. It's recorded as placed by hand.</p>
+          <button type="button" onClick={onCancelPlace}>
+            Cancel placing
+          </button>
+        </div>
+      ) : null}
       <div className="map-legend">
         <p className="concept-note">{conceptNote(features)}</p>
         <ul className="legend-list">

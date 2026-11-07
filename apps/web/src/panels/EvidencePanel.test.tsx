@@ -90,6 +90,45 @@ describe("source evidence", () => {
     expect(screen.getByRole("link", { name: /Original file/ }).getAttribute("href")).toBe("/files/sample-file-1");
   });
 
+  it("downloads an original file rather than opening it on this origin", () => {
+    setup("main_device_rating");
+    expect(screen.getByRole("link", { name: /Original file/ }).hasAttribute("download")).toBe(true);
+  });
+
+  it.each([
+    [true, "Position: placed by hand"],
+    [false, "Position: phone GPS"],
+  ])("states the position's basis when placedByHand is %s", (placedByHand, words) => {
+    const record = sampleRecord();
+    record.features.find((f) => f.field === "main_device_rating")!.placedByHand = placedByHand;
+    setup("main_device_rating", {}, record);
+    expect(screen.getByRole("complementary").textContent).toContain(words);
+  });
+
+  it("resets what's cited when a new draft arrives on the same value", () => {
+    const record = sampleRecord();
+    const props = {
+      api: { evidenceUrl: (id: string) => `/files/${id}` } as EngineerApi,
+      report: sampleReport(),
+      fields: ["parcel_id"],
+      actorName: "",
+      onActorName: vi.fn(),
+      onRecord: vi.fn(),
+      onClose: vi.fn(),
+    };
+    const { rerender } = render(<EvidencePanel {...props} record={record} />);
+    const cited = screen.getByRole("checkbox", { name: /SAMPLE-0001/ }) as HTMLInputElement;
+    fireEvent.click(cited);
+    expect(cited.checked).toBe(true);
+    const next = sampleRecord();
+    const value = next.values.find((v) => v.field === "parcel_id")!;
+    const newer = { ...structuredClone(next.observations[0]!), id: "obs-new" };
+    next.observations.push(newer);
+    value.observationIds.push("obs-new");
+    rerender(<EvidencePanel {...props} record={next} />);
+    for (const box of screen.getAllByRole("checkbox") as HTMLInputElement[]) expect(box.checked).toBe(false);
+  });
+
   it("says when a value has no map feature", () => {
     setup("meter_number");
     expect(screen.getByRole("complementary").textContent).toMatch(/Not a map item/);

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { DOORS_CLOSED_SAFETY_TEXT, type CaptureRequest } from "@eqore/contract";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CaptureApiError, type CaptureApi } from "./captureApi";
 import { CapturePage } from "./CapturePage";
@@ -124,6 +124,52 @@ describe("location", () => {
     await chooseFile();
     fireEvent.click(await screen.findByRole("button", { name: "Use this photo" }));
     await waitFor(() => expect(api.submit).toHaveBeenCalledWith("t", photo, {}));
+  });
+});
+
+describe("location timing", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("gives up on a silent location request after about 10 seconds", async () => {
+    stubLocation("silent");
+    render(<CapturePage token="t" api={fakeApi()} />);
+    const share = await screen.findByRole("button", { name: "Share location" });
+    vi.useFakeTimers();
+    fireEvent.click(share);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(screen.getByText(/You can still send the photo/)).toBeTruthy();
+  });
+
+  it("moves on when the browser has no location support", async () => {
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined });
+    render(<CapturePage token="t" api={fakeApi()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Share location" }));
+    expect(await screen.findByText(/You can still send the photo/)).toBeTruthy();
+  });
+
+  it("keeps the chosen photo when a slow location answer lands late", async () => {
+    const getCurrentPosition = stubLocation("silent");
+    const api = fakeApi();
+    render(<CapturePage token="t" api={api} />);
+    const share = await screen.findByRole("button", { name: "Share location" });
+    vi.useFakeTimers();
+    fireEvent.click(share);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    vi.useRealTimers();
+    await chooseFile();
+    await screen.findByRole("button", { name: "Use this photo" });
+    const late = getCurrentPosition.mock.calls[0]![0];
+    act(() => late({ coords: { latitude: 42.26, longitude: -71.8, accuracy: 8 } } as GeolocationPosition));
+    fireEvent.click(screen.getByRole("button", { name: "Use this photo" }));
+    await waitFor(() =>
+      expect(api.submit).toHaveBeenCalledWith("t", photo, { latitude: 42.26, longitude: -71.8, accuracyMeters: 8 }),
+    );
   });
 });
 

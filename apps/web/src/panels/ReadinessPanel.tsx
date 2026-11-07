@@ -162,6 +162,7 @@ export function ReadinessPanel(props: ReadinessPanelProps) {
         <span className="item-label">{item.label}</span>
         {item.teamDerived ? <span className="tag">Team-derived</span> : null}
         <span className="item-status">{statusWords(item, record)}</span>
+        <span className="item-citation">Owner: {OWNER_WORDS[item.owner]}</span>
         <span className="item-citation">{item.citation}</span>
       </button>
       {item.rowKind === "form" && inputsOf(item.id).length > 0 ? (

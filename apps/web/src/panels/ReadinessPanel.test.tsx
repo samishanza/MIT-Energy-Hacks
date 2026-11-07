@@ -106,6 +106,13 @@ describe("required items", () => {
     expect(within(screen.getByRole("button", { name: /Circuit and substation/ })).getByText(/Preview only/)).toBeTruthy();
   });
 
+  it("names every row's owner, whatever its status", () => {
+    setup();
+    expect(screen.getByRole("button", { name: /Facility location/ }).textContent).toMatch(/Owner: public data/);
+    expect(screen.getByRole("button", { name: /Circuit and substation/ }).textContent).toMatch(/Owner: the utility/);
+    expect(screen.getByRole("button", { name: /PE-stamped one-line/ }).textContent).toMatch(/Owner: the engineer/);
+  });
+
   it("selects a row's fields", () => {
     const props = setup();
     fireEvent.click(screen.getByRole("button", { name: /PE-stamped one-line/ }));

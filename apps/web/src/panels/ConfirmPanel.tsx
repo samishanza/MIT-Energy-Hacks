@@ -35,7 +35,7 @@ export function ConfirmPanel(props: ConfirmPanelProps) {
   const reviewedAt = observations.findIndex((o) => o.id === reviewedId);
   const shown = reviewedAt < 0 ? observations : observations.slice(0, reviewedAt + 1);
   const draft = shown.filter((o) => o.kind === "reading" && o.method === "model_draft").at(-1);
-  const fileObservation = shown.filter((o) => o.locator.evidenceFileId).at(-1);
+  const fileObservation = draft?.locator.evidenceFileId ? draft : shown.filter((o) => o.locator.evidenceFileId).at(-1);
   const fileId = fileObservation?.locator.evidenceFileId;
   const [kind, setKind] = useState<"image" | "pdf">("image");
   const [fileState, setFileState] = useState<"loading" | "loaded" | "failed">("loading");

@@ -77,6 +77,25 @@ describe("comparing a draft with its photo", () => {
     expect(region.style.width).toBe("75%");
   });
 
+  it("keeps showing the draft's own file when a later retake can't be read", async () => {
+    const { api, record } = await recordWithDraft();
+    const draft = record.observations.at(-1)!;
+    const draftFile = draft.locator.evidenceFileId!;
+    const retake = {
+      ...structuredClone(draft),
+      id: "obs-retake",
+      kind: "unreadable" as const,
+      value: null,
+      reason: "Too blurred to read.",
+      locator: { evidenceFileId: "retake-file" },
+    };
+    record.observations.push(retake);
+    const { container } = setup(api, record, "meter_number");
+    expect((container.querySelector(".confirm-file img") as HTMLImageElement).getAttribute("src")).toBe(
+      api.evidenceUrl(draftFile),
+    );
+  });
+
   it("shows a PDF in the browser's viewer and enables Confirm once loaded", async () => {
     const { api } = await recordWithDraft();
     const pdf = new File(["%PDF"], "bill.pdf", { type: "application/pdf" });

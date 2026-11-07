@@ -14,6 +14,7 @@ export interface EvidencePanelProps {
   onActorName: (name: string) => void;
   onRecord: (record: RecordVersion) => void;
   onClose: () => void;
+  onPlace?: (field: string) => void;
 }
 
 function HistoryRow({ observation, api, value }: { observation: Observation; api: EngineerApi; value: Value }) {
@@ -36,7 +37,8 @@ function HistoryRow({ observation, api, value }: { observation: Observation; api
       {observation.reason && observation.reason !== value.reason ? <p className="note">{observation.reason}</p> : null}
       <ProvenanceTag synthetic={observation.synthetic} />
       {fileId ? (
-        <a href={api.evidenceUrl(fileId)} target="_blank" rel="noreferrer">
+        // Saved rather than opened: anyone holding a capture link chooses what this file contains.
+        <a href={api.evidenceUrl(fileId)} download>
           Original file
         </a>
       ) : null}
@@ -55,6 +57,7 @@ function ValueEvidence(props: EvidencePanelProps & { value: Value }) {
   const onMap = record.features.some((f) => f.field === value.field);
   const required = report.items.some((item) => item.fields.includes(value.field));
   const position = positionWords(record, value.field);
+  const fromAFile = record.observations.some((o) => o.field === value.field && o.locator.evidenceFileId);
   return (
     <article className="evidence">
       <h3>{value.label}</h3>
@@ -78,7 +81,7 @@ function ValueEvidence(props: EvidencePanelProps & { value: Value }) {
       {!required ? <p className="note">Not required by this form. Shown for context.</p> : null}
 
       <ResolveControls
-        key={`${value.field}-${value.state}`}
+        key={`${value.field}-${value.state}-${value.observationIds.at(-1) ?? "none"}`}
         api={api}
         record={record}
         value={value}
@@ -86,6 +89,12 @@ function ValueEvidence(props: EvidencePanelProps & { value: Value }) {
         onActorName={onActorName}
         onRecord={onRecord}
       />
+
+      {props.onPlace && (position || fromAFile) ? (
+        <button type="button" onClick={() => props.onPlace?.(value.field)}>
+          {position ? "Move on the map" : "Place on the map"}
+        </button>
+      ) : null}
 
       <h4>History</h4>
       <ul className="history" aria-label="History">

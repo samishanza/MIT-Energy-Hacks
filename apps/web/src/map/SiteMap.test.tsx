@@ -13,8 +13,10 @@ const fake = vi.hoisted(() => {
     removed = false;
     sources: Record<string, { data?: unknown; setData: (d: unknown) => void }> = {};
     queryRenderedFeatures = (() => {
-      const fn = (): unknown[] => fn.result;
+      const fn = (_box: unknown, options?: { layers?: string[] }): unknown[] =>
+        fn.byLayer[options?.layers?.[0] ?? ""] ?? fn.result;
       fn.result = [] as unknown[];
+      fn.byLayer = {} as Record<string, unknown[]>;
       return fn;
     })();
     constructor() {
@@ -45,7 +47,10 @@ const fake = vi.hoisted(() => {
       this.featureState.push({ id: target.id, selected: value.selected });
     }
     setPadding() {}
-    easeTo() {}
+    eased = 0;
+    easeTo() {
+      this.eased += 1;
+    }
     getCanvas() {
       return document.createElement("canvas");
     }
@@ -133,6 +138,43 @@ describe("site map", () => {
     lastMap().queryRenderedFeatures.result = [{ properties: { field: "feeder" } }];
     lastMap().fire("click", { point: { x: 1, y: 2 }, lngLat: { lng: 0, lat: 0 } });
     expect(onSelect).toHaveBeenCalledWith("feeder");
+  });
+
+  it("picks a utility line over the parcel beneath it", () => {
+    const { onSelect } = setup();
+    lastMap().queryRenderedFeatures.byLayer = {
+      "property-fill": [{ properties: { field: "property_line" } }],
+      "utility-line": [{ properties: { field: "feeder" } }],
+    };
+    lastMap().fire("click", { point: { x: 1, y: 2 }, lngLat: { lng: 0, lat: 0 } });
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith("feeder");
+  });
+
+  it("offers a way out of placing", () => {
+    const onCancelPlace = vi.fn();
+    setup({ placingField: "meter_number", onPlace: vi.fn(), onCancelPlace });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel placing" }));
+    expect(onCancelPlace).toHaveBeenCalled();
+  });
+
+  it("eases to a focused label once, not again on each new version", () => {
+    const { rerender, onSelect } = setup({ focusField: "main_device_rating" });
+    expect(lastMap().eased).toBe(1);
+    const next = sampleRecord();
+    next.version = 3;
+    rerender(<SiteMap record={next} selectedFields={[]} onSelect={onSelect} focusField="main_device_rating" />);
+    expect(lastMap().eased).toBe(1);
+  });
+
+  it.each([
+    [true, "Based on public data and customer photos."],
+    [false, "Based on public data."],
+  ])("states the note's basis when equipment is shown: %s", (withEquipment, words) => {
+    const record = sampleRecord();
+    if (!withEquipment) record.features = record.features.filter((f) => f.kind !== "existing_equipment");
+    setup({ record });
+    expect(screen.getByText(/Concept-grade/).textContent).toContain(words);
   });
 
   it("shows an existing equipment label that selects its field", () => {

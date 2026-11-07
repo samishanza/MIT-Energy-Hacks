@@ -35,12 +35,16 @@ type Candidates = Extract<RunSiteResponse, { status: "needs_choice" }>["candidat
 function ChoosePosition({ onPin }: { onPin: (latitude: number, longitude: number) => void }) {
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  const [invalid, setInvalid] = useState(false);
   return (
     <form
       className="pin-entry"
       onSubmit={(event) => {
         event.preventDefault();
-        onPin(Number(latitude), Number(longitude));
+        const position = [Number(latitude), Number(longitude)] as const;
+        const usable = position.every(Number.isFinite);
+        setInvalid(!usable);
+        if (usable) onPin(...position);
       }}
     >
       <p className="note">Or give the site's position as a pin. It's recorded as placed by a person.</p>
@@ -53,6 +57,11 @@ function ChoosePosition({ onPin }: { onPin: (latitude: number, longitude: number
         <input className="mono" required inputMode="decimal" value={longitude} onChange={(e) => setLongitude(e.target.value)} />
       </label>
       <button type="submit">Use this position</button>
+      {invalid ? (
+        <p role="alert" className="error">
+          Latitude and longitude each need to be a number.
+        </p>
+      ) : null}
     </form>
   );
 }
@@ -84,9 +93,14 @@ export function App({ api }: { api: EngineerApi }) {
     return () => clearInterval(timer);
   }, [running]);
 
+  // Only the most recent request to show a record may land, however the responses are ordered.
+  const showRequest = useRef(0);
   const show = useCallback(
     async (next: RecordVersion) => {
+      showRequest.current += 1;
+      const request = showRequest.current;
       const nextReport = await api.readReadiness(next.site.id, next.version);
+      if (request !== showRequest.current) return null;
       setRecord(next);
       setReport(nextReport);
       return nextReport;
@@ -95,15 +109,20 @@ export function App({ api }: { api: EngineerApi }) {
   );
 
   const hasOpenLink = record ? links.some((tracked) => isLinkOpen(tracked, record)) : false;
+  // Also while comparing a draft, so new evidence is noticed even with no link to watch, as after a reload.
+  const watching = hasOpenLink || confirmField !== null;
   const siteId = record?.site.id;
   useEffect(() => {
-    if (!hasOpenLink || !siteId) return;
+    if (!watching || !siteId) return;
+    let checking = false;
     const timer = setInterval(() => {
+      if (checking) return;
+      checking = true;
       void api
         .readVersion(siteId, "latest")
         .then(async (latest) => {
           const previous = current.current.record;
-          if (!previous || latest.version <= previous.version) return;
+          if (!previous || previous.site.id !== latest.site.id || latest.version <= previous.version) return;
           const seen = new Set(previous.observations.map((o) => o.id));
           const labels = [
             ...new Set(
@@ -112,20 +131,30 @@ export function App({ api }: { api: EngineerApi }) {
                 .map((o) => latest.values.find((v) => v.field === o.field)?.label ?? o.field),
             ),
           ];
-          await show(latest);
-          if (labels.length > 0) setArrival(`New evidence for ${labels.join(", ")}`);
+          const shown = await show(latest);
+          if (shown && labels.length > 0) setArrival(`New evidence for ${labels.join(", ")}`);
         })
         .catch(() => {
           // A missed check is retried on the next tick.
+        })
+        .finally(() => {
+          checking = false;
         });
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, [api, hasOpenLink, siteId, show]);
+  }, [api, watching, siteId, show]);
 
   async function afterAction(next: RecordVersion) {
     const before = current.current;
-    const nextReport = await show(next);
-    if (!before.record) return;
+    let nextReport: ReadinessReport | null;
+    try {
+      nextReport = await show(next);
+    } catch {
+      setRecord(next);
+      setError("The change was saved, but the screen couldn't refresh the evidence check. Run the site again to update it.");
+      return;
+    }
+    if (!before.record || !nextReport) return;
     const share = (report: ReadinessReport | null) => report?.share?.formRows;
     const was = share(before.report);
     const now = share(nextReport);
@@ -138,12 +167,12 @@ export function App({ api }: { api: EngineerApi }) {
   async function run(request: RunSiteRequest) {
     setRunning(true);
     setError(null);
-    setCandidates(null);
     try {
       const response = await api.runSite(request);
       if (response.status === "needs_choice") {
         setCandidates(response.candidates);
       } else {
+        setCandidates(null);
         setSelected([]);
         setLinks([]);
         setConfirmField(null);
@@ -317,6 +346,7 @@ export function App({ api }: { api: EngineerApi }) {
               dockOpen={selected.length > 0}
               placingField={placingField}
               onPlace={(field, longitude, latitude) => void place(field, longitude, latitude)}
+              onCancelPlace={() => setPlacingField(null)}
               focusField={focusField}
             />
             {selected.length > 0 ? (
@@ -329,6 +359,7 @@ export function App({ api }: { api: EngineerApi }) {
                 onActorName={updateActor}
                 onRecord={(next) => void afterAction(next)}
                 onClose={() => setSelected([])}
+                onPlace={setPlacingField}
               />
             ) : null}
           </div>
@@ -344,8 +375,10 @@ export function App({ api }: { api: EngineerApi }) {
           onActorName={updateActor}
           onRecord={(next) => {
             const hasPoint = next.features.some((f) => f.field === confirmField && isEquipmentPoint(f));
+            // Only a photographed item has somewhere to go on the map. A bill's meter number doesn't.
+            const isPhoto = report?.gaps.some((g) => g.field === confirmField && g.route === "capture_photo");
             if (hasPoint) setFocusField(confirmField);
-            else setPlacingField(confirmField);
+            else if (isPhoto) setPlacingField(confirmField);
             setConfirmField(null);
             void afterAction(next);
           }}

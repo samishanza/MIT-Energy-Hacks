@@ -93,7 +93,8 @@ export function CapturePage({ token, api }: { token: string; api: CaptureApi }) 
           longitude: coords.longitude,
           accuracyMeters: coords.accuracy,
         };
-        setStage({ name: "capture" });
+        // A slow answer may land after the page has moved on, so it never undoes a chosen photo.
+        setStage((current) => (current.name === "location" || current.name === "capture" ? { name: "capture" } : current));
       },
       () => {
         clearTimeout(giveUp);
