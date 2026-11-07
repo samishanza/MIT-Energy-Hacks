@@ -18,6 +18,8 @@ import { App } from "./App";
 function fakeApi(overrides: Partial<EngineerApi> = {}): EngineerApi {
   return {
     runSite: vi.fn().mockResolvedValue({ status: "ok", record: sampleRecord() }),
+    readRunProgress: vi.fn().mockResolvedValue(null),
+    exportFile: vi.fn().mockResolvedValue(null),
     readVersion: vi.fn().mockResolvedValue(sampleRecord()),
     readReadiness: vi.fn().mockResolvedValue(sampleReport()),
     confirmValue: vi.fn(),
@@ -39,32 +41,45 @@ async function runAddress(api: EngineerApi) {
   await waitFor(() => expect(api.runSite).toHaveBeenCalled());
 }
 
+// The evidence check, requests, and capture links open only from the not-public line.
+async function openReport() {
+  fireEvent.click(await screen.findByRole("button", { name: /^Not in public records/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Open the evidence check and requests" }));
+  await screen.findByRole("region", { name: "Evidence check" });
+}
+
+const strip = () => within(screen.getByRole("region", { name: "Site status" }));
+
 afterEach(cleanup);
 
 describe("running a site", () => {
-  it("shows the record version, synthetic label, and map after a run", async () => {
+  it("goes straight to the map, with no request list, source list, or checklist in the first view", async () => {
     await runAddress(fakeApi());
     expect(await screen.findByTestId("site-map")).toBeTruthy();
-    const header = screen.getByRole("banner");
-    expect(within(header).getByText(/Record v2/)).toBeTruthy();
-    expect(within(header).getByText("Synthetic")).toBeTruthy();
+    expect(within(screen.getByRole("banner")).getByText(/Record v2/)).toBeTruthy();
+    expect(strip().getByText("Synthetic")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Needs your attention" })).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Sources" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Next request" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "Ranked gaps" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Evidence check" })).toBeNull();
   });
 
-  it("lists every source with its outcome and reason, even when one failed", async () => {
+  it("lists a failed or unchecked source in the attention list, with its reason, without blocking the map", async () => {
     await runAddress(fakeApi());
-    const sources = await screen.findByRole("list", { name: "Sources" });
-    expect(sources.textContent).toMatch(/parcel source.*Done/);
-    expect(sources.textContent).toMatch(/elevation.*Missing.*No credentials configured/);
-    expect(sources.textContent).toMatch(/permit portal.*Person only.*robots\.txt/);
-    expect(screen.getByRole("region", { name: "Next request" })).toBeTruthy();
+    const attention = await screen.findByRole("region", { name: "Needs your attention" });
+    expect(attention.textContent).toMatch(/elevation.*Failed or not run\. No credentials configured/);
+    expect(attention.textContent).toMatch(/permit portal.*Not checked by the tool\. robots\.txt/);
+    expect(screen.getByTestId("site-map")).toBeTruthy();
   });
 
   it("labels real data as real", async () => {
     const record = sampleRecord();
     record.synthetic = false;
+    for (const value of record.values) value.synthetic = false;
     await runAddress(fakeApi({ runSite: vi.fn().mockResolvedValue({ status: "ok", record }) }));
     await screen.findByTestId("site-map");
-    expect(within(screen.getByRole("banner")).getByText("Real public data")).toBeTruthy();
+    expect(strip().getByText("Real public data")).toBeTruthy();
   });
 
   it("banners a snapshot with its date", async () => {
@@ -72,6 +87,29 @@ describe("running a site", () => {
     record.snapshot = true;
     await runAddress(fakeApi({ runSite: vi.fn().mockResolvedValue({ status: "ok", record }) }));
     expect((await screen.findByRole("status", { name: "Snapshot" })).textContent).toMatch(/2026-11-07/);
+  });
+
+  it("draws results as sources answer, and counts them, before the record exists", async () => {
+    const record = sampleRecord();
+    let finish: (value: unknown) => void = () => {};
+    const progress = {
+      status: "running",
+      site: record.site,
+      sourceRuns: record.sourceRuns.map((run, i) => (i === 0 ? run : { sourceId: run.sourceId, name: run.name, status: "pending" })),
+      features: record.features.filter((f) => f.kind === "property_line"),
+    };
+    const api = fakeApi({
+      runSite: vi.fn().mockImplementation(() => new Promise((resolve) => (finish = resolve))),
+      readRunProgress: vi.fn().mockResolvedValue(progress),
+    });
+    await runAddress(api);
+    await waitFor(() => expect(strip().getByRole("status").textContent).toBe("Reading sources, 1 of 4 answered"));
+    expect(api.readRunProgress).toHaveBeenCalledWith("100 Sample Way");
+    expect(mapProps.current?.loading).toBe(true);
+    expect((mapProps.current?.features as unknown as { kind: string }[]).map((f) => f.kind)).toEqual(["property_line"]);
+    await act(async () => finish({ status: "ok", record }));
+    await waitFor(() => expect(mapProps.current?.loading).toBe(false));
+    expect(screen.queryByText(/Reading sources/)).toBeNull();
   });
 
   it("asks the engineer to choose when an address has several matches", async () => {
@@ -113,6 +151,53 @@ describe("running a site", () => {
   it("shows a failed run's reason", async () => {
     await runAddress(fakeApi({ runSite: vi.fn().mockRejectedValue(new Error("The API isn't reachable.")) }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/isn't reachable/);
+  });
+
+  it("still shows the map and facts when the evidence check can't be read", async () => {
+    await runAddress(fakeApi({ readReadiness: vi.fn().mockRejectedValue(new Error("offline")) }));
+    expect(await screen.findByTestId("site-map")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Public facts" })).toBeTruthy();
+    expect(strip().getByText("Grid connection request check unavailable.")).toBeTruthy();
+  });
+});
+
+describe("the site view", () => {
+  it("opens a fact one click from its row, and the one item the map picked", async () => {
+    await runAddress(fakeApi());
+    fireEvent.click(within(await screen.findByRole("region", { name: "Public facts" })).getByRole("button", { name: /^Parcel ID/ }));
+    expect(within(screen.getByRole("complementary")).getByRole("heading", { name: "Parcel ID" })).toBeTruthy();
+    expect(mapProps.current?.selectedFields).toEqual(["parcel_id"]);
+    act(() => {
+      mapProps.current!.onSelect!("feeder" as never, "f-feeder" as never);
+    });
+    expect(mapProps.current?.selectedFeatureId).toBe("f-feeder");
+    expect(within(screen.getByRole("complementary")).getByRole("region", { name: "Selected item" })).toBeTruthy();
+  });
+
+  it("says when the server doesn't offer a file yet, and keeps the map", async () => {
+    const exportFile = vi.fn().mockResolvedValue(null);
+    await runAddress(fakeApi({ exportFile }));
+    fireEvent.click(await screen.findByRole("button", { name: "DXF for CAD" }));
+    await waitFor(() => expect(exportFile).toHaveBeenCalledWith("sample-site", 2, "dxf"));
+    expect((await screen.findByRole("status", { name: "Download" })).textContent).toMatch(/doesn't offer the DXF file yet/);
+    expect(screen.getByTestId("site-map")).toBeTruthy();
+  });
+
+  it("saves a file the server does offer, named for the site and version", async () => {
+    const saved: string[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      saved.push(this.download);
+    });
+    Object.assign(URL, { createObjectURL: () => "blob:kml", revokeObjectURL: () => {} });
+    await runAddress(fakeApi({ exportFile: vi.fn().mockResolvedValue(new Blob(["<kml/>"])) }));
+    fireEvent.click(await screen.findByRole("button", { name: "KML for Google Earth" }));
+    await waitFor(() => expect(saved).toEqual(["sample-site-v2.kml"]));
+    click.mockRestore();
+  });
+
+  it("keeps the site plan tab", async () => {
+    await runAddress(fakeApi());
+    expect(await screen.findByRole("tab", { name: "Site plan" })).toBeTruthy();
   });
 });
 
@@ -164,6 +249,7 @@ describe("placing equipment", () => {
       ...api,
     });
     await runAddress(fake);
+    await openReport();
     const input = await screen.findByLabelText(/Upload evidence for/);
     fireEvent.change(input, { target: { files: [new File(["x"], "label.jpg", { type: "image/jpeg" })] } });
     const dialog = await screen.findByRole("dialog", { name: "Confirm reading" });
@@ -211,6 +297,7 @@ describe("placing equipment", () => {
   it("places from the evidence dock on a verified value", async () => {
     const record = verifiedFrom(draftOnly("main_device_rating"), "main_device_rating");
     await runAddress(fakeApi({ runSite: vi.fn().mockResolvedValue({ status: "ok", record }) }));
+    await openReport();
     fireEvent.click(await screen.findByRole("button", { name: /^Main device rating/ }));
     fireEvent.click(within(screen.getByRole("complementary")).getByRole("button", { name: "Place on the map" }));
     await waitFor(() => expect(mapProps.current?.placingField).toBe("main_device_rating"));
@@ -223,7 +310,7 @@ describe("responses that land late or fail", () => {
     saved.version = 5;
     const readReadiness = vi.fn().mockResolvedValueOnce(sampleReport()).mockRejectedValue(new Error("offline"));
     await runAddress(fakeApi({ readReadiness, confirmValue: vi.fn().mockResolvedValue(saved) }));
-    fireEvent.click(await screen.findByRole("button", { name: /^Facility location/ }));
+    fireEvent.click(within(await screen.findByRole("region", { name: "Public facts" })).getByRole("button", { name: /^Parcel ID/ }));
     const dock = within(screen.getByRole("complementary"));
     fireEvent.click(dock.getByRole("button", { name: "Confirm" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/saved.*couldn't refresh/i);
@@ -258,7 +345,7 @@ describe("responses that land late or fail", () => {
       confirmValue: vi.fn().mockResolvedValue(saved),
     });
     await runAddress(api);
-    await screen.findByRole("region", { name: "Next request" });
+    await openReport();
     const ranked = within(screen.getByRole("list", { name: "Ranked gaps" }));
     fireEvent.click(ranked.getAllByRole("button", { name: "Create capture link" })[0]!);
     await screen.findByText(/waiting for a photo/);
@@ -331,7 +418,7 @@ describe("waiting on a capture", () => {
 
   async function startLink(api: EngineerApi) {
     await runAddress(api);
-    await screen.findByRole("region", { name: "Next request" });
+    await openReport();
     const ranked = within(screen.getByRole("list", { name: "Ranked gaps" }));
     fireEvent.click(ranked.getAllByRole("button", { name: "Create capture link" })[0]!);
     await screen.findByText(/waiting for a photo/);
@@ -356,7 +443,7 @@ describe("waiting on a capture", () => {
   it("doesn't poll with no open link", async () => {
     const readVersion = vi.fn().mockResolvedValue(sampleRecord());
     await runAddress(fakeApi({ readVersion }));
-    await screen.findByRole("region", { name: "Next request" });
+    await screen.findByRole("region", { name: "Public facts" });
     await new Promise((resolve) => setTimeout(resolve, 3300));
     expect(readVersion).not.toHaveBeenCalled();
   }, 8000);
@@ -392,9 +479,10 @@ describe("waiting on a capture", () => {
   }, 10000);
 });
 
-describe("selecting and creating a link", () => {
+describe("the evidence check, on request", () => {
   it("opens evidence from a report row", async () => {
     await runAddress(fakeApi());
+    await openReport();
     fireEvent.click(await screen.findByRole("button", { name: /^Meter number/ }));
     expect(within(screen.getByRole("complementary")).getByText(/too blurred to read/)).toBeTruthy();
   });
@@ -411,11 +499,19 @@ describe("selecting and creating a link", () => {
       maxUploads: 5,
     });
     await runAddress(fakeApi({ createCaptureLink }));
-    await screen.findByRole("region", { name: "Next request" });
+    await openReport();
     const ranked = within(screen.getByRole("list", { name: "Ranked gaps" }));
     fireEvent.click(ranked.getAllByRole("button", { name: "Create capture link" })[0]!);
     await waitFor(() => expect(createCaptureLink).toHaveBeenCalledWith("sample-site", "meter_number"));
     expect((await screen.findAllByText(/SAMPLE-TOKEN/)).length).toBeGreaterThan(0);
     expect(screen.getByText(/This tool does not send it/)).toBeTruthy();
+  });
+
+  it("goes back to the facts", async () => {
+    await runAddress(fakeApi());
+    await openReport();
+    fireEvent.click(screen.getByRole("button", { name: "Back to the facts" }));
+    expect(screen.getByRole("region", { name: "Public facts" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Evidence check" })).toBeNull();
   });
 });

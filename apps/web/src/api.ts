@@ -4,6 +4,7 @@ import {
   ReadinessReportSchema,
   RecordVersionSchema,
   routes,
+  RunProgressSchema,
   RunSiteResponseSchema,
   type CaptureLink,
   type CaptureMetadata,
@@ -13,6 +14,7 @@ import {
   type ObservedValue,
   type ReadinessReport,
   type RecordVersion,
+  type RunProgress,
   type RunSiteRequestSchema,
 } from "@eqore/contract";
 import { ApiRequestError, send as sendWith, uploadForm } from "./app/http";
@@ -28,8 +30,14 @@ export interface Actor {
   evidence: EvidenceRef[];
 }
 
+export type ExportFormat = "dxf" | "kml";
+
 export interface EngineerApi {
   runSite(request: RunSiteRequest): Promise<RunSiteResponse>;
+  // Null when no run for that address is known yet, as just before it starts.
+  readRunProgress(address: string): Promise<RunProgress | null>;
+  // Null when the server doesn't offer the file, so the screen can say so instead of failing.
+  exportFile(siteId: string, version: number, format: ExportFormat): Promise<Blob | null>;
   readVersion(siteId: string, version: number | "latest"): Promise<RecordVersion>;
   readReadiness(siteId: string, version: number | "latest"): Promise<ReadinessReport>;
   confirmValue(siteId: string, field: string, request: Actor & { expectedObservationId: string }): Promise<RecordVersion>;
@@ -58,6 +66,26 @@ const postJson = (body: unknown): RequestInit => ({
 
 export const httpApi: EngineerApi = {
   runSite: (request) => send(RunSiteResponseSchema, routes.runSite.path, postJson(request)),
+  readRunProgress: async (address) => {
+    try {
+      return await send(RunProgressSchema, `${routes.readRunProgress.path}?address=${encodeURIComponent(address)}`);
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === "not_found") return null;
+      throw error;
+    }
+  },
+  exportFile: async (siteId, version, format) => {
+    const route = format === "dxf" ? routes.exportDxf : routes.exportKml;
+    let response: Response;
+    try {
+      response = await fetch(fill(route.path, { siteId, version }));
+    } catch {
+      throw new ApiRequestError("network", "The API isn't reachable.");
+    }
+    if (response.status === 404) return null;
+    if (!response.ok) throw new ApiRequestError("unknown", `The API returned ${response.status}.`);
+    return response.blob();
+  },
   readVersion: (siteId, version) =>
     send(RecordVersionSchema, fill(routes.readVersion.path, { siteId, version })),
   readReadiness: (siteId, version) =>

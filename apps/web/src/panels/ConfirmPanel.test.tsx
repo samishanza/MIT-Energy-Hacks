@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EngineerApi } from "../api";
 import { createMockApi } from "../mockApi";
-import { sampleRecord } from "../test/fixtures";
+import { sampleRecord, worcesterRecord } from "../test/fixtures";
 import { ConfirmPanel } from "./ConfirmPanel";
 
 afterEach(cleanup);
@@ -141,7 +141,7 @@ describe("confirming and correcting", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await waitFor(() => expect(onRecord).toHaveBeenCalled());
     const report = await api.readReadiness("sample-site", "latest");
-    expect(report.items.find((i) => i.id === "meter")!.status).toBe("has_evidence");
+    expect(report.items.find((i) => i.id === "meter-number")!.status).toBe("has_evidence");
     expect(report.gaps.some((g) => g.field === "meter_number")).toBe(false);
   });
 
@@ -217,7 +217,7 @@ describe("confirming and correcting", () => {
     expect(screen.getByRole("region", { name: "Draft reading" }).textContent).toMatch(/mark all fields verified/);
     expect(onRecord).not.toHaveBeenCalled();
     expect(record.values.filter((v) => v.state === "verified")).toHaveLength(
-      sampleRecord().values.filter((v) => v.state === "verified").length,
+      worcesterRecord().values.filter((v) => v.state === "verified").length,
     );
   });
 });

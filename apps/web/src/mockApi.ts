@@ -10,15 +10,88 @@ import {
   type ReadinessItem,
   type ReadinessReport,
   type RecordVersion,
+  type RunProgress,
   type Value,
 } from "@eqore/contract";
-import readinessSample from "@eqore/contract/samples/readiness.sample.json";
-import recordSample from "@eqore/contract/samples/record.sample.json";
 import { ApiRequestError, type Actor, type EngineerApi } from "./api";
 import { formatValue } from "./app/format";
 import { isEquipmentPoint } from "./map/layers";
+import worcesterReadiness from "./mock/worcester.readiness.json";
+import worcesterRecord from "./mock/worcester.record.json";
 
-// A synthetic stand-in for the engineer API, so the UI can be walked before the real API exists.
+// A stand-in for the engineer API, so the UI can be walked without the API running. It serves a run of
+// 100 Research Dr, Worcester, recorded from real public sources, plus eligibility zones the backend doesn't
+// compute yet, which are synthetic and labeled so in the data.
+
+type Ring = [number, number][];
+const rectangle = (west: number, east: number, south: number, north: number): Ring => [
+  [west, south],
+  [east, south],
+  [east, north],
+  [west, north],
+  [west, south],
+];
+
+const SAMPLE_ZONES: { tier: string; ring: Ring }[] = [
+  { tier: "remote", ring: rectangle(-71.77, -71.769, 42.277, 42.2776) },
+  { tier: "near_exposure", ring: rectangle(-71.77, -71.7696, 42.2762, 42.2765) },
+  { tier: "exception", ring: rectangle(-71.7693, -71.7691, 42.275, 42.2754) },
+];
+
+function withSampleZones(base: RecordVersion): RecordVersion {
+  const record = structuredClone(base);
+  const field = "sample_eligibility_zones";
+  const source = { id: "sample-zones", name: "SYNTHETIC SAMPLE eligibility zones", kind: "human_evidence" as const, dataOrigin: "synthetic" as const };
+  const observationId = "obs-sample-zones";
+  const current = { type: "text" as const, value: `${SAMPLE_ZONES.length} zones, a SYNTHETIC SAMPLE until the backend computes them` };
+  record.observations.push({
+    id: observationId,
+    siteId: record.site.id,
+    field,
+    kind: "reading",
+    value: current,
+    source,
+    retrievedAt: record.createdAt,
+    sourceDate: null,
+    method: "computed",
+    locator: {},
+    identity: { sourceId: source.id, query: field, contentHash: observationId },
+    grade: "reference",
+    synthetic: true,
+  });
+  record.values.push({
+    field,
+    label: "Eligibility zones (SYNTHETIC SAMPLE)",
+    state: "inferred",
+    grade: "reference",
+    owner: "public_data",
+    current,
+    method: "computed",
+    candidates: [],
+    observationIds: [observationId],
+    currentObservationId: observationId,
+    flags: ["Synthetic sample shapes for walking the screen. Not computed from this site's rules."],
+    family: "physical",
+    synthetic: true,
+  });
+  record.features.push(
+    ...SAMPLE_ZONES.map(({ tier, ring }, index) => ({
+      id: `sample-zone-${index + 1}`,
+      kind: "candidate_area" as const,
+      field,
+      label: `SYNTHETIC SAMPLE zone ${index + 1}`,
+      geometry: { type: "Polygon" as const, coordinates: [ring] },
+      attributes: {
+        tier: { type: "text" as const, value: tier },
+        rules: { type: "text" as const, value: "SYNTHETIC SAMPLE: IFC 1207.8.1, NFPA 855 4.4.3" },
+      },
+    })),
+  );
+  record.synthetic = true;
+  return RecordVersionSchema.parse(record);
+}
+
+const RUN_MS = 2400;
 
 const SAMPLE_PHOTO = `data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640"><rect width="960" height="640" fill="#4a5157"/><rect x="120" y="80" width="720" height="480" fill="#d8d6ce"/><text x="480" y="170" font-family="sans-serif" font-size="30" text-anchor="middle" fill="#b3261e">SYNTHETIC SAMPLE PHOTO</text><text x="480" y="300" font-family="monospace" font-size="56" text-anchor="middle">800 A 480Y/277 V</text></svg>`,
@@ -80,12 +153,24 @@ function nextReport(record: RecordVersion, previous: ReadinessReport): Readiness
   });
 }
 
-export function createMockApi(): EngineerApi {
-  let record = RecordVersionSchema.parse(structuredClone(recordSample));
-  let report = ReadinessReportSchema.parse(structuredClone(readinessSample));
+function progressAt(record: RecordVersion, fraction: number): RunProgress {
+  const order = (kind: string) => (kind === "property_line" ? 0 : kind === "building_outline" ? 0.3 : 0.6);
+  const answered = Math.floor(record.sourceRuns.length * fraction);
+  return {
+    status: "running",
+    site: record.site,
+    sourceRuns: record.sourceRuns.map((run, index) => (index < answered ? run : { sourceId: run.sourceId, name: run.name, status: "pending" })),
+    features: record.features.filter((feature) => order(feature.kind) <= fraction),
+  };
+}
+
+export function createMockApi({ runMs = RUN_MS }: { runMs?: number } = {}): EngineerApi {
+  let record = withSampleZones(RecordVersionSchema.parse(structuredClone(worcesterRecord)));
+  let report = ReadinessReportSchema.parse({ ...structuredClone(worcesterReadiness), recordVersionId: record.id, synthetic: true });
   const files = new Map<string, string>([["sample-file-1", SAMPLE_PHOTO]]);
   const pdfs = new Set<string>();
   let serial = 100;
+  let runStarted: number | null = null;
 
   function commit(trigger: RecordVersion["trigger"], change: (next: RecordVersion) => void): RecordVersion {
     const next = structuredClone(record);
@@ -155,7 +240,17 @@ export function createMockApi(): EngineerApi {
       if (/no match/i.test(request.address) && !request.choice) {
         return RunSiteResponseSchema.parse({ status: "needs_choice", candidates: [] });
       }
+      runStarted = Date.now();
+      await new Promise((resolve) => setTimeout(resolve, runMs));
+      runStarted = null;
       return RunSiteResponseSchema.parse({ status: "ok", record: structuredClone(record) });
+    },
+    async readRunProgress() {
+      if (runStarted === null) return null;
+      return progressAt(record, Math.min(1, (Date.now() - runStarted) / runMs));
+    },
+    async exportFile() {
+      return null;
     },
     async readVersion() {
       return structuredClone(record);
