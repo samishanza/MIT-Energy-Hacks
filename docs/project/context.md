@@ -25,6 +25,7 @@ Living context for the EQORE track. **Last updated:** 2026-11-07
 - The biggest problem is the time it takes to connect to the grid. The product is a data collection and aggregation tool that sets inputs and outputs for each site, so approval to connect comes faster and without mistakes. Software can reduce avoidable rework, but it can't guarantee approval or turnaround.
 - The demo will target either Massachusetts or California sites.
 - We want a repeatable, novel way to populate the database for any site. We still need to choose it, and the tech stack.
+- Collection has two parts: physical data (where batteries can go) and technical electrical specifications (how it can actually be built). From what engineers told the team, physical data would come from Google Earth Engine, and electrical specifications from city-provided resources that map energy delivery and transmission lines, such as NavigateLA in Los Angeles. Neither has been tested yet.
 
 **Still missing**
 - The Century Tywood plan set. It is not in this repo, and a filename search of this machine's Documents, Downloads, and Desktop folders did not find it. Two other sample plan sets are now in `provided resources/`.

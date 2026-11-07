@@ -2,22 +2,22 @@
 
 Open decisions, assumptions, and team choices. EQORE's Challenge Brief and the latest context are in [context.md](context.md).
 
-**Current phase:** Ideation. Do not scaffold the app until D1 and D2 are decided.
+**Current phase:** Build, under `docs/plans/2026-11-07-0954-feat-site-data-collection-plan.md`. D1 and D2 are decided below at the team's request ("make your best judgement"), so scaffolding may start from the plan's first unit.
 
 ## Open decisions
 
 | ID | Decision | Status | Owner |
 |---|---|---|---|
-| D1 | Primary bottleneck (one of the four options in context.md) | Open, leaning Option 1 | Team |
-| D2 | Stack | Open | Team |
-| D3 | Primary user and the one manual handoff we replace | Open, follows D1 | Team |
+| D1 | Primary bottleneck (one of the four options in context.md) | Decided: Option 1, aimed at the grid connection application | Team |
+| D2 | Stack | Decided: TypeScript on Node 24, React, Vite, MapLibre, Hono, SQLite, Zod. See KTD7 in the plan | Lead |
+| D3 | Primary user and the one manual handoff we replace | Assumed: design engineer, assembling site facts for the application. Confirm with EQORE | Team |
 | D4 | Source of demo data: redacted from EQORE, public, or labeled synthetic | Open, ask EQORE | Team |
 | D5 | Owner of shared types and schemas | Open | Team |
 | D6 | Writing-task isolation: Compound Engineering workers or named Git worktrees | Open | Lead |
 | D8 | Lead who coordinates implementation | Open | Team |
-| D9 | Data collection approach for Option 1: software, hardware, or both, and the repeatable method for populating the database | Open, being planned | Team |
-| D11 | Demo state: Massachusetts or California | Open, starting from Massachusetts unless the utility research clearly favors California | Team |
-| D12 | Scope: narrow the target to the interconnection application and the drawings it requires, from signed contract until the application is submitted | Proposed in `/ce-plan`, not yet confirmed | Team |
+| D9 | Data collection approach for Option 1: software, hardware, or both, and the repeatable method for populating the database | Decided: software. Physical data from public services and Google Earth Engine, utility-side data from public utility or city services, customer-side data by phone link. Earth Engine is assumed to be what the engineers meant; confirm with them | Team |
+| D11 | Demo state: Massachusetts or California | Decided: National Grid site in Worcester, MA, with PG&E in Fremont, CA as the second region | Lead |
+| D12 | Scope: narrow the target to the interconnection application and the drawings it requires, from signed contract until the application is submitted | Decided at the team's request, not separately reviewed line by line | Team |
 
 ## Hackathon facts we still need
 
