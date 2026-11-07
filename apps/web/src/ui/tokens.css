@@ -673,12 +673,13 @@ legend {
 .place-prompt {
   position: absolute;
   top: 10px;
-  left: 50%;
+  right: 10px;
+  left: 70px;
   z-index: 2;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  transform: translateX(-50%);
   padding: 6px 12px;
   background: var(--select);
   color: var(--white);
@@ -687,6 +688,14 @@ legend {
 
 .place-prompt p {
   margin: 0;
+}
+
+.place-prompt button {
+  flex: none;
+}
+
+.dock-open .place-prompt {
+  right: 430px;
 }
 
 /* Confirm takeover */
