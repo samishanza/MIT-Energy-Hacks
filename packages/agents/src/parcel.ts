@@ -38,10 +38,14 @@ export const parcelAgent: Agent = {
       e.miss('zoning.district');
       e.note('parcel layer carries no zoning district; a use code is not a substitute for one');
     }
-    e.propose('site.road_side', parcel.roadSide, parcel, 'parcel', {
-      confidence: 0.8,
-      rationale: 'Parcel edge coincident with the public right-of-way.',
-    });
+    if (parcel.roadSide) {
+      e.propose('site.road_side', parcel.roadSide, parcel, 'parcel', {
+        confidence: 0.8,
+        rationale: 'Parcel edge coincident with the public right-of-way.',
+      });
+    } else {
+      e.miss('site.road_side');
+    }
 
     // Lot dimensions come with a tolerance: parcel polygons are not survey grade.
     e.propose('lot.width_ft', parcel.lotWidthFt, parcel, 'parcel', {

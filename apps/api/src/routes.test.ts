@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ApiErrorSchema, RecordVersionSchema, RunSiteResponseSchema, routes } from "@eqore/contract";
+import { ApiErrorSchema, RecordVersionSchema, RunProgressSchema, RunSiteResponseSchema, routes } from "@eqore/contract";
 import type { Observation, ObservedValue, RecordVersion, Value } from "@eqore/contract";
 import { fixtureFetch } from "@eqore/sources";
 import type { CaptureDeps } from "./capture.ts";
@@ -72,11 +72,18 @@ describe("the engineer API", () => {
     expect(record.synthetic).toBe(false);
     expect(record.sourceRuns.map((source) => [source.sourceId, source.status])).toEqual([
       ["massgis-l3-parcels", "done"],
-      ["massgis-roofprints", "done"],
       ["massgis-imagery-2025", "done"],
+      ["massgis-roofprints", "done"],
       ["national-grid-hosting-capacity", "done"],
       ["national-grid-feeder-lines", "done"],
       ["census-tiger-local-roads", "done"],
+      ["massgis-municipalities", "done"],
+      ["massdot-roads", "done"],
+      ["massdep-wetlands", "done"],
+      ["massgis-fire-stations", "done"],
+      ["esri-usa-flood-hazard", "missing"],
+      ["usgs-epqs", "done"],
+      ["massgis-lidar-dem", "done"],
       ["earth-engine", "missing"],
     ]);
     expect(deps.store.observations(SITE).length).toBe(record.observations.length);
@@ -364,6 +371,25 @@ describe("the engineer API", () => {
 
     const local = await confirm({ host: "127.0.0.1:5173", origin: "http://127.0.0.1:5173" });
     expect(local.status).toBe(200);
+  });
+
+  it("answers run progress by the address as typed, and 404 when there's no run", async () => {
+    const deps = { ...testDeps(), progress: new Map() };
+    const app = createEngineerApp(deps);
+    await app.request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: ADDRESS }) });
+    const response = await app.request(`${routes.readRunProgress.path}?address=${encodeURIComponent(ADDRESS)}`);
+    const progress = RunProgressSchema.parse(await response.json());
+    expect(progress.status).toBe("done");
+    expect(progress.site?.id).toBe(SITE);
+    expect(progress.features.some((feature) => feature.kind === "property_line")).toBe(true);
+    expect((await app.request(`${routes.readRunProgress.path}?address=nowhere`)).status).toBe(404);
+  });
+
+  it("sets catalog coverage on the record", async () => {
+    const { run } = setup();
+    const record = await run();
+    expect(record.coverage?.total).toBeGreaterThan(70);
+    expect(record.coverage?.filled).toBeGreaterThan(10);
   });
 
   it("sends no CORS headers", async () => {

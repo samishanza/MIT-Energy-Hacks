@@ -6,8 +6,8 @@
 // result into the payloads the agents already read. No agent, gatekeeper rule or engine
 // changes; swapping makeFixtureSources() for makeLiveSources() is the whole difference.
 //
-// The hard discipline here is what it REFUSES to supply. MassGIS L3 carries no owner and
-// no zoning district; no GIS layer carries openings, pad zones, surface type or a bus
+// The hard discipline here is what it REFUSES to supply. Owner names aren't collected; no
+// GIS layer carries openings, pad zones, surface type or a bus
 // rating. Those come back null, the agents report them unresolved, and the engine ranks
 // them — which is the correct behaviour and the entire point of the record. An adapter
 // that quietly filled them with plausible numbers would be worse than no adapter.
@@ -162,7 +162,6 @@ export interface LiveSources {
 /** What no Massachusetts GIS layer can answer, whatever address you give it. */
 export const NOT_AVAILABLE_FROM_GIS = [
   'site.owner',
-  'zoning.district',
   'openings[].wall',
   'openings[].kind',
   'openings[].at_ft',
@@ -213,7 +212,9 @@ export async function makeLiveSources(opts: LiveOptions): Promise<LiveSources> {
     lat: collection.site.location?.[1],
   };
 
-  // --- parcel: real geometry, and openly missing owner and zoning
+  // --- parcel: real geometry and zoning, with the owner openly missing
+  const roadSide = readText(observations, 'road_side');
+  const collectedRoadSide = (['north', 'south', 'east', 'west'] as const).find((side) => side === roadSide);
   const parcelId = readText(observations, 'parcel_id');
   const lotSizeAcres = readNumber(observations, 'lot_size_acres');
   const parcel: ParcelRecord | null =
@@ -229,7 +230,8 @@ export async function makeLiveSources(opts: LiveOptions): Promise<LiveSources> {
           lotWidthFt: boxSizeFt(lotBounds).widthFt,
           lotDepthFt: boxSizeFt(lotBounds).depthFt,
           toleranceFt: 10,
-          roadSide: 'south',
+          roadSide: collectedRoadSide,
+          zoningDistrict: readText(observations, 'zoning_district') ?? undefined,
         }
       : null;
 

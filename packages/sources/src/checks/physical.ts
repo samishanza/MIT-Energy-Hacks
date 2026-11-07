@@ -27,9 +27,12 @@ export type PhysicalCollection = {
   measurable: {
     lookup: ArcgisResult;
     parcel: ArcgisFeature & { geometry: PolygonGeometry };
-    outlines: { result: ArcgisResult; features: (ArcgisFeature & { geometry: PolygonGeometry })[] } | null;
+    yearBuilt: unknown;
   } | null;
 };
+
+// A stated team assumption until something measures height: stories alone say nothing of floor height.
+export const ASSUMED_FLOOR_HEIGHT_FT = 14;
 
 function isPolygon(geometry: ArcgisFeature["geometry"]): geometry is PolygonGeometry {
   return geometry?.type === "Polygon" || geometry?.type === "MultiPolygon";
@@ -80,7 +83,7 @@ type Outlines = {
   measurable: { result: ArcgisResult; features: (ArcgisFeature & { geometry: PolygonGeometry })[] };
 };
 
-async function collectOutlines(buildings: BuildingOutlines, parcelGeometry: PolygonGeometry, yearBuilt: unknown, ctx: CollectContext): Promise<Outlines> {
+export async function collectOutlines(buildings: BuildingOutlines, parcelGeometry: PolygonGeometry, yearBuilt: unknown, ctx: CollectContext): Promise<Outlines> {
   const result = await queryArcgis(buildings.entry, { kind: "polygon", geometry: parcelGeometry }, ctx);
   // A neighbor's roof can touch the query polygon, so keep outlines centered on this parcel.
   const inside = result.features.filter(
@@ -183,8 +186,28 @@ function locationObservation(anchor: SiteAnchor, location: [number, number], loo
   };
 }
 
-// Fills the physical half of the record. Each source fails on its own, with its reason.
-export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, ctx: CollectContext): Promise<PhysicalCollection> {
+function heightObservation(lookup: ArcgisResult, parcelLookup: ParcelLookup, parcel: ArcgisFeature, ctx: CollectContext): Observation[] {
+  if (!parcelLookup.storiesAttribute) return [];
+  const raw = parcel.attributes[parcelLookup.storiesAttribute];
+  const stories = typeof raw === "number" ? raw : Number(raw);
+  const shared = { field: "building_height_ft", attribute: parcelLookup.storiesAttribute, objectId: parcel.objectId, sourceDate: sourceDateOf(lookup.entry, parcel.attributes) };
+  if (!Number.isFinite(stories) || stories <= 0) {
+    return [observe(lookup, ctx, { ...shared, kind: "no_value", value: null, reason: `${parcelLookup.storiesAttribute} is blank or 0 in the source, so no height can be estimated.` })];
+  }
+  return [
+    observe(lookup, ctx, {
+      ...shared,
+      kind: "reading",
+      value: { type: "quantity", value: stories * ASSUMED_FLOOR_HEIGHT_FT, unit: "ft" },
+      method: "assumed",
+      grade: "reference",
+      reason: `An estimate, not a measurement: ${stories} stories on the assessor record times an assumed ${ASSUMED_FLOOR_HEIGHT_FT} ft per story.`,
+    }),
+  ];
+}
+
+// The physical facts that come from the anchor itself, with no further request.
+export function anchorPhysical(region: RegionConfig, anchor: SiteAnchor, ctx: CollectContext): PhysicalCollection {
   const observations: Observation[] = [];
   const features: MapFeature[] = [];
   const runs: SourceRun[] = [];
@@ -199,10 +222,11 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
     runs.push(anchor.lookup.run);
     observations.push(...toObservations(anchor.lookup, ctx, [parcel]));
     observations.push(...lotSizeObservations(anchor.lookup, region.parcels, parcel, ctx));
+    observations.push(...heightObservation(anchor.lookup, region.parcels, parcel, ctx));
     if (!isPolygon(parcel.geometry)) throw new Error("A parcel anchor needs a polygon");
     {
       parcelGeometry = parcel.geometry;
-      measurable = { lookup: anchor.lookup, parcel: { ...parcel, geometry: parcel.geometry }, outlines: null };
+      measurable = { lookup: anchor.lookup, parcel: { ...parcel, geometry: parcel.geometry }, yearBuilt: parcel.attributes[region.parcels.yearBuiltAttribute] };
       observations.push(
         observe(anchor.lookup, ctx, {
           field: "property_line",
@@ -229,15 +253,6 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
 
   const located = locationObservation(anchor, location, lookup, ctx);
   observations.push(located.observation);
-
-  if (region.buildings && parcelGeometry) {
-    const yearBuilt = anchor.kind === "parcel" && region.parcels ? anchor.parcel.attributes[region.parcels.yearBuiltAttribute] : null;
-    const outlines = await collectOutlines(region.buildings, parcelGeometry, yearBuilt, ctx);
-    observations.push(...outlines.observations);
-    features.push(...outlines.features);
-    runs.push(outlines.run);
-    if (measurable) measurable.outlines = outlines.measurable;
-  }
 
   let baseMap: BaseMap | null = null;
   if (region.imagery) {

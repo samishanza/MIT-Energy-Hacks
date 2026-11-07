@@ -16,7 +16,7 @@ const context = (fetch: FetchLike = recorded): CollectContext => ({ siteId: "tes
 
 const parcels = massachusetts.parcels!.entry;
 // The stored time of the recording this test replays.
-const recordedAt = JSON.parse(readFileSync(join(dir("arcgis"), "worcester-100-research-dr-71d700b1bd868958.json"), "utf8")).retrievedAt as string;
+const recordedAt = JSON.parse(readFileSync(join(dir("arcgis"), "worcester-100-research-dr-38d1c115ab5285b8.json"), "utf8")).retrievedAt as string;
 const grid = massachusetts.grid[0]!.entry;
 const WORCESTER = "SITE_ADDR='100 RESEARCH DR' AND CITY='WORCESTER'";
 

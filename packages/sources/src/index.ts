@@ -1,9 +1,8 @@
-import { californiaPge } from "../config/california-pge.ts";
-import { massachusetts } from "../config/massachusetts.ts";
-import type { RegionConfig } from "./registry.ts";
-
-export const REGIONS: RegionConfig[] = [massachusetts, californiaPge];
-
+export { REGIONS, californiaPge, massachusetts } from "../config/index.ts";
+export * from "./catalog-map.ts";
+export * from "./geometry.ts";
+export * from "./json-api.ts";
+export * from "./layers.ts";
 export * from "./arcgis.ts";
 export * from "./collect.ts";
 export * from "./derive.ts";
@@ -13,4 +12,3 @@ export * from "./geocode.ts";
 export * from "./registry.ts";
 export * from "./resolve-site.ts";
 export * from "./units.ts";
-export { massachusetts, californiaPge };

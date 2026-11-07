@@ -1,4 +1,5 @@
 import type { FitnessGrade, Owner } from "@eqore/contract";
+import { CATALOG_ROUTES, type Family } from "./catalog-map.ts";
 
 // Team value for the demo until EQORE gives one.
 export const LOT_SIZE_TOLERANCE = 0.03;
@@ -16,6 +17,7 @@ export type FieldDefinition = {
   field: string;
   label: string;
   owner: Owner;
+  family?: Family;
   grade: FitnessGrade;
   comparison?: Comparison;
   missingReason?: string;
@@ -42,6 +44,23 @@ export const FIELDS: FieldDefinition[] = [
   { field: "building_area_sqft", label: "Building area", owner: "customer", grade: "reference" },
   { field: "building_outline", label: "Building outline", owner: "public_data", grade: "reference" },
   { field: "aerial_image", label: "Aerial image", owner: "public_data", grade: "reference" },
+  { field: "zoning_district", label: "Zoning district", owner: "public_data", grade: "reference" },
+  { field: "building_stories", label: "Stories", owner: "public_data", grade: "reference" },
+  { field: "use_description", label: "Assessor use", owner: "public_data", grade: "reference" },
+  { field: "building_height_ft", label: "Building height (estimate)", owner: "public_data", grade: "reference" },
+  ...[
+    ["municipality", "Municipality"],
+    ["county", "County"],
+    ["road_name", "Fronting road"],
+    ["road_width_ft", "Road surface width"],
+    ["road_lanes", "Road lanes"],
+    ["road_surface_type", "Road surface type"],
+    ["flood_zone", "Flood zone"],
+    ["wetlands_nearby", "Wetlands nearby"],
+    ["fire_stations_nearby", "Fire stations nearby"],
+    ["ground_elevation_ft", "Ground elevation"],
+    ["site_slope_pct", "Ground slope across the parcel"],
+  ].map(([field, label]): FieldDefinition => ({ field: field!, label: label!, owner: "public_data", grade: "reference", comparison: { kind: "latest" }, missingReason: "No source has answered for this site." })),
   ...[
     ["lot_width_ft", "Lot width (fitted east-west extent)"],
     ["lot_depth_ft", "Lot depth (fitted north-south extent)"],
@@ -104,6 +123,22 @@ export const FIELDS: FieldDefinition[] = [
   { field: "protection_schematics", label: "Protection and control schematics", owner: "engineer", grade: "reference", missingReason: ENGINEER },
   { field: "applicant_signature", label: "Applicant signature", owner: "engineer", grade: "reference", missingReason: "A person signs this. The tool never fills it." },
 ].map((definition) => ({ ...definition, missingReason: definition.missingReason ?? NO_EVIDENCE })) as FieldDefinition[];
+
+const HAND_FAMILY: Record<string, Family> = {
+  serving_utility: "utility",
+  feeder: "utility",
+  peak_demand_kw: "energy",
+};
+
+// Every catalog field has a value, so what nobody answered still shows with its owner and why.
+for (const route of CATALOG_ROUTES) {
+  if (!FIELDS.some((definition) => definition.field === route.field)) {
+    FIELDS.push({ field: route.field, label: route.label ?? route.key, owner: route.owner, grade: "reference", family: route.family, missingReason: route.why });
+  }
+}
+for (const definition of FIELDS) {
+  definition.family ??= HAND_FAMILY[definition.field] ?? CATALOG_ROUTES.find((route) => route.field === definition.field)?.family ?? (definition.owner === "public_data" ? "physical" : definition.owner === "utility" ? "utility" : definition.owner === "customer" || definition.owner === "qualified_person" ? "customer" : "decision");
+}
 
 // Details stored as their own observations, so each keeps its source, and shown on the feeder.
 export const FEEDER_ATTRIBUTES: Record<string, string> = {

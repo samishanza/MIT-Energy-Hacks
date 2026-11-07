@@ -37,7 +37,8 @@ describe("the site map export", () => {
     expect(map.site.address).toBe("100 Research Dr, Worcester, MA");
     expect(map.baseMap?.sourceId).toBe("massgis-imagery-2025");
     const kinds = new Set(map.features.features.map((feature) => feature.properties.kind));
-    expect([...kinds].sort()).toEqual(["building_outline", "dimension_line", "property_line", "utility_line"]);
+    expect([...kinds].sort()).toEqual(["building_outline", "constraint", "dimension_line", "property_line", "utility_line"]);
+    expect(map.coverage?.filled).toBeGreaterThan(10);
   });
 
   it("gives every feature the state, grade, and owner of the value behind it, and includes what's missing", async () => {

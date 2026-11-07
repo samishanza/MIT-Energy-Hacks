@@ -1,5 +1,6 @@
 import type { RegionConfig } from "../src/registry.ts";
 import { censusLocalRoads } from "./census-roads.ts";
+import { usgsPointElevation } from "./national.ts";
 
 export const californiaPge: RegionConfig = {
   id: "california-pge",
@@ -16,7 +17,7 @@ export const californiaPge: RegionConfig = {
         layer: 3,
         // A Census point falls along the street, so this search is wider than one from a parcel.
         searchRadiusMeters: 100,
-        licenseNote: "PG&E public map, no login. Terms not yet read. Utility-published context for the location queried, not a site answer.",
+        licenseNote: 'PG&E: the item says it makes the data "available for general public consumption". The ArcGIS Online host answered robots.txt with 403, so no rule was read. Utility-published context for the location queried, not a site answer.',
         robotsChecked: "2026-11-07",
         objectIdAttribute: "FeederId",
         sourceDate: { attribute: "ICA_Analysis_Date", format: "text" },
@@ -35,12 +36,13 @@ export const californiaPge: RegionConfig = {
     },
   ],
   roads: censusLocalRoads,
+  jsonSources: [usgsPointElevation],
   unavailable: [
     {
       sourceId: "earth-engine",
-      name: "Google Earth Engine imagery and elevation",
-      fields: ["aerial_image", "elevation_m"],
-      reason: "The Earth Engine adapter isn't built yet, so imagery and elevation are missing.",
+      name: "Google Earth Engine imagery and land cover",
+      fields: ["aerial_image", "land_cover"],
+      reason: "The Earth Engine adapter isn't built yet, so imagery and land cover are missing.",
     },
   ],
   personRoutes: [

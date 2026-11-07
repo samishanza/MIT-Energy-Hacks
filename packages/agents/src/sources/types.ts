@@ -27,7 +27,7 @@ export interface ParcelRecord extends SourceDoc {
   toleranceFt: number;
   /** Absent from MassGIS L3. A use code is not a zoning district and must not stand in for one. */
   zoningDistrict?: string;
-  roadSide: Wall;
+  roadSide?: Wall;
   floodZone?: string;
   /** Owner of the parcel across the nearest property line; named on a stamped site plan. */
   abutterOwner?: string;
