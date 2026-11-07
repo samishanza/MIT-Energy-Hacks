@@ -1,5 +1,6 @@
 import type { BaseMap, MapFeature, Observation, Site, SourceRun } from "@eqore/contract";
 import { observe, queryArcgis, type CollectContext, type FetchLike, type PolygonGeometry } from "./arcgis.ts";
+import { queryTerritories, servingUtility } from "./checks/energy.ts";
 import { collectGrid } from "./checks/grid.ts";
 import { measureSite, type Measurements } from "./checks/measure.ts";
 import { anchorPhysical, collectOutlines } from "./checks/physical.ts";
@@ -111,6 +112,7 @@ export async function collectSite(address: string, region: RegionConfig, anchor:
   if (region.roads && parcel) pending(region.roads.entry.id, region.roads.entry.name);
   for (const layer of region.layers ?? []) pending(layer.entry.id, layer.entry.name);
   for (const json of region.jsonSources ?? []) pending(json.id, json.name);
+  if (region.territories) pending(region.territories.entry.id, region.territories.entry.name);
   if (region.lidarSlope && ctx.measureSlope && physical.parcelGeometry) pending(region.lidarSlope.source.id, region.lidarSlope.source.name);
 
   const liveFeatures: MapFeature[] = [...physical.features];
@@ -126,7 +128,7 @@ export async function collectSite(address: string, region: RegionConfig, anchor:
   const layerAnchor = { parcel: physical.parcelGeometry, location: physical.location };
   const request = { location: physical.location, address };
 
-  const [outlines, grid, roads, layers, json, slope] = await Promise.all([
+  const [outlines, grid, roads, layers, json, slope, territories] = await Promise.all([
     region.buildings && physical.parcelGeometry ? collectOutlines(region.buildings, physical.parcelGeometry, parcel?.yearBuilt ?? null, ctx).then(landed) : null,
     collectGrid(region, physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] }, ctx).then(landed),
     region.roads && parcel
@@ -138,6 +140,12 @@ export async function collectSite(address: string, region: RegionConfig, anchor:
     Promise.all((region.layers ?? []).map((layer) => collectLayer(layer, layerAnchor, address, ctx).then(landed))),
     Promise.all((region.jsonSources ?? []).map((source) => collectJson(source, request, ctx).then(landed))),
     collectSlope(region, physical.parcelGeometry, ctx).then((part) => (part ? landed(part) : null)),
+    region.territories
+      ? queryTerritories(region.territories, physical.location, ctx).then((result) => {
+          landed({ run: result.run });
+          return result;
+        })
+      : null,
   ]);
   cancel();
 
@@ -172,6 +180,7 @@ export async function collectSite(address: string, region: RegionConfig, anchor:
       ...layers.flatMap((layer) => layer.observations),
       ...json.flatMap((source) => source.observations),
       ...(slope?.observations ?? []),
+      ...(territories && region.territories ? servingUtility(region.territories, territories, grid.outcomes, ctx) : []),
       ...unavailable,
       ...personRoutes,
     ],

@@ -135,10 +135,16 @@ describe("the wider physical record", () => {
     expect(value("wetlands_nearby").flags.join(" ")).toContain("not that none exist");
   });
 
-  it("says an empty flood layer doesn't show the site is out of a flood zone", async () => {
-    const { value } = await collect("100 Research Dr, Worcester, MA");
+  it("leaves the flood zone to a person reading FEMA's map, with no query", async () => {
+    const urls: string[] = [];
+    const { value, collection } = await collect("100 Research Dr, Worcester, MA", (url, init) => {
+      urls.push(url);
+      return recorded(url, init);
+    });
     expect(value("flood_zone").state).toBe("missing");
-    expect(value("flood_zone").reason).toContain("doesn't show the site is out of a flood zone");
+    expect(value("flood_zone").reason).toContain("Flood Map Service Center");
+    expect(collection.sourceRuns.find((run) => run.sourceId === "fema-flood-map")).toMatchObject({ status: "person_only" });
+    expect(urls.some((url) => /flood/i.test(url))).toBe(false);
   });
 
   it("estimates height as stories times a stated assumption, and never from blank stories", async () => {

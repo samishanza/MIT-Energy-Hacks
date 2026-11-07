@@ -1,6 +1,7 @@
 import type { MapFeature, Observation, SourceRun } from "@eqore/contract";
 import { observe, queryArcgis, toObservations, type ArcgisFeature, type ArcgisResult, type CollectContext, type PolygonGeometry, type SpatialQuery } from "../arcgis.ts";
 import type { ArcgisEntry, RegionConfig } from "../registry.ts";
+import type { GridOutcome } from "./energy.ts";
 
 export type GridAnchor = { parcel: PolygonGeometry } | { longitude: number; latitude: number };
 
@@ -10,10 +11,10 @@ export type GridCollection = {
   runs: SourceRun[];
   // The drawn lines, for measuring distances to them.
   lines: { result: ArcgisResult; features: ArcgisFeature[]; label: (feature: ArcgisFeature) => string }[];
+  outcomes: GridOutcome[];
 };
 
-function queryFor(entry: ArcgisEntry, anchor: GridAnchor): SpatialQuery {
-  const bufferMeters = entry.searchRadiusMeters;
+function queryFor(entry: ArcgisEntry, anchor: GridAnchor, bufferMeters = entry.searchRadiusMeters): SpatialQuery {
   return "parcel" in anchor
     ? { kind: "polygon", geometry: anchor.parcel, bufferMeters }
     : { kind: "point", longitude: anchor.longitude, latitude: anchor.latitude, bufferMeters };
@@ -26,20 +27,32 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
   const features: MapFeature[] = [];
   const runs: SourceRun[] = [];
   const measuredLines: GridCollection["lines"] = [];
+  const outcomes: GridOutcome[] = [];
   let servingUtilityFound = false;
+  const search = (source: (typeof region.grid)[number], meters: number) =>
+    Promise.all([
+      queryArcgis(source.entry, queryFor(source.entry, anchor, meters), ctx),
+      source.lineGeometry ? queryArcgis(source.lineGeometry, queryFor(source.lineGeometry, anchor, meters), ctx) : null,
+    ]);
   const results = await Promise.all(
     region.grid.map(async (source) => {
-      const [result, lines] = await Promise.all([
-        queryArcgis(source.entry, queryFor(source.entry, anchor), ctx),
-        source.lineGeometry ? queryArcgis(source.lineGeometry, queryFor(source.lineGeometry, anchor), ctx) : null,
-      ]);
-      return { source, result, lines };
+      const near = source.entry.searchRadiusMeters;
+      let [result, lines] = await search(source, near);
+      let searchedMeters = near;
+      let note: string | undefined;
+      if (!result.failure && result.features.length === 0 && source.widenToMeters) {
+        [result, lines] = await search(source, source.widenToMeters);
+        searchedMeters = source.widenToMeters;
+        note = `Nothing is mapped within ${near} m of the site, so the search reached ${searchedMeters} m. A nearby line isn't evidence that it serves the site.`;
+      }
+      return { source, result, lines, searchedMeters, note };
     }),
   );
 
-  for (const { source, result, lines } of results) {
+  for (const { source, result, lines, searchedMeters, note } of results) {
     runs.push(result.run);
-    observations.push(...toObservations(result, ctx));
+    outcomes.push({ utilityName: source.utilityName, feederFound: result.features.length > 0, searchedMeters, failure: result.failure, barredReason: source.entry.barred?.reason });
+    observations.push(...toObservations(result, ctx, result.features, { note, emptyReason: `${source.utilityName}'s map shows no feeder within ${searchedMeters} m of this site.` }));
     if (lines) runs.push(lines.run);
     const feederAttribute = source.entry.fields.find((mapping) => mapping.field === "feeder")?.attribute;
     // Only draw lines the record has a feeder for. The line layer also holds transmission lines.
@@ -86,5 +99,5 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
       );
     }
   }
-  return { observations, features, runs, lines: measuredLines };
+  return { observations, features, runs, lines: measuredLines, outcomes };
 }

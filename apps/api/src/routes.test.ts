@@ -7,6 +7,7 @@ import type { Observation, ObservedValue, RecordVersion, Value } from "@eqore/co
 import { fixtureFetch } from "@eqore/sources";
 import type { CaptureDeps } from "./capture.ts";
 import { createEngineerApp } from "./routes.ts";
+import { checkReadiness } from "./readiness.ts";
 import { nextVersion } from "./run.ts";
 import { Store } from "./store.ts";
 
@@ -81,10 +82,11 @@ describe("the engineer API", () => {
       ["massdot-roads", "done"],
       ["massdep-wetlands", "done"],
       ["massgis-fire-stations", "done"],
-      ["esri-usa-flood-hazard", "missing"],
       ["usgs-epqs", "done"],
+      ["hifld-retail-territories", "done"],
       ["massgis-lidar-dem", "done"],
       ["earth-engine", "missing"],
+      ["fema-flood-map", "person_only"],
     ]);
     expect(deps.store.observations(SITE).length).toBe(record.observations.length);
     expect(record.baseMap?.tileUrlTemplate).toContain("Massachusetts_Aerial_Imagery_2025");
@@ -383,6 +385,25 @@ describe("the engineer API", () => {
     expect(progress.site?.id).toBe(SITE);
     expect(progress.features.some((feature) => feature.kind === "property_line")).toBe(true);
     expect((await app.request(`${routes.readRunProgress.path}?address=nowhere`)).status).toBe(404);
+  });
+
+  it("resolves a pin choice to a site", async () => {
+    const { post } = setup();
+    const response = await post(routes.runSite.path, { address: ADDRESS, choice: { kind: "pin", latitude: 42.27614096601859, longitude: -71.7694444626631 } });
+    const body = RunSiteResponseSchema.parse(await response.json());
+    if (body.status !== "ok") throw new Error("Expected a record");
+    expect(body.record.site.id).toBe(SITE);
+  });
+
+  it("names the utility and shows no readiness share where no requirements table applies", async () => {
+    const { run, value } = setup();
+    const hyannis = await run("367 Main St, Hyannis, MA");
+    expect(value(hyannis, "serving_utility").current).toEqual({ type: "text", value: "Eversource" });
+    expect(checkReadiness(hyannis).share).toBeNull();
+    const holliston = await run("11 Bartzak Dr, Holliston, MA");
+    expect(value(holliston, "serving_utility").state).toBe("conflicting");
+    expect(checkReadiness(holliston).share).toBeNull();
+    expect(checkReadiness(await run()).share).not.toBeNull();
   });
 
   it("sets catalog coverage on the record", async () => {

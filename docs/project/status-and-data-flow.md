@@ -25,24 +25,26 @@ These are REST API calls to public map services, with no web scraping. An addres
 
 **Earth Engine:** the credential works, and a test call returned 166.13 m at the demo site. No adapter uses it yet.
 
-**Slope:** the agent layer queries MassGIS lidar directly, and that isn't wired into the app yet.
+**Slope:** the app takes it from the agent layer's MassGIS lidar sampler.
 
 ## Massachusetts coverage
 
-A check on 2026-11-07 ran 8 public addresses through the app. It's a small sample, not a measure of the state.
+`scripts/massachusetts-coverage.ts` runs 27 public addresses, all city and town halls apart from the two demo sites, through live collection. These numbers come from its run on 2026-11-07, and they're the ones to quote. 27 addresses is still a small sample of the state.
 
-| Address | Reached a map | Grid data |
-|---|---|---|
-| 455 Main St, Worcester | Yes | No feeder within 30 m |
-| 1 City Hall Sq, Boston | Yes | None configured for its utility |
-| 36 Court St, Springfield | No, stopped with nothing to choose | None |
-| 375 Merrimack St, Lowell | Yes | 6 feeder candidates, National Grid |
-| 1 Government Ctr, Fall River | No, stopped with nothing to choose | None |
-| 11 Bartzak Dr, Holliston | Yes | None configured for its utility |
-| 100 North St, Pittsfield | Yes | None configured for its utility |
-| 367 Main St, Hyannis | No, stopped with nothing to choose | None |
+| Measure | Result |
+|---|---|
+| Reached a map | 23 of 27 |
+| Reached a map or offered a choice of parcels and a pin | 27 of 27 |
+| Got a parcel | 23 of 27 |
+| Named one utility | 14 of 27 |
+| Named the utility or its candidates | 23 of 27 |
+| Got grid data | 10 of 27, all National Grid |
 
-Physical data is statewide, because MassGIS is. Grid data today comes only from National Grid.
+- **Choices:** Springfield, Fall River, Cambridge, and Chicopee each offer parcels to choose from, because the assessor wrote the address differently. Springfield's parcel has no house number, for example, and Fall River's is spelled `1 GOVERNMENT CEN TER`. The app always offers a pin as well.
+- **Villages:** Hyannis resolves to its Barnstable parcel.
+- **Utilities:** the service territory layer names a utility everywhere it has an answer. Territories overlap, so several are candidates until a utility's own map returns a feeder, or the bill names one.
+- **Grid data:** this comes only from National Grid. Eversource's map isn't read, because its terms bar reuse without written permission (D18), so Eversource sites get the utility's name and a person route. Municipal utilities, such as Holyoke and Hudson, have none.
+- **Downtown Worcester:** no feeder is mapped within 30 m of 455 Main St. The search now widens to 150 m and says so on the value.
 
 ## What happens after collection
 

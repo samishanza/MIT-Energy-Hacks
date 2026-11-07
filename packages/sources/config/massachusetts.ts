@@ -1,6 +1,6 @@
 import type { RegionConfig } from "../src/registry.ts";
 import { censusLocalRoads } from "./census-roads.ts";
-import { usgsPointElevation } from "./national.ts";
+import { hifldTerritories, usgsPointElevation } from "./national.ts";
 
 const MASSGIS = "https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services";
 const CREDIT = 'Credit: "MassGIS (Bureau of Geographic Information), Commonwealth of Massachusetts EOTSS".';
@@ -61,9 +61,25 @@ export const massachusetts: RegionConfig = {
       fields: [],
     },
   },
+  // Only towns whose villages were seen filed under the town. Others resolve by the geocoded point.
+  villages: {
+    HYANNIS: "BARNSTABLE",
+    CENTERVILLE: "BARNSTABLE",
+    OSTERVILLE: "BARNSTABLE",
+    COTUIT: "BARNSTABLE",
+    "MARSTONS MILLS": "BARNSTABLE",
+    "WEST BARNSTABLE": "BARNSTABLE",
+  },
+  territories: {
+    ...hifldTerritories,
+    withoutMap: {
+      Eversource: "Eversource's hosting capacity map isn't read, because its terms bar reuse of its content without written permission. Ask Eversource for the feeder, or read it from a Pre-Application Report.",
+    },
+  },
   grid: [
     {
       utilityName: "National Grid",
+      widenToMeters: 150,
       // The hosting capacity layer returns no geometry, so the lines come from the feeder layer.
       lineGeometry: {
         kind: "arcgis_rest",
@@ -183,22 +199,6 @@ export const massachusetts: RegionConfig = {
         ],
       },
     },
-    {
-      mode: { kind: "one", pick: "all_distinct", emptyReason: "This reduced set leaves out some zones, including minimal hazard, so an empty result doesn't show the site is out of a flood zone." },
-      entry: {
-        kind: "arcgis_rest",
-        id: "esri-usa-flood-hazard",
-        name: "Esri USA flood hazard areas (from FEMA)",
-        serviceUrl: "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Flood_Hazard_Reduced_Set_gdb/FeatureServer",
-        layer: 0,
-        searchRadiusMeters: 0,
-        licenseNote: "Source: FEMA, Esri. The item is licensed under the Esri Master License Agreement, whose full text wasn't read, so check it before production use. FEMA's own services bar robots. A person confirms against the current FIRM panel.",
-        robotsChecked: "2026-11-07",
-        objectIdAttribute: "OBJECTID",
-        outFields: ["OBJECTID", "FLD_ZONE"],
-        fields: [{ field: "flood_zone", attribute: "FLD_ZONE", type: "text", grade: "reference" }],
-      },
-    },
   ],
   jsonSources: [usgsPointElevation],
   lidarSlope: {
@@ -232,5 +232,12 @@ export const massachusetts: RegionConfig = {
       reason: "The Earth Engine adapter isn't built yet, so land cover is missing.",
     },
   ],
-  personRoutes: [],
+  personRoutes: [
+    {
+      sourceId: "fema-flood-map",
+      name: "FEMA Flood Map Service Center",
+      fields: ["flood_zone"],
+      reason: "A person reads the flood zone for the site from FEMA's Flood Map Service Center (msc.fema.gov). The tool doesn't query FEMA's services, which bar automated access.",
+    },
+  ],
 };
