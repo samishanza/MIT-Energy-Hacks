@@ -439,6 +439,12 @@ describe("the engineer API", () => {
     expect(checkReadiness(await run()).share).not.toBeNull();
   });
 
+  it("puts cross-check results on the record's values", async () => {
+    const { run, value } = setup();
+    const record = await run();
+    expect(value(record, "lot_size_acres").crossChecks?.[0]).toMatchObject({ result: "disagrees" });
+  });
+
   it("sets catalog coverage on the record", async () => {
     const { run } = setup();
     const record = await run();

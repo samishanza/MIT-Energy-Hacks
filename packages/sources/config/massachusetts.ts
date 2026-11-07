@@ -27,8 +27,10 @@ const nationalGridDetails: FeederDetail[] = [
     entry: ngEntry("national-grid-feeder-loading", "feeder loading", "MASDP_Feeders", 0, {
       objectIdAttribute: "Master_CDF",
       sourceDate: { attribute: "Last_Updated", format: "text" },
-      outFields: ["Master_CDF", "Peak_Pct_Current_Year", "SN__MVA_", "Peak_MVA_Current_Year", "Peak_MVA_Year_Plus1", "Peak_MVA_Year_Plus2", "Peak_MVA_Year_Plus3", "Peak_MVA_Year_Plus4", "Peak_MVA_Year_Plus5", "Last_Updated"],
+      outFields: ["Master_CDF", "Substation", "Voltage__kV_", "Peak_Pct_Current_Year", "SN__MVA_", "Peak_MVA_Current_Year", "Peak_MVA_Year_Plus1", "Peak_MVA_Year_Plus2", "Peak_MVA_Year_Plus3", "Peak_MVA_Year_Plus4", "Peak_MVA_Year_Plus5", "Last_Updated"],
       fields: [
+        { field: "feeder_layer_substation", attribute: "Substation", type: "text", grade: "reference" },
+        { field: "feeder_layer_voltage", attribute: "Voltage__kV_", type: "quantity", unit: "kV", grade: "reference" },
         { field: "feeder_peak_loading_pct", attribute: "Peak_Pct_Current_Year", transform: { kind: "percent_text" }, grade: "reference" },
         { field: "feeder_rating_mva", attribute: "SN__MVA_", type: "quantity", unit: "MVA", zeroIsMissing: true, grade: "reference" },
         {
@@ -71,8 +73,11 @@ const nationalGridDetails: FeederDetail[] = [
     entry: ngEntry("national-grid-nodal-feeders", "nodal hosting capacity by feeder", "Nodal_Hosting_Capacity_MA", 0, {
       objectIdAttribute: "Master_CDF",
       sourceDate: { attribute: "hca_refresh_date", format: "text" },
-      outFields: ["Master_CDF", "feeder_installed_dg", "feeder_queued_dg", "Ongoing_ASO_Study", "hca_refresh_date"],
-      fields: [MW("feeder_installed_dg", "feeder_installed_dg"), MW("feeder_queued_dg", "feeder_queued_dg"), { field: "feeder_aso_study", attribute: "Ongoing_ASO_Study", type: "text", grade: "reference" }],
+      outFields: ["Master_CDF", "substation_name", "feeder_voltage", "feeder_installed_dg", "feeder_queued_dg", "Ongoing_ASO_Study", "hca_refresh_date"],
+      fields: [
+        { field: "feeder_nodal_substation", attribute: "substation_name", type: "text", grade: "reference" },
+        { field: "feeder_nodal_voltage", attribute: "feeder_voltage", type: "quantity", unit: "kV", grade: "reference" },
+        MW("feeder_installed_dg", "feeder_installed_dg"), MW("feeder_queued_dg", "feeder_queued_dg"), { field: "feeder_aso_study", attribute: "Ongoing_ASO_Study", type: "text", grade: "reference" }],
     }),
   },
   {

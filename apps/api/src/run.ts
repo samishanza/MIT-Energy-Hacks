@@ -10,7 +10,7 @@ import {
   RunSiteRequestSchema,
 } from "@eqore/contract";
 import type { EvidenceRef, MapFeature, Observation, ObservedValue, RecordVersion, RunProgress, Value } from "@eqore/contract";
-import { ADDRESS_CANDIDATE, REGIONS, RESOLVE_DEADLINE_MS, withRunDeadline, canonicalAddress, catalogCoverage, collectSite, deriveValues, fieldDefinition, resolveSite, selectRegion, sha256, siteIdFor } from "@eqore/sources";
+import { ADDRESS_CANDIDATE, REGIONS, crossCheck, RESOLVE_DEADLINE_MS, withRunDeadline, canonicalAddress, catalogCoverage, collectSite, deriveValues, fieldDefinition, resolveSite, selectRegion, sha256, siteIdFor } from "@eqore/sources";
 import { measureSlope } from "@eqore/agents";
 import type { CollectContext, FetchLike, RegionConfig, SiteChoice } from "@eqore/sources";
 import { z } from "zod";
@@ -60,7 +60,7 @@ function labelVerifiedEquipment(features: MapFeature[], values: Value[]): MapFea
 export function createVersion(deps: ApiDeps, parts: VersionParts): RecordVersion {
   const { store } = deps;
   const observations = store.observations(parts.site.id);
-  const values = deriveValues(observations);
+  const values = crossCheck({ address: parts.site.address, values: deriveValues(observations), observations, features: parts.features });
   const version = store.latestVersionNumber(parts.site.id) + 1;
   const record: RecordVersion = {
     id: `${parts.site.id}-v${version}`,
