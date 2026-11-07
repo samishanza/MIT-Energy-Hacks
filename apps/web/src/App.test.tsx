@@ -440,6 +440,18 @@ describe("waiting on a capture", () => {
     expect(screen.queryByRole("complementary")).toBeNull();
   }, 8000);
 
+  it("tries the evidence check again on the next tick when it fails for new evidence", async () => {
+    const readReadiness = vi
+      .fn()
+      .mockResolvedValueOnce(sampleReport())
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(sampleReport());
+    const readVersion = vi.fn().mockResolvedValue(withDraft());
+    await startLink(fakeApi({ readVersion, readReadiness, createCaptureLink: vi.fn().mockResolvedValue(openLink) }));
+    expect((await screen.findByRole("status", { name: "New evidence" }, { timeout: 8000 })).textContent).toMatch(/Meter number/);
+    expect(readReadiness).toHaveBeenCalledTimes(3);
+  }, 12000);
+
   it("doesn't poll with no open link", async () => {
     const readVersion = vi.fn().mockResolvedValue(sampleRecord());
     await runAddress(fakeApi({ readVersion }));

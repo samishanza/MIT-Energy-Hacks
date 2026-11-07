@@ -1,4 +1,4 @@
-import type { Observation, ReadinessReport, RecordVersion, Value } from "@eqore/contract";
+import type { Observation, ReadinessReport, RecordVersion, SourceRun, Value } from "@eqore/contract";
 import { formatValue } from "./format";
 
 export type Family = NonNullable<Value["family"]>;
@@ -79,6 +79,9 @@ function conflictReason(value: Value): string {
   }
 }
 
+// The collector reports a source that answered with no features as missing too, and says so in its reason.
+const answeredEmpty = (run: SourceRun) => /^No features for |^No roofprint is centered/.test(run.reason ?? "");
+
 // Only what needs a person: conflicts, layers that failed or weren't checked, and values below layout grade.
 // Everything else stays drawn and traced without asking to be read.
 export function attentionItems(record: RecordVersion): AttentionItem[] {
@@ -89,7 +92,8 @@ export function attentionItems(record: RecordVersion): AttentionItem[] {
   }
   for (const run of record.sourceRuns) {
     if (run.status === "missing") {
-      items.push({ id: `layer-${run.sourceId}`, kind: "layer", title: run.name, reason: `Failed or not run. ${run.reason ?? "It didn't answer."}` });
+      const verdict = answeredEmpty(run) ? "Answered, nothing found at this site." : "Failed or not run.";
+      items.push({ id: `layer-${run.sourceId}`, kind: "layer", title: run.name, reason: `${verdict} ${run.reason ?? "It didn't answer."}` });
     } else if (run.status === "person_only") {
       items.push({ id: `layer-${run.sourceId}`, kind: "layer", title: run.name, reason: `Not checked by the tool. ${run.reason ?? "A person looks this up."}` });
     }

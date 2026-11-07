@@ -122,16 +122,20 @@ export function App({ api }: { api: EngineerApi }) {
   const select = (field: string, featureId?: string) => setSelected({ fields: [field], featureId: featureId ?? null });
 
   // Only the most recent request to show a record may land, however the responses are ordered.
+  // A skipped older version must not take the token from a newer request still waiting on its check.
   const showRequest = useRef(0);
+  // The last record whose evidence check landed, so a poll retries a version whose check failed.
+  const checked = useRef<RecordVersion | null>(null);
   const show = useCallback(
     async (next: RecordVersion) => {
-      showRequest.current += 1;
-      const request = showRequest.current;
       const shown = current.current.record;
       if (shown && shown.site.id === next.site.id && next.version < shown.version) return null;
+      showRequest.current += 1;
+      const request = showRequest.current;
       setRecord(next);
       const nextReport = await api.readReadiness(next.site.id, next.version);
       if (request !== showRequest.current) return null;
+      checked.current = next;
       setReport(nextReport);
       return nextReport;
     },
@@ -151,7 +155,7 @@ export function App({ api }: { api: EngineerApi }) {
       void api
         .readVersion(siteId, "latest")
         .then(async (latest) => {
-          const previous = current.current.record;
+          const previous = checked.current?.site.id === latest.site.id ? checked.current : current.current.record;
           if (!previous || previous.site.id !== latest.site.id || latest.version <= previous.version) return;
           const seen = new Set(previous.observations.map((o) => o.id));
           const labels = [

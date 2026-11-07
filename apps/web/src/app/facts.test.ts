@@ -73,6 +73,20 @@ describe("facts on Worcester", () => {
   });
 });
 
+describe("layers that answered with nothing", () => {
+  it("says a source that answered empty answered, rather than calling it failed", () => {
+    const record = worcesterRecord();
+    record.sourceRuns.push(
+      { sourceId: "wetlands-empty", name: "Wetlands", status: "missing", reason: "No features for this parcel" },
+      { sourceId: "roofprints-empty", name: "Roofprints", status: "missing", reason: "No roofprint is centered on this parcel (query)" },
+    );
+    const reasons = Object.fromEntries(attentionItems(record).map((item) => [item.id, item.reason]));
+    expect(reasons["layer-wetlands-empty"]).toBe("Answered, nothing found at this site. No features for this parcel");
+    expect(reasons["layer-roofprints-empty"]).toMatch(/^Answered, nothing found at this site./);
+    expect(reasons["layer-earth-engine"]).toMatch(/^Failed or not run./);
+  });
+});
+
 describe("families", () => {
   it("reads a family from the owner on a record that names none", () => {
     const record = sampleRecord();

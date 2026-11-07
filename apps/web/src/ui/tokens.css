@@ -223,19 +223,6 @@ input:not([type="radio"], [type="checkbox"]) {
   font-weight: 600;
 }
 
-.sources {
-  display: flex;
-  flex-wrap: wrap;
-  grid-column: 1 / -1;
-  gap: 2px 18px;
-  font-size: 12.5px;
-}
-
-.source-missing strong,
-.source-person_only strong {
-  color: var(--conflicting);
-}
-
 .snapshot-banner {
   padding: 6px 16px;
   background: var(--unreadable);
@@ -480,15 +467,6 @@ input:not([type="radio"], [type="checkbox"]) {
 .key {
   display: inline-block;
   width: 22px;
-}
-
-.key-property { border-top: 2px dashed var(--ink); }
-.key-building { border-top: 2px solid var(--ink); }
-.key-utility { border-top: 3px solid var(--utility); }
-
-.key-existing {
-  font-size: 11px;
-  font-weight: 700;
 }
 
 .map-warning {
