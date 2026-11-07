@@ -1,6 +1,7 @@
 import type { BaseMap, MapFeature, Observation, Site, SourceRun } from "@eqore/contract";
-import { observe, type CollectContext } from "./arcgis.ts";
+import { observe, queryArcgis, type CollectContext } from "./arcgis.ts";
 import { collectGrid } from "./checks/grid.ts";
+import { measureSite, type Measurements } from "./checks/measure.ts";
 import { collectPhysical } from "./checks/physical.ts";
 import type { NamedRoute, RegionConfig } from "./registry.ts";
 import { parseAddress, type SiteAnchor } from "./resolve-site.ts";
@@ -40,6 +41,30 @@ export async function collectSite(address: string, region: RegionConfig, anchor:
     physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] },
     ctx,
   );
+
+  let measurements: Measurements = { observations: [], features: [] };
+  const roadRuns: SourceRun[] = [];
+  if (physical.measurable) {
+    const { lookup, parcel, outlines } = physical.measurable;
+    const roads = region.roads
+      ? await queryArcgis(region.roads.entry, { kind: "polygon", geometry: parcel.geometry, bufferMeters: region.roads.entry.searchRadiusMeters }, ctx)
+      : null;
+    if (roads) roadRuns.push(roads.run);
+    const assessorArea = physical.observations.find((observation) => observation.field === "building_area_sqft" && observation.value?.type === "quantity")?.value;
+    measurements = measureSite(
+      {
+        address,
+        lookup,
+        parcel,
+        outlines,
+        lines: grid.lines,
+        roads: roads && region.roads ? { result: roads, features: roads.features, nameAttribute: region.roads.nameAttribute } : null,
+        assessorAreaSqft: assessorArea?.type === "quantity" ? assessorArea.value : null,
+      },
+      ctx,
+    );
+  }
+
   const unavailable = region.unavailable.flatMap((route) => routeObservations(route, "earth_engine", ctx));
   const personRoutes = region.personRoutes.flatMap((route) => routeObservations(route, "human_evidence", ctx));
 
@@ -51,12 +76,13 @@ export async function collectSite(address: string, region: RegionConfig, anchor:
       location: physical.location,
       locationMethod: physical.locationMethod,
     },
-    observations: [...physical.observations, ...grid.observations, ...unavailable, ...personRoutes],
-    features: [...physical.features, ...grid.features],
+    observations: [...physical.observations, ...grid.observations, ...measurements.observations, ...unavailable, ...personRoutes],
+    features: [...physical.features, ...grid.features, ...measurements.features],
     baseMap: physical.baseMap,
     sourceRuns: [
       ...physical.runs,
       ...grid.runs,
+      ...roadRuns,
       ...region.unavailable.map((route): SourceRun => ({ sourceId: route.sourceId, name: route.name, status: "missing", reason: route.reason })),
       ...region.personRoutes.map((route): SourceRun => ({ sourceId: route.sourceId, name: route.name, status: "person_only", reason: route.reason })),
     ],

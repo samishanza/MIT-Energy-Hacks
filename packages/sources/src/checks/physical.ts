@@ -23,6 +23,12 @@ export type PhysicalCollection = {
   location: [number, number];
   locationMethod: Observation["method"];
   parcelGeometry: PolygonGeometry | null;
+  // What the measurements are computed from, when a parcel anchors the site.
+  measurable: {
+    lookup: ArcgisResult;
+    parcel: ArcgisFeature & { geometry: PolygonGeometry };
+    outlines: { result: ArcgisResult; features: (ArcgisFeature & { geometry: PolygonGeometry })[] } | null;
+  } | null;
 };
 
 function isPolygon(geometry: ArcgisFeature["geometry"]): geometry is PolygonGeometry {
@@ -67,18 +73,27 @@ function lotSizeObservations(lookup: ArcgisResult, parcelLookup: ParcelLookup, p
   return observations;
 }
 
-type Outlines = { observations: Observation[]; features: MapFeature[]; run: SourceRun };
+type Outlines = {
+  observations: Observation[];
+  features: MapFeature[];
+  run: SourceRun;
+  measurable: { result: ArcgisResult; features: (ArcgisFeature & { geometry: PolygonGeometry })[] };
+};
 
 async function collectOutlines(buildings: BuildingOutlines, parcelGeometry: PolygonGeometry, yearBuilt: unknown, ctx: CollectContext): Promise<Outlines> {
   const result = await queryArcgis(buildings.entry, { kind: "polygon", geometry: parcelGeometry }, ctx);
   // A neighbor's roof can touch the query polygon, so keep outlines centered on this parcel.
-  const inside = result.features.filter((feature) => isPolygon(feature.geometry) && booleanPointInPolygon(centroid(feature.geometry), parcelGeometry));
+  const inside = result.features.filter(
+    (feature): feature is ArcgisFeature & { geometry: PolygonGeometry } => isPolygon(feature.geometry) && booleanPointInPolygon(centroid(feature.geometry), parcelGeometry),
+  );
+  const measurable = { result, features: inside };
   if (inside.length === 0) {
     const reason = result.failure ?? `No roofprint is centered on this parcel (${result.query})`;
     return {
       observations: [observe(result, ctx, { field: "building_outline", kind: "no_value", value: null, reason })],
       features: [],
       run: result.failure ? result.run : { ...result.run, status: "missing", reason },
+      measurable,
     };
   }
   const dates = inside.map((feature) => sourceDateOf(buildings.entry, feature.attributes)).filter((date): date is string => Boolean(date)).sort();
@@ -105,6 +120,7 @@ async function collectOutlines(buildings: BuildingOutlines, parcelGeometry: Poly
       label: `Roofprint${feature.attributes[buildings.sourceDateAttribute] ? `, ${sourceDateOf(buildings.entry, feature.attributes)}` : ""} (not surveyed)`,
     })),
     run: result.run,
+    measurable,
   };
 }
 
@@ -175,6 +191,7 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
 
   const lookup = anchor.kind === "parcel" ? anchor.lookup : anchor.parcelLookup;
   let parcelGeometry: PolygonGeometry | null = null;
+  let measurable: PhysicalCollection["measurable"] = null;
   let location: [number, number];
 
   if (anchor.kind === "parcel" && region.parcels) {
@@ -185,6 +202,7 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
     if (!isPolygon(parcel.geometry)) throw new Error("A parcel anchor needs a polygon");
     {
       parcelGeometry = parcel.geometry;
+      measurable = { lookup: anchor.lookup, parcel: { ...parcel, geometry: parcel.geometry }, outlines: null };
       observations.push(
         observe(anchor.lookup, ctx, {
           field: "property_line",
@@ -218,6 +236,7 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
     observations.push(...outlines.observations);
     features.push(...outlines.features);
     runs.push(outlines.run);
+    if (measurable) measurable.outlines = outlines.measurable;
   }
 
   let baseMap: BaseMap | null = null;
@@ -228,5 +247,5 @@ export async function collectPhysical(region: RegionConfig, anchor: SiteAnchor, 
     baseMap = baseMapOf(region.imagery, location);
   }
 
-  return { observations, features, runs, baseMap, location, locationMethod: located.method, parcelGeometry };
+  return { observations, features, runs, baseMap, location, locationMethod: located.method, parcelGeometry, measurable };
 }

@@ -1,4 +1,5 @@
 import type { RegionConfig } from "../src/registry.ts";
+import { censusLocalRoads } from "./census-roads.ts";
 
 const MASSGIS = "https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services";
 
@@ -94,6 +95,7 @@ export const massachusetts: RegionConfig = {
       },
     },
   ],
+  roads: censusLocalRoads,
   imagery: {
     id: "massgis-imagery-2025",
     name: "MassGIS 2025 aerial imagery",

@@ -6,6 +6,7 @@ const FACTORS: Record<string, number> = {
   "kW>MW": 0.001,
   "MW>kW": 1000,
   "sqm>acre": 1 / 4046.8564224,
+  "sqm>sqft": 10.7639104167,
   "sqft>acre": 1 / 43560,
   "acre>sqft": 43560,
 };
