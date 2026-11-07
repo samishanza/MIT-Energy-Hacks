@@ -34,10 +34,10 @@ export const EVIDENCE_REQUESTS: EvidenceRequest[] = [
   },
   {
     id: "existing-generation-record",
-    request: "Existing generation on the account or parcel, with any application numbers",
+    request: "Existing generation on the account or parcel, with any application numbers and nameplate capacity",
     route: "customer_record",
     owner: "customer",
-    fields: ["existing_generation"],
+    fields: ["existing_generation", "existing_facility_record"],
     routeCost: 2,
   },
   {

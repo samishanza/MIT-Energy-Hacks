@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Value } from "@eqore/contract";
 import { californiaPge, massachusetts, type CollectContext, type FetchLike } from "../index.ts";
-import { collectSite } from "../collect.ts";
+import { collectSite, siteIdFor } from "../collect.ts";
 import { deriveValues } from "../derive.ts";
 import { fixtureFetch } from "../fixtures.ts";
 import { resolveSite } from "../resolve-site.ts";
@@ -32,6 +32,15 @@ const SQUARE = [[[-71.8, 42.26], [-71.8, 42.261516], [-71.797962, 42.261516], [-
 const parcel = (attributes: Record<string, unknown>) => ({
   attributes: { LOC_ID: "P-1", SITE_ADDR: "1 TEST WAY", CITY: "WORCESTER", USE_DESC: "Test parcel", LOT_UNITS: "Acres", BLD_AREA: 1000, ...attributes },
   geometry: { rings: SQUARE },
+});
+
+describe("site identity", () => {
+  it("gives spellings of one address the same site", () => {
+    expect(siteIdFor("100 Research Drive, Worcester, MA 01605")).toBe("100-research-dr-worcester-ma");
+    expect(siteIdFor("100 research dr., worcester, ma")).toBe("100-research-dr-worcester-ma");
+    // Only the street type is shortened, so a street named Court keeps its name.
+    expect(siteIdFor("12 Court St, Worcester, MA")).toBe("12-court-st-worcester-ma");
+  });
 });
 
 describe("physical collection", () => {

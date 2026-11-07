@@ -53,6 +53,13 @@ export const FIELDS: FieldDefinition[] = [
   { field: "interconnecting_customer", label: "Interconnecting customer and contacts", owner: "customer", grade: "reference" },
   { field: "site_control", label: "Site control", owner: "customer", grade: "reference" },
   { field: "existing_generation", label: "Existing generation", owner: "customer", grade: "reference" },
+  {
+    field: "existing_facility_record",
+    label: "Existing facility's application number and nameplate capacity",
+    owner: "customer",
+    grade: "reference",
+    missingReason: "No evidence yet. This applies only if the application changes an existing facility. Public data doesn't fill it.",
+  },
   { field: "account_number", label: "Account number", owner: "customer", grade: "nameplate" },
   { field: "meter_number", label: "Meter number", owner: "customer", grade: "nameplate" },
   { field: "peak_demand_kw", label: "Billed peak demand", owner: "customer", grade: "nameplate", comparison: { kind: "tolerance", relative: 0 } },
@@ -66,6 +73,7 @@ export const FIELDS: FieldDefinition[] = [
 
   // Engineer decisions and documents.
   { field: "system_capacity_kw", label: "System capacity", owner: "engineer", grade: "reference", missingReason: ENGINEER },
+  { field: "facility_change_plan", label: "New facility, or the proposed change and total capacity", owner: "engineer", grade: "reference", missingReason: ENGINEER },
   { field: "generating_equipment", label: "Equipment make, model, and AC ratings", owner: "engineer", grade: "reference", missingReason: ENGINEER },
   { field: "export_plan", label: "Export plan", owner: "engineer", grade: "reference", missingReason: ENGINEER },
   { field: "single_parcel", label: "Facility on a single parcel", owner: "engineer", grade: "reference", missingReason: ENGINEER },

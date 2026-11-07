@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ReadinessReportSchema, RecordVersionSchema, routes } from "@eqore/contract";
@@ -61,12 +63,14 @@ describe("the readiness check", () => {
   it("lists every required item with its owner for a record with nothing else in it", () => {
     const report = checkReadiness(record([NATIONAL_GRID]));
 
-    expect(report.requirementsTable).toMatchObject({ utility: "National Grid", formDate: "2021-09-15", superseded: true });
+    expect(report.requirementsTable).toEqual({ utility: "National Grid", form: "M.D.P.U. No. 1632, Exhibit C", formDate: "2026-05-01", superseded: false });
     expect(report.items.map((entry) => [entry.id, entry.owner])).toEqual([
       ["applicant-contacts", "customer"],
       ["site-control", "customer"],
       ["single-parcel", "engineer"],
       ["existing-generation", "customer"],
+      ["existing-facility", "customer"],
+      ["new-or-change", "engineer"],
       ["facility-address", "public_data"],
       ["distribution-company", "utility"],
       ["account-number", "customer"],
@@ -93,7 +97,10 @@ describe("the readiness check", () => {
       ["protective-interface-location", "engineer"],
       ["protection-schematics", "engineer"],
     ]);
-    expect(item(report, "one-line").citation).toContain("Sheet 117");
+    expect(item(report, "one-line").citation).toBe("M.D.P.U. No. 1632, Exhibit C, Page 124");
+    expect(item(report, "site-control").citation).toBe("M.D.P.U. No. 1632, Exhibit C, Page 116, 125 to 128");
+    expect(item(report, "meter-number").citation).toBe("M.D.P.U. No. 1632, Exhibit C, Page 115, 117");
+    expect(item(report, "new-or-change").citation).toBe("M.D.P.U. No. 1632, Exhibit C, Page 117");
     expect(item(report, "main-device")).toMatchObject({ rowKind: "input", teamDerived: true, parentItemId: "one-line" });
     expect(() => ReadinessReportSchema.parse(report)).not.toThrow();
   });
@@ -162,7 +169,7 @@ describe("the readiness check", () => {
     const version = record([NATIONAL_GRID]);
     const first = checkReadiness(version);
     expect(checkReadiness(version)).toEqual(first);
-    expect(first.gaps.map((gap) => gap.id).slice(0, 3)).toEqual(["bill", "contract-documents", "nameplate-photo"]);
+    expect(first.gaps.map((gap) => gap.id).slice(0, 4)).toEqual(["bill", "contract-documents", "existing-generation-record", "nameplate-photo"]);
     expect(first.gaps.map((gap) => gap.rank)).toEqual(first.gaps.map((_, index) => index + 1));
   });
 
@@ -182,15 +189,25 @@ describe("the readiness check", () => {
   });
 
   it("reports the Worcester demo site through the API, counting form rows and input rows apart", async () => {
-    const app = createEngineerApp({ store: new Store(), fetch: recorded, now: () => new Date().toISOString() });
+    const app = createEngineerApp({
+      store: new Store(),
+      fetch: recorded,
+      now: () => new Date().toISOString(),
+      uploadDir: join(tmpdir(), "readiness-test-uploads"),
+      capturePublicUrl: "https://tunnel.invalid",
+      extractor: async () => ({ kind: "failed", reason: "No model call in this test" }),
+    });
     await app.request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: "100 Research Dr, Worcester, MA" }) });
     const response = await app.request("/api/sites/100-research-dr-worcester-ma/versions/latest/readiness");
     const report = ReadinessReportSchema.parse(await response.json());
 
     expect(report.recordVersionId).toBe("100-research-dr-worcester-ma-v1");
     expect(report.synthetic).toBe(false);
-    expect(report.share?.formRows).toEqual({ withEvidence: 2, total: 19 });
+    expect(report.share?.formRows).toEqual({ withEvidence: 2, total: 21 });
     expect(report.share?.inputRows).toEqual({ withEvidence: 3, total: 10 });
+    // The new-or-change block isn't filled from public data.
+    expect(item(report, "existing-facility").status).toBe("needs_evidence");
+    expect(item(report, "new-or-change").status).toBe("engineer_owned");
     expect(item(report, "pre-application-report").status).toBe("preview_only");
     expect(report.gaps[0]).toMatchObject({ id: "bill", route: "capture_bill" });
   });

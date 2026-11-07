@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { routes } from "@eqore/contract";
+import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps } from "./capture.ts";
 import { checkReadiness } from "./readiness.ts";
-import type { ApiDeps } from "./run.ts";
 import { ApiFailure, confirmValue, correctValue, movePin, resolveConflict, runSite } from "./run.ts";
 
 async function jsonBody(request: Request): Promise<unknown> {
@@ -27,7 +27,7 @@ function parseVersion(raw: string): number | "latest" {
 }
 
 // The engineer API has no login, and sends no CORS headers. It binds to loopback and is never tunneled.
-export function createEngineerApp(deps: ApiDeps): Hono {
+export function createEngineerApp(deps: CaptureDeps): Hono {
   const app = new Hono();
   respondToFailures(app);
 
@@ -55,6 +55,15 @@ export function createEngineerApp(deps: ApiDeps): Hono {
     c.json(resolveConflict(deps, c.req.param("siteId")!, c.req.param("field")!, await jsonBody(c.req.raw))),
   );
   app.post(routes.movePin.path, async (c) => c.json(movePin(deps, c.req.param("siteId")!, await jsonBody(c.req.raw))));
+
+  app.post(routes.createCaptureLink.path, async (c) => c.json(createCaptureLink(deps, c.req.param("siteId")!, await jsonBody(c.req.raw))));
+  app.post(routes.uploadEvidence.path, async (c) =>
+    c.json(await uploadEvidence(deps, c.req.param("siteId")!, c.req.param("field")!, await c.req.parseBody())),
+  );
+  app.get(routes.readEvidenceFile.path, (c) => {
+    const file = readEvidenceFile(deps, c.req.param("evidenceFileId")!);
+    return c.body(Buffer.from(file.bytes), 200, { "content-type": file.contentType, "x-content-type-options": "nosniff" });
+  });
 
   return app;
 }

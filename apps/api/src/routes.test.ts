@@ -1,10 +1,13 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ApiErrorSchema, RecordVersionSchema, RunSiteResponseSchema, routes } from "@eqore/contract";
 import type { Observation, ObservedValue, RecordVersion, Value } from "@eqore/contract";
 import { fixtureFetch } from "@eqore/sources";
+import type { CaptureDeps } from "./capture.ts";
 import { createEngineerApp } from "./routes.ts";
-import { nextVersion, type ApiDeps } from "./run.ts";
+import { nextVersion } from "./run.ts";
 import { Store } from "./store.ts";
 
 const dir = (name: string) => fileURLToPath(new URL(`../../../fixtures/${name}`, import.meta.url));
@@ -14,8 +17,18 @@ const ADDRESS = "100 Research Dr, Worcester, MA";
 const SITE = "100-research-dr-worcester-ma";
 const evidence = [{ kind: "document", description: "Survey on file" }];
 
+const testDeps = (snapshot = false): CaptureDeps => ({
+  store: new Store(),
+  fetch: recorded,
+  now: () => new Date().toISOString(),
+  snapshot,
+  uploadDir: join(tmpdir(), "engineer-api-test-uploads"),
+  capturePublicUrl: "https://tunnel.invalid",
+  extractor: async () => ({ kind: "failed", reason: "No model call in this test" }),
+});
+
 function setup() {
-  const deps: ApiDeps = { store: new Store(), fetch: recorded, now: () => new Date().toISOString() };
+  const deps = testDeps();
   const app = createEngineerApp(deps);
   const post = (path: string, body: unknown) =>
     app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -268,8 +281,7 @@ describe("the engineer API", () => {
   });
 
   it("marks a record served from recorded data as a snapshot", async () => {
-    const deps: ApiDeps = { store: new Store(), fetch: recorded, now: () => new Date().toISOString(), snapshot: true };
-    const response = await createEngineerApp(deps).request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: ADDRESS }) });
+    const response = await createEngineerApp(testDeps(true)).request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: ADDRESS }) });
     const body = RunSiteResponseSchema.parse(await response.json());
     if (body.status !== "ok") throw new Error("Expected a record");
     expect(body.record.snapshot).toBe(true);

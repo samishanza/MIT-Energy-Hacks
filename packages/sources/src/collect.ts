@@ -3,7 +3,7 @@ import { observe, type CollectContext } from "./arcgis.ts";
 import { collectGrid } from "./checks/grid.ts";
 import { collectPhysical } from "./checks/physical.ts";
 import type { NamedRoute, RegionConfig } from "./registry.ts";
-import type { SiteAnchor } from "./resolve-site.ts";
+import { parseAddress, type SiteAnchor } from "./resolve-site.ts";
 
 export type SiteCollection = {
   site: Site;
@@ -13,8 +13,11 @@ export type SiteCollection = {
   sourceRuns: SourceRun[];
 };
 
+// Spellings of one address name one site: 100 Research Drive, Worcester, MA 01605 and 100 Research Dr, Worcester, MA.
 export function siteIdFor(address: string): string {
-  return address
+  const parsed = parseAddress(address);
+  const state = address.split(",")[2]?.trim().split(/\s+/)[0] ?? "";
+  return (parsed ? `${parsed.street} ${parsed.city} ${state}` : address)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
