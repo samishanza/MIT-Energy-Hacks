@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { applyTransform } from "./transforms.ts";
 import { booleanClockwise, distance, nearestPointOnLine } from "@turf/turf";
 import type { Geometry, Observation, ObservedValue, Source, SourceRun } from "@eqore/contract";
 import { ObservationSchema } from "@eqore/contract";
@@ -297,6 +298,7 @@ export function observe(origin: ArcgisResult | ObservationOrigin, ctx: CollectCo
 
 export function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { value: ObservedValue } | { reason: string } {
   if (mapping.constant) return { value: mapping.constant };
+  if (mapping.transform) return applyTransform(mapping.transform, mapping.attribute, feature.attributes, mapping.sentinels);
   const attribute = mapping.attribute!;
   const raw = feature.attributes[attribute];
   if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
@@ -305,6 +307,7 @@ export function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { va
   if (mapping.type === "quantity") {
     const number = typeof raw === "number" ? raw : Number(raw);
     if (!Number.isFinite(number)) return { reason: `${attribute} isn't a number: ${String(raw)}` };
+    if (mapping.sentinels?.includes(number)) return { reason: `${attribute} is ${number}, which the source uses to mean no value` };
     if (number === 0 && mapping.zeroIsMissing) {
       return { reason: `${attribute} is 0 in the source, which can't be true, so it's stored as missing` };
     }

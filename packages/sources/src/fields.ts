@@ -57,6 +57,8 @@ export const FIELDS: FieldDefinition[] = [
     ["road_surface_type", "Road surface type"],
     ["wetlands_nearby", "Wetlands nearby"],
     ["fire_stations_nearby", "Fire stations nearby"],
+    ["substations_nearby", "Substations nearby"],
+    ["transmission_nearby", "Transmission lines nearby"],
     ["ground_elevation_ft", "Ground elevation"],
     ["site_slope_pct", "Ground slope across the parcel"],
   ].map(([field, label]): FieldDefinition => ({ field: field!, label: label!, owner: "public_data", grade: "reference", comparison: { kind: "latest" }, missingReason: "No source has answered for this site." })),
@@ -125,6 +127,8 @@ export const FIELDS: FieldDefinition[] = [
 ].map((definition) => ({ ...definition, missingReason: definition.missingReason ?? NO_EVIDENCE })) as FieldDefinition[];
 
 const HAND_FAMILY: Record<string, Family> = {
+  substations_nearby: "utility",
+  transmission_nearby: "utility",
   serving_utility: "utility",
   feeder: "utility",
   peak_demand_kw: "energy",
@@ -148,6 +152,15 @@ export const FEEDER_ATTRIBUTES: Record<string, string> = {
   feeder_load_capacity: "load_capacity",
   feeder_limiting_criterion: "limiting_criterion",
   feeder_screen_result: "screen_result",
+  feeder_peak_loading_pct: "peak_loading",
+  feeder_peak_forecast: "peak_forecast",
+  feeder_rating_mva: "rating",
+  feeder_construction: "construction",
+  feeder_study_status: "study_status",
+  feeder_installed_dg: "installed_dg",
+  feeder_queued_dg: "queued_dg",
+  feeder_aso_study: "aso_study",
+  feeder_nodal_hosting_capacity: "hosting_capacity_near_site",
 };
 
 export function fieldDefinition(field: string): FieldDefinition | undefined {

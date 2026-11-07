@@ -10,7 +10,7 @@ import {
   RunSiteRequestSchema,
 } from "@eqore/contract";
 import type { EvidenceRef, MapFeature, Observation, ObservedValue, RecordVersion, RunProgress, Value } from "@eqore/contract";
-import { ADDRESS_CANDIDATE, REGIONS, canonicalAddress, catalogCoverage, collectSite, deriveValues, fieldDefinition, resolveSite, selectRegion, sha256, siteIdFor } from "@eqore/sources";
+import { ADDRESS_CANDIDATE, REGIONS, RESOLVE_DEADLINE_MS, withRunDeadline, canonicalAddress, catalogCoverage, collectSite, deriveValues, fieldDefinition, resolveSite, selectRegion, sha256, siteIdFor } from "@eqore/sources";
 import { measureSlope } from "@eqore/agents";
 import type { CollectContext, FetchLike, RegionConfig, SiteChoice } from "@eqore/sources";
 import { z } from "zod";
@@ -36,6 +36,7 @@ export type ApiDeps = {
   retryDelayMs?: number;
   availableKeys?: string[];
   runDeadlineMs?: number;
+  resolveDeadlineMs?: number;
   progress?: Map<string, RunProgress>;
 };
 
@@ -114,7 +115,8 @@ export async function runSite(deps: ApiDeps, body: unknown) {
   // A chosen spelling replaces the typed one and isn't a site choice.
   const spelled = request.choice?.kind === "candidate" && request.choice.candidateId.startsWith(ADDRESS_CANDIDATE) ? request.choice.candidateId.slice(ADDRESS_CANDIDATE.length) : null;
   const choice = spelled ? undefined : request.choice;
-  const firstCtx: CollectContext = { siteId: "", fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs };
+  const finding = withRunDeadline(deps.fetch, deps.resolveDeadlineMs ?? RESOLVE_DEADLINE_MS, "site lookup");
+  const firstCtx: CollectContext = { siteId: "", fetch: finding.limited, now: deps.now, retryDelayMs: deps.retryDelayMs };
   const canonical = await canonicalAddress(spelled ?? asTyped, firstCtx);
   if (canonical.status === "failed") throw new ApiFailure("source_failed", 502, `The address couldn't be checked. ${canonical.reason}`);
   if (canonical.status === "choose") return { status: "needs_choice" as const, candidates: canonical.candidates };
@@ -127,18 +129,20 @@ export async function runSite(deps: ApiDeps, body: unknown) {
   const ctx: CollectContext = { siteId, fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs, availableKeys: deps.availableKeys, runDeadlineMs: deps.runDeadlineMs, measureSlope };
   setProgress(deps, progressKey, { status: "running", sourceRuns: [], features: [] });
   try {
-    return await collectAndRecord(deps, { address, region, siteId, ctx, choice, progressKey });
+    return await collectAndRecord(deps, { address, region, siteId, ctx, choice, progressKey, findFetch: finding.limited });
   } catch (error) {
     setProgress(deps, progressKey, { status: "failed", sourceRuns: [], features: [], reason: (error as Error).message });
     throw error;
+  } finally {
+    finding.cancel();
   }
 }
 
 async function collectAndRecord(
   deps: ApiDeps,
-  { address, region, siteId, ctx, choice, progressKey }: { address: string; region: RegionConfig; siteId: string; ctx: CollectContext; choice?: SiteChoice; progressKey: string },
+  { address, region, siteId, ctx, choice, progressKey, findFetch }: { address: string; region: RegionConfig; siteId: string; ctx: CollectContext; choice?: SiteChoice; progressKey: string; findFetch: FetchLike },
 ) {
-  const resolved = await resolveSite(address, region, ctx, choice);
+  const resolved = await resolveSite(address, region, { ...ctx, fetch: findFetch }, choice);
   if (resolved.status === "needs_choice") {
     deps.progress?.delete(progressKey);
     return { status: "needs_choice" as const, candidates: resolved.candidates };

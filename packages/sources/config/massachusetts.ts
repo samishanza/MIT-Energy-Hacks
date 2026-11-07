@@ -1,6 +1,112 @@
-import type { RegionConfig } from "../src/registry.ts";
+import type { ArcgisEntry, FeederDetail, RegionConfig } from "../src/registry.ts";
 import { censusLocalRoads } from "./census-roads.ts";
 import { hifldTerritories, usgsPointElevation } from "./national.ts";
+
+const NATIONAL_GRID = "https://systemdataportal.nationalgrid.com/arcgis/rest/services/MASDP";
+const NATIONAL_GRID_NOTE = "National Grid public portal, no key. No terms were found on the portal or service, and robots.txt returned 404. Utility-published context, not a site answer.";
+
+const ngEntry = (id: string, name: string, path: string, layer: number, rest: Partial<ArcgisEntry> & Pick<ArcgisEntry, "objectIdAttribute" | "outFields" | "fields">): ArcgisEntry => ({
+  kind: "arcgis_rest",
+  id,
+  name: `National Grid MA System Data Portal, ${name}`,
+  serviceUrl: `${NATIONAL_GRID}/${path}/MapServer`,
+  layer,
+  searchRadiusMeters: 0,
+  licenseNote: NATIONAL_GRID_NOTE,
+  robotsChecked: "2026-11-07",
+  attributesOnly: true,
+  ...rest,
+});
+
+const MW = (field: string, attribute: string) => ({ field, attribute, type: "quantity" as const, unit: "MW", grade: "reference" as const });
+
+const nationalGridDetails: FeederDetail[] = [
+  {
+    kind: "by_feeder",
+    joinAttribute: "Master_CDF",
+    entry: ngEntry("national-grid-feeder-loading", "feeder loading", "MASDP_Feeders", 0, {
+      objectIdAttribute: "Master_CDF",
+      sourceDate: { attribute: "Last_Updated", format: "text" },
+      outFields: ["Master_CDF", "Peak_Pct_Current_Year", "SN__MVA_", "Peak_MVA_Current_Year", "Peak_MVA_Year_Plus1", "Peak_MVA_Year_Plus2", "Peak_MVA_Year_Plus3", "Peak_MVA_Year_Plus4", "Peak_MVA_Year_Plus5", "Last_Updated"],
+      fields: [
+        { field: "feeder_peak_loading_pct", attribute: "Peak_Pct_Current_Year", transform: { kind: "percent_text" }, grade: "reference" },
+        { field: "feeder_rating_mva", attribute: "SN__MVA_", type: "quantity", unit: "MVA", zeroIsMissing: true, grade: "reference" },
+        {
+          field: "feeder_peak_forecast",
+          transform: {
+            kind: "series",
+            attributes: ["Peak_MVA_Current_Year", "Peak_MVA_Year_Plus1", "Peak_MVA_Year_Plus2", "Peak_MVA_Year_Plus3", "Peak_MVA_Year_Plus4", "Peak_MVA_Year_Plus5"],
+            unit: "MVA",
+            describe: "peak this year, then each of the next five, as the utility forecasts",
+          },
+          grade: "reference",
+        },
+      ],
+    }),
+  },
+  {
+    kind: "construction",
+    joinAttribute: "Master_CDF",
+    constructionAttribute: "Construction",
+    lengthAttribute: "Shape_Length",
+    underground: "UG",
+    field: "feeder_construction",
+    entries: [1, 2, 4, 5].map((layer) =>
+      ngEntry(`national-grid-construction-${layer}`, `overview layer ${layer}`, "MASDP_Overview", layer, { objectIdAttribute: "OBJECTID", outFields: ["OBJECTID", "Master_CDF", "Construction", "Shape_Length"], fields: [] }),
+    ),
+  },
+  {
+    kind: "by_feeder",
+    joinAttribute: "Master_CDF",
+    entry: ngEntry("national-grid-group-studies", "group studies", "MASDP_Group_Study_Feeders", 1, {
+      objectIdAttribute: "Master_CDF",
+      sourceDate: { attribute: "Last_Updated", format: "epoch_ms" },
+      outFields: ["Master_CDF", "Group_Study_Map_Status", "Last_Updated"],
+      fields: [{ field: "feeder_study_status", attribute: "Group_Study_Map_Status", type: "text", grade: "reference" }],
+    }),
+  },
+  {
+    kind: "by_feeder",
+    joinAttribute: "Master_CDF",
+    entry: ngEntry("national-grid-nodal-feeders", "nodal hosting capacity by feeder", "Nodal_Hosting_Capacity_MA", 0, {
+      objectIdAttribute: "Master_CDF",
+      sourceDate: { attribute: "hca_refresh_date", format: "text" },
+      outFields: ["Master_CDF", "feeder_installed_dg", "feeder_queued_dg", "Ongoing_ASO_Study", "hca_refresh_date"],
+      fields: [MW("feeder_installed_dg", "feeder_installed_dg"), MW("feeder_queued_dg", "feeder_queued_dg"), { field: "feeder_aso_study", attribute: "Ongoing_ASO_Study", type: "text", grade: "reference" }],
+    }),
+  },
+  {
+    // The primary segment nearest the site, with every limit kept and the lowest named.
+    kind: "nearest",
+    joinAttribute: "feeder_cdf",
+    entry: ngEntry("national-grid-nodal-primary", "nodal hosting capacity on the primary", "Nodal_Hosting_Capacity_MA", 2, {
+      attributesOnly: false,
+      searchRadiusMeters: 30,
+      objectIdAttribute: "feeder_cdf",
+      groupByAttribute: "feeder_cdf",
+      outFields: ["feeder_cdf", "primary_hc_over_voltage", "primary_hc_voltage_deviation", "primary_hc_regulator_deviation", "primary_hc_thermal_from_gen", "primary_hc_anti_islanding", "primary_hc_flicker"],
+      fields: [
+        {
+          field: "feeder_nodal_hosting_capacity",
+          transform: {
+            kind: "lowest_of",
+            unit: "MW",
+            limits: {
+              primary_hc_over_voltage: "over-voltage",
+              primary_hc_voltage_deviation: "voltage deviation",
+              primary_hc_regulator_deviation: "regulator deviation",
+              primary_hc_thermal_from_gen: "thermal",
+              primary_hc_anti_islanding: "anti-islanding",
+              primary_hc_flicker: "flicker",
+            },
+          },
+          sentinels: [-99.99],
+          grade: "reference",
+        },
+      ],
+    }),
+  },
+];
 
 const MASSGIS = "https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services";
 const CREDIT = 'Credit: "MassGIS (Bureau of Geographic Information), Commonwealth of Massachusetts EOTSS".';
@@ -80,6 +186,7 @@ export const massachusetts: RegionConfig = {
     {
       utilityName: "National Grid",
       widenToMeters: 150,
+      details: nationalGridDetails,
       // The hosting capacity layer returns no geometry, so the lines come from the feeder layer.
       lineGeometry: {
         kind: "arcgis_rest",
@@ -121,6 +228,19 @@ export const massachusetts: RegionConfig = {
   ],
   roads: censusLocalRoads,
   layers: [
+    {
+      mode: { kind: "items", field: "substations_nearby", noun: "mapped substation", plural: "mapped substations", nameAttribute: "NAME", feature: "substation", limit: 3, absent: "unknown", note: "Nearby context with measured distance. Distance doesn't show which substation serves the site." },
+      entry: ngEntry("national-grid-substations", "substations", "MASDP_Substations", 0, {
+        attributesOnly: false,
+        searchRadiusMeters: 3000,
+        objectIdAttribute: "OBJECTID",
+        outFields: ["OBJECTID", "NAME", "TYPE", "STATUS"],
+        fields: [
+          { field: "substation_type", attribute: "TYPE", type: "text", grade: "reference" },
+          { field: "substation_status", attribute: "STATUS", type: "text", grade: "reference" },
+        ],
+      }),
+    },
     {
       mode: { kind: "one", pick: "first" },
       entry: {

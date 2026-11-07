@@ -1,5 +1,6 @@
 import type { FitnessGrade, MapFeature, ObservedValue, Source } from "@eqore/contract";
 import type { JsonSource } from "./json-api.ts";
+import type { Transform } from "./transforms.ts";
 import { parseAddress } from "./resolve-site.ts";
 
 // How a date in a source's attributes is written.
@@ -19,6 +20,9 @@ export type FieldMapping = {
   zeroIsMissing?: boolean;
   // Text a source uses to mean it has no value, such as a surface type of 0.
   blankValues?: string[];
+  // Numbers a source uses to mean it has no value, such as -99.99.
+  sentinels?: number[];
+  transform?: Transform;
 };
 
 export type ArcgisEntry = {
@@ -76,7 +80,17 @@ export type GridSource = {
   lineGeometry?: ArcgisEntry;
   // A wider search when nothing is mapped within the entry's radius, as downtown, where lines are drawn along streets.
   widenToMeters?: number;
+  // Other layers of the same utility, joined to each feeder candidate by the feeder's id.
+  details?: FeederDetail[];
 };
+
+export type FeederDetail =
+  // One row per feeder, found by its id.
+  | { kind: "by_feeder"; entry: ArcgisEntry; joinAttribute: string }
+  // Rows along the feeder, of which the one nearest the site is kept.
+  | { kind: "nearest"; entry: ArcgisEntry; joinAttribute: string }
+  // Overhead and underground segments across several layers, read as the share underground by mapped length.
+  | { kind: "construction"; entries: ArcgisEntry[]; joinAttribute: string; constructionAttribute: string; lengthAttribute: string; underground: string; field: string };
 
 export type TerritorySource = {
   entry: ArcgisEntry;
