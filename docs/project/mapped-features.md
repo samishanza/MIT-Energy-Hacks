@@ -23,7 +23,7 @@ Each feature has a `kind`, a `field` that ties it to a record value, and a label
 | Utility poles | `existing_equipment` | USGS 3DEP lidar, by shape | detected (lidar) |
 | Overhead conductors between poles | `utility_line` | USGS 3DEP lidar, by shape | detected (lidar) |
 | Service drop, service pole, service entrance | `utility_line`, `existing_equipment` | USGS 3DEP lidar, by shape | detected (lidar) |
-| Possible pad-mount transformers | `existing_equipment` | USGS 3DEP lidar, by shape | detected (lidar) |
+| Equipment boxes (solid, flat-topped, 1 to 2.4 m tall, possible pad-mount transformers) | `existing_equipment` | USGS 3DEP lidar, by shape | detected (lidar) |
 | Service path from the nearest mapped line, when lidar finds no drop | `utility_line`, `existing_equipment` | Computed from the National Grid line segments and the building | inferred |
 | Concept battery pad, AC disconnect, trench route, new breaker | `candidate_area`, `existing_equipment`, `utility_line` | Computed by `@eqore/electrical` from the record | concept |
 | Photo pins | `capture_pin` | Equipment located from a person's photo through the capture link, until someone verifies it | human evidence |

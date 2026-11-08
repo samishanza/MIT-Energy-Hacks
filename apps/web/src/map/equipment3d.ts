@@ -122,9 +122,14 @@ export function equipmentSolids(all: MapFeature[]): Solid[] {
           add(f, "can", { color: "#8f9aa3", base: top - 2.6, top: top - 1.5, ring: octagon(offset(at, 0.35, 0), 0.32) });
           break;
         }
-        case "pad_mount_transformer_candidate":
-          add(f, "box", { color: "#8f9aa3", base: 0, top: 1.5, ring: box(at, 1.8, 1.7) });
+        case "pad_mount_transformer_candidate": {
+          // Sized from the lidar returns when the detector measured it.
+          const w = Number(attr(f, "width_ft")) * FT || 1.8;
+          const d = Number(attr(f, "depth_ft")) * FT || 1.7;
+          const h = Number(attr(f, "height_ft")) * FT || 1.5;
+          add(f, "box", { color: "#8f9aa3", base: 0, top: h, ring: box(at, w, d) });
           break;
+        }
         case "service_entrance":
           add(f, "gear", { color: "#9aa3ab", base: 0, top: 2.3, ring: box(at, 2.4, 0.7) });
           break;

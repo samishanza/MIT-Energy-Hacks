@@ -1,8 +1,8 @@
 import { createLazPerf } from "laz-perf";
 import type { FetchLike } from "./arcgis.ts";
 
-// A lidar return in metres east and north of an origin, with its ASPRS class.
-export type LidarPoint = { x: number; y: number; z: number; classification: number };
+// A lidar return in metres east and north of an origin, with its ASPRS class and how many returns its pulse had.
+export type LidarPoint = { x: number; y: number; z: number; classification: number; returns?: number };
 
 type Ept = { bounds: number[]; boundsConforming: number[]; srs: { horizontal?: string } };
 
@@ -12,7 +12,7 @@ const mercator = (lon: number, lat: number): [number, number] => [(lon * Math.PI
 let lazPerf: ReturnType<typeof createLazPerf> | null = null;
 
 // Decodes one LAZ file into points, reading the LAS header for scale and offset.
-async function decode(bytes: Uint8Array): Promise<{ x: number; y: number; z: number; classification: number }[]> {
+async function decode(bytes: Uint8Array): Promise<LidarPoint[]> {
   lazPerf ??= createLazPerf();
   const lp = await lazPerf;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -24,7 +24,7 @@ async function decode(bytes: Uint8Array): Promise<{ x: number; y: number; z: num
   const filePointer = lp._malloc(bytes.byteLength);
   lp.HEAPU8.set(bytes, filePointer);
   const laszip = new lp.LASZip();
-  const points: { x: number; y: number; z: number; classification: number }[] = [];
+  const points: LidarPoint[] = [];
   try {
     laszip.open(filePointer, bytes.byteLength);
     const length = laszip.getPointLength();
@@ -38,6 +38,8 @@ async function decode(bytes: Uint8Array): Promise<{ x: number; y: number; z: num
           y: record.getInt32(4, true) * scale[1]! + offset[1]!,
           z: record.getInt32(8, true) * scale[2]! + offset[2]!,
           classification: format >= 6 ? record.getUint8(classAt) : record.getUint8(classAt) & 0x1f,
+          // Formats 6 and up keep the number of returns in the high four bits of byte 14; older ones in bits 3 to 5.
+          returns: format >= 6 ? record.getUint8(14) >> 4 : (record.getUint8(14) >> 3) & 0x07,
         });
       }
     } finally {
@@ -94,7 +96,7 @@ export async function readEptPoints(base: string, [lon, lat]: [number, number], 
     if (!response.ok) throw new Error(`HTTP ${response.status} for lidar node ${key}`);
     for (const point of await decode(new Uint8Array(await response.arrayBuffer()))) {
       if (point.x < box[0]! || point.x > box[2]! || point.y < box[1]! || point.y > box[3]!) continue;
-      points.push({ x: (point.x - cx) / stretch, y: (point.y - cy) / stretch, z: point.z, classification: point.classification });
+      points.push({ x: (point.x - cx) / stretch, y: (point.y - cy) / stretch, z: point.z, classification: point.classification, returns: point.returns });
     }
   }
   return points;
