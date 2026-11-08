@@ -315,7 +315,14 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
       case 'candidate_area':
         {
           const kind = (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value;
-          labels[f.id] = kind === 'feasible_bess' ? '(N) FEASIBLE BESS ZONE' : kind === 'feasible_bess_remote' ? '(N) BESS ZONE, OVER 100 FT FROM EXPOSURES' : 'OPEN GROUND';
+          labels[f.id] =
+            kind === 'feasible_bess_preferred'
+              ? '(N) BESS ZONE'
+              : kind === 'feasible_bess'
+                ? '(N) BESS ZONE, LONGER RUN'
+                : kind === 'feasible_bess_remote'
+                  ? '(N) BESS ZONE, OVER 100 FT FROM EXPOSURES'
+                  : 'OPEN GROUND';
         }
         break;
       default:
@@ -371,10 +378,12 @@ export function workArea(features: MapFeature[], padM = 25): [number, number, nu
         : f.geometry.type === 'MultiLineString'
           ? (f.geometry.coordinates as number[][][]).flat()
           : outer(f);
+  const hasPreferred = features.some((f) => (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value === 'feasible_bess_preferred');
   for (const f of drawnEquipment(features)) {
     const electrical = f.kind === 'existing_equipment' || /service|drop|trench|conductor/i.test(String((f.attributes?.['line_class'] as { value?: unknown } | undefined)?.value ?? ''));
-    const zone = f.kind === 'candidate_area' && (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value === 'feasible_bess';
-    // The remote area can sit far out on the lot; it's shown but doesn't widen the frame.
+    // The frame is the preferred zone, where the pad should go; the wider areas are shown but don't widen it.
+    const kind = f.kind === 'candidate_area' ? (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value : null;
+    const zone = kind === 'feasible_bess_preferred' || (kind === 'feasible_bess' && !hasPreferred);
     if (electrical || zone) pts.push(...coords(f).filter(near));
   }
   const xs = pts.map((p) => p[0]!);

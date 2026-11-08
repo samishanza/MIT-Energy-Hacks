@@ -26,3 +26,6 @@ dist/
 *.db-wal
 *.sqlite
 uploads/
+
+# Plan-set drawings aligned onto the map (customer documents)
+apps/web/public/private/
