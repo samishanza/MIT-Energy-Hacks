@@ -81,6 +81,8 @@ type Row = Record<string, string | number | null>;
 
 export class Store {
   readonly db: DatabaseSync;
+  // Called after each version is saved, for a mirror that copies it elsewhere.
+  onVersionSaved: ((record: RecordVersion) => void) | null = null;
 
   constructor(path = ":memory:") {
     this.db = new DatabaseSync(path);
@@ -113,6 +115,15 @@ export class Store {
 
   saveVersion(record: RecordVersion): void {
     this.db.prepare("INSERT INTO versions (site_id, version, json) VALUES (?, ?, ?)").run(record.site.id, record.version, JSON.stringify(RecordVersionSchema.parse(record)));
+    this.onVersionSaved?.(record);
+  }
+
+  siteIds(): string[] {
+    return (this.db.prepare("SELECT DISTINCT site_id FROM versions ORDER BY site_id").all() as Row[]).map((row) => String(row.site_id));
+  }
+
+  versionNumbers(siteId: string): number[] {
+    return (this.db.prepare("SELECT version FROM versions WHERE site_id = ? ORDER BY version").all(siteId) as Row[]).map((row) => Number(row.version));
   }
 
   readVersion(siteId: string, version: number | "latest"): RecordVersion | null {
