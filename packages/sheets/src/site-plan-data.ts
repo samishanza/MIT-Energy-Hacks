@@ -316,9 +316,11 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
         {
           const kind = (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value;
           labels[f.id] =
-            kind === 'feasible_bess_preferred'
+            kind === 'feasible_bess_recommended'
               ? '(N) BESS ZONE'
-              : kind === 'feasible_bess'
+              : kind === 'feasible_bess_preferred'
+                ? '(N) BESS ZONE, UP TO 150 FT RUN'
+                : kind === 'feasible_bess'
                 ? '(N) BESS ZONE, LONGER RUN'
                 : kind === 'feasible_bess_remote'
                   ? '(N) BESS ZONE, OVER 100 FT FROM EXPOSURES'
@@ -378,12 +380,14 @@ export function workArea(features: MapFeature[], padM = 12): [number, number, nu
         : f.geometry.type === 'MultiLineString'
           ? (f.geometry.coordinates as number[][][]).flat()
           : outer(f);
-  const hasPreferred = features.some((f) => (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value === 'feasible_bess_preferred');
+  // The zone that frames the view: the recommended area, else the preferred one, else the whole feasible area.
+  const kinds = features.map((f) => (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value);
+  const primary = ['feasible_bess_recommended', 'feasible_bess_preferred', 'feasible_bess'].find((k) => kinds.includes(k));
   // The frame is the building and the preferred zone, where the pad should go; the wider areas are shown but
   // don't widen it.
   for (const f of drawnEquipment(features)) {
     const kind = f.kind === 'candidate_area' ? (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value : null;
-    if (kind === 'feasible_bess_preferred' || (kind === 'feasible_bess' && !hasPreferred)) pts.push(...coords(f).filter(near));
+    if (kind && kind === primary) pts.push(...coords(f).filter(near));
   }
   // Equipment widens it only beside that area, so poles and lines down the street don't pull the frame out.
   const reach = 20 / 111_320;

@@ -18,6 +18,10 @@ export const PREFERRED_RUN_FT = 150;
 const ROUTED_FACTOR = 1.25;
 const ROUTED_EXTRA_FT = 20;
 export const PREFERRED_STRAIGHT_FT = (PREFERRED_RUN_FT - ROUTED_EXTRA_FT) / ROUTED_FACTOR;
+// Where the battery would realistically go: spots as good as the best one (same tier, no more flags),
+// with at most this much more run, and within this distance of the best pad.
+export const RECOMMENDED_RUN_SLACK_FT = 25;
+export const RECOMMENDED_REACH_FT = 50;
 // How far from the building to look for the utility supply that sets the likely service wall.
 const SUPPLY_SEARCH_FT = 400;
 const CELL = 2;
@@ -90,8 +94,10 @@ export type BessZone = {
   zone: MapFeature | null;
   // The part of the zone more than 100 ft from every exposure.
   remote: MapFeature | null;
-  // The part of the zone within the preferred run of the target: where the pad should go.
+  // The part of the zone within the preferred run of the target.
   preferred: MapFeature | null;
+  // Spots about as good as the best pad, around it: where the battery would realistically go.
+  recommended: MapFeature | null;
   pad: BessPad | null;
   target: "main switchboard" | "service entrance" | "building wall" | "building wall nearest the utility supply";
   // When nothing qualifies, the rule that removed the last cells.
@@ -250,7 +256,7 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
   const switchboard = record.features.find((f) => f.kind === "capture_pin" && f.field === "switchboard_location" && f.geometry.type === "Point");
   const entrance = switchboard ?? record.features.find(isEntrance);
   let target: BessZone["target"] = switchboard ? "main switchboard" : entrance ? "service entrance" : "building wall";
-  const none = (reason: string): BessZone => ({ zone: null, remote: null, preferred: null, pad: null, target, reason });
+  const none = (reason: string): BessZone => ({ zone: null, remote: null, preferred: null, recommended: null, pad: null, target, reason });
   if (!parcels.length || !buildings.length) return none("The record has no lot or no building outline to place a pad against.");
   const value = (field: string) => record.values.find((v) => v.field === field)?.current ?? null;
   const flood = value("flood_zone");
@@ -382,6 +388,7 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
     return k >= 0 && ra[k]! < rb[k]!;
   };
   let best: Placement | null = null;
+  const placements: Placement[] = [];
   for (const [bw, bh] of [[long, short], [short, long]] as const) {
     for (let y = 0; y + bh <= h; y++) for (let x = 0; x + bw <= w; x++) {
       if (block(x, y, bw, bh) !== bw * bh) continue;
@@ -398,6 +405,7 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
       }
       const flags = [buffer && "env.wetland_buffer_100ft", access && "fire.access_road_150ft", line && "util.overhead_line_20ft"].filter((f): f is string => Boolean(f));
       const placement = { x, y, bw, bh, run: nearest, flags, remote: exposure > REMOTE_FT, paved: onPaving };
+      placements.push(placement);
       if (!best || before(placement, best)) best = placement;
     }
   }
@@ -413,6 +421,21 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
     remoteCells[i] = covered[i] && toExposure(i) > REMOTE_FT + MARGIN ? 1 : 0;
     const straight = entrancePoint ? Math.hypot(center(x, y)[0] - entrancePoint[0], center(x, y)[1] - entrancePoint[1]) : toBuilding[i]!;
     preferredCells[i] = covered[i] && straight <= PREFERRED_STRAIGHT_FT ? 1 : 0;
+  }
+  // The recommended area: every cell covered by a placement about as good as the best one, near it.
+  const recommendedCells = new Uint8Array(w * h);
+  if (best) {
+    const top = best;
+    const [tier, paving] = rank(top);
+    const mid = (p: Placement) => [p.x + p.bw / 2, p.y + p.bh / 2];
+    const [bx, by] = mid(top);
+    for (const p of placements) {
+      const [r0, r1] = rank(p);
+      if (r0 !== tier || r1 !== paving || p.flags.length > top.flags.length || p.run > top.run + RECOMMENDED_RUN_SLACK_FT) continue;
+      const [px, py] = mid(p);
+      if (Math.hypot(px! - bx!, py! - by!) * CELL > RECOMMENDED_REACH_FT) continue;
+      for (let yy = p.y; yy < p.y + p.bh; yy++) for (let xx = p.x; xx < p.x + p.bw; xx++) recommendedCells[yy * w + xx] = 1;
+    }
   }
   const geometryOf = (mask: Uint8Array): MapFeature["geometry"] | null => {
     const rings = outline(mask, w, h).map((ring) => ring.map(([x, y]) => back([minU + x * CELL, minV + y * CELL])));
@@ -493,6 +516,26 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
       confidence_reason: text(`Every spot where an ${PAD.widthFt} x ${PAD.depthFt} ft pad with ${PAD.workingFt} ft of working space fits under the rules, within ${MAX_RUN_FT} ft of the ${target}, from the mapped lot, buildings, road centerlines, detected overhead lines and equipment, and mapped wetlands.`),
     },
   };
+  const recommendedGeometry = geometryOf(recommendedCells);
+  const recommended: MapFeature | null = recommendedGeometry
+    ? {
+        id: "concept-feasible-bess-recommended",
+        kind: "candidate_area",
+        field: "candidate_areas",
+        geometry: recommendedGeometry,
+        label: "(N) BESS ZONE",
+        attributes: {
+          zone_kind: text("feasible_bess_recommended"),
+          area_sqft: { type: "quantity", value: area(recommendedCells), unit: "sqft" },
+          run_ft: { type: "quantity", value: pad.run.feet, unit: "ft" },
+          run_target: text(target),
+          basis: text("concept"),
+          confidence_reason: text(
+            `Where the pad would realistically go: spots as good as the best one under the rules (${b.paved ? "on paving, since no unpaved spot fits" : "off paving"}, no more flags), with at most ${RECOMMENDED_RUN_SLACK_FT} ft more run, within ${RECOMMENDED_REACH_FT} ft of it. Measured from the ${target}.`,
+          ),
+        },
+      }
+    : null;
   const preferredGeometry = geometryOf(preferredCells);
   const preferred: MapFeature | null = preferredGeometry
     ? {
@@ -532,5 +575,5 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
         },
       }
     : null;
-  return { zone, remote, preferred, pad, target, reason: null };
+  return { zone, remote, preferred, recommended, pad, target, reason: null };
 }

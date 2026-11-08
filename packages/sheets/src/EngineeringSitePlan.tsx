@@ -134,9 +134,12 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   const isFeasible = (f: MapFeature) => (attributeText(f, 'zone_kind') ?? '').startsWith('FEASIBLE_BESS');
   const zoneKind = (f: MapFeature) => attributeText(f, 'zone_kind') ?? '';
   // The preferred zone is hatched; the wider feasible area, with longer runs, is a dashed outline.
-  const hasPreferred = record.features.some((f) => zoneKind(f) === 'FEASIBLE_BESS_PREFERRED');
-  const feasible = record.features.filter((f) => f.kind === 'candidate_area' && (zoneKind(f) === 'FEASIBLE_BESS_PREFERRED' || (!hasPreferred && zoneKind(f) === 'FEASIBLE_BESS')));
-  const feasibleOuter = hasPreferred ? record.features.filter((f) => f.kind === 'candidate_area' && zoneKind(f) === 'FEASIBLE_BESS') : [];
+  // The recommended area (where the pad would realistically go) is hatched; the area within a 150 ft run is
+  // a dashed outline around it. Older records without them fall back to the wider zones.
+  const order = ['FEASIBLE_BESS_RECOMMENDED', 'FEASIBLE_BESS_PREFERRED', 'FEASIBLE_BESS'];
+  const present = order.filter((k) => record.features.some((f) => f.kind === 'candidate_area' && zoneKind(f) === k));
+  const feasible = record.features.filter((f) => f.kind === 'candidate_area' && zoneKind(f) === present[0]);
+  const feasibleOuter = present[1] ? record.features.filter((f) => f.kind === 'candidate_area' && zoneKind(f) === present[1]) : [];
   const open = record.features.filter((f) => f.kind === 'candidate_area' && !isFeasible(f));
   const dims = record.features.filter((f) => f.kind === 'dimension_line');
   const inMassachusetts = /massachusetts/i.test(record.site.region);
@@ -191,8 +194,14 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   for (const z of feasible) {
     const pts = polygonsOfFeature(z, frame).flatMap((p) => p.outer.map(toSheet));
     const at = firstInside(pts, view, 0.2);
-    const preferred = zoneKind(z) === 'FEASIBLE_BESS_PREFERRED';
-    if (at) callouts.push({ anchor: at, lines: preferred ? ['(N) BESS ZONE', `WITHIN ${attributeText(z, 'preferred_run_ft') ?? "150'"} RUN OF THE SERVICE`] : ['(N) BESS ZONE', `WITHIN ${attributeText(z, 'max_run_ft') ?? "250'"} RUN OF THE SERVICE`], color: NEW });
+    const kind = zoneKind(z);
+    const lines =
+      kind === 'FEASIBLE_BESS_RECOMMENDED'
+        ? ['(N) BESS ZONE']
+        : kind === 'FEASIBLE_BESS_PREFERRED'
+          ? ['(N) BESS ZONE', `WITHIN ${attributeText(z, 'preferred_run_ft') ?? "150'"} RUN OF THE SERVICE`]
+          : ['(N) BESS ZONE', `WITHIN ${attributeText(z, 'max_run_ft') ?? "250'"} RUN OF THE SERVICE`];
+    if (at) callouts.push({ anchor: at, lines, color: NEW });
   }
 
   const substations = record.features
@@ -1017,7 +1026,7 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
     },
     { label: '(E) TRANSMISSION LINE, KV', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" /> },
     { label: '(E) ELECTRIC SERVICE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} /> },
-    { label: '(N) BESS ZONE, LONGER RUN', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="none" stroke={NEW} strokeWidth={1.5} strokeDasharray="14 8" /> },
+    { label: '(N) BESS ZONE, UP TO 150 FT RUN', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="none" stroke={NEW} strokeWidth={1.5} strokeDasharray="14 8" /> },
     { label: '(N) BESS ZONE', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#feasibleHatch)" stroke={NEW} strokeWidth={3} /> },
     { label: '(N) BESS PAD', symbol: (sx, sy) => <PadSymbol at={{ x: sx + 90, y: sy }} k={1.6} /> },
     { label: '(N) TRENCH ROUTE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" /> },

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MapFeature, RecordVersion } from "@eqore/contract";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { APPLIED_RULES, NOT_CHECKED, feasibleBessZone, MAX_RUN_FT, PREFERRED_STRAIGHT_FT } from "./zone.ts";
+import { APPLIED_RULES, NOT_CHECKED, feasibleBessZone, MAX_RUN_FT, PREFERRED_STRAIGHT_FT, RECOMMENDED_REACH_FT } from "./zone.ts";
 
 // A labeled synthetic site, laid out in feet east and north of a point and converted to degrees.
 const ORIGIN = [-71.5, 42.2] as const;
@@ -120,6 +120,15 @@ describe("where the battery should go", () => {
     const [x] = feetOf(pad!.center);
     expect(x).toBeLessThan(150);
     expect(pad!.run.feet).toBeLessThanOrEqual(150);
+  });
+
+  it("narrows to where the pad would realistically go: around the best pad, a fraction of the preferred zone", () => {
+    const { recommended, preferred, pad } = feasibleBessZone(site([entrance(200, 200)]));
+    const area = (f: MapFeature) => (f.attributes!["area_sqft"] as { value: number }).value;
+    expect(area(recommended!)).toBeLessThan(area(preferred!) / 2);
+    const [cx, cy] = feetOf(pad!.center);
+    // Every corner of the area lies within the reach of the best pad, plus half a pad and a cell.
+    for (const [x, y] of pointsOf(recommended!)) expect(Math.hypot(x - cx, y - cy)).toBeLessThanOrEqual(RECOMMENDED_REACH_FT + 12);
   });
 
   it("falls back to every wall when there's no entrance and no supply nearby", () => {
