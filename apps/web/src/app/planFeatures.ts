@@ -23,6 +23,7 @@ const POINT_TYPES: Record<string, { equipment: string; label: string }> = {
   transformer: { equipment: "pad_mount_transformer", label: "(E) PAD-MOUNT TRANSFORMER" },
   meter: { equipment: "meter", label: "(E) UTILITY METER" },
   main_switchboard: { equipment: "service_entrance", label: "(E) MAIN DISTRIBUTION PANEL" },
+  generator: { equipment: "generator", label: "(E) GENERATOR" },
 };
 
 export async function loadPlanFeatures(siteId: string): Promise<PlanFeatureCollection | null> {

@@ -94,6 +94,8 @@ export function equipmentTag(f: MapFeature): { tag: string; name: string } | nul
       return { tag: "MH", name: "Manhole" };
     case "meter":
       return { tag: "M", name: "Utility meter" };
+    case "generator":
+      return { tag: "GEN", name: "Generator" };
     default:
       return f.kind === "substation" ? { tag: "SUB", name: "Substation" } : null;
   }
@@ -183,6 +185,11 @@ export function equipmentSolids(all: MapFeature[]): Solid[] {
           break;
         case "meter":
           add(f, "meter", { color: "#9aa3ab", base: 1.2, top: 1.7, ring: box(at, 0.35, 0.25) });
+          break;
+        case "generator":
+          // A standby generator in its enclosure on a pad, about 12 x 5 ft and 6 ft tall.
+          add(f, "pad", { color: "#c8c4bb", base: 0, top: 0.12, ring: box(at, 4.2, 1.9) });
+          add(f, "enclosure", { color: "#d8d4c8", base: 0.12, top: 1.95, ring: box(at, 3.7, 1.5) });
           break;
       }
     }
