@@ -131,6 +131,16 @@ describe("where the battery should go", () => {
     for (const [x, y] of pointsOf(recommended!)) expect(Math.hypot(x - cx, y - cy)).toBeLessThanOrEqual(RECOMMENDED_REACH_FT + 12);
   });
 
+  it("keeps the pad beside a paved drive, for delivery, over open grass farther out", () => {
+    // A drive runs north-south 60 ft west of the building; grass lies on both sides of it.
+    const drive = feature("drive", "constraint", "paved_area_sqft", { type: "Polygon", coordinates: [box(120, 100, 140, 300)] });
+    const { pad } = feasibleBessZone(site([entrance(200, 200), drive]));
+    const [x] = feetOf(pad!.center);
+    // Beside the drive (within 20 ft of its edges, off it), not out in the grass beyond.
+    expect(x > 140 || x < 120).toBe(true);
+    expect(Math.min(Math.abs(x - 140), Math.abs(x - 120))).toBeLessThan(20 + 14);
+  });
+
   it("falls back to every wall when there's no entrance and no supply nearby", () => {
     expect(feasibleBessZone(site()).target).toBe("building wall");
   });

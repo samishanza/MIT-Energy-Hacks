@@ -438,5 +438,15 @@
     "citation": "Project inference; reference plan set (pad beside the building's electrical room)",
     "url": "",
     "notes": "INFERENCE. Routed length already captures most of this. Keep it as a tie-breaker."
+  },
+  {
+    "id": "site.delivery_access_20ft",
+    "rule": "Prefer a pad within 20 ft of a paved drive (but not on it), so a truck or crane can set the cabinet and fire apparatus can reach it.",
+    "distance_ft": 20,
+    "kind": "preference",
+    "layer": "MassGIS impervious land cover (paved parking and drives)",
+    "citation": "Project inference; NFPA 855 (2020) 4.4.3.8 and NFPA 1 (2021) 18.2.3.2.2 for fire access; manufacturer data for an EDGE760-class cabinet of about 8 tons",
+    "url": "",
+    "notes": "INFERENCE. A cabinet of several tons is set from a truck or crane parked on a drive; a pad far out on grass needs a temporary road. Ranked, not excluded."
   }
 ]

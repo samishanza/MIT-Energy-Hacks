@@ -21,7 +21,9 @@ export const PREFERRED_STRAIGHT_FT = (PREFERRED_RUN_FT - ROUTED_EXTRA_FT) / ROUT
 // Where the battery would realistically go: spots as good as the best one (same tier, no more flags),
 // with at most this much more run, and within this distance of the best pad.
 export const RECOMMENDED_RUN_SLACK_FT = 25;
-export const RECOMMENDED_REACH_FT = 50;
+// A truck or crane sets the cabinet from a drive, so a pad beside paving ranks ahead of one far out on grass.
+const DELIVERY_FT = 20;
+export const RECOMMENDED_REACH_FT = 60;
 // How far from the building to look for the utility supply that sets the likely service wall.
 const SUPPLY_SEARCH_FT = 400;
 const CELL = 2;
@@ -53,6 +55,7 @@ export const APPLIED_RULES: SitingRule[] = [
   { id: "site.pad_fit", status: "inference", use: "excludes", text: "Room for the 11.5 x 14 ft pad plus 3 ft of working space", citation: "Project algorithm; NEC 110.26" },
   { id: "elec.run_preferred_150ft", status: "inference", use: "ranks", text: "Shortest run first, preferring 150 ft or less", citation: "Project inference" },
   { id: "site.parking_stalls", status: "inference", use: "ranks", text: "Off paved parking and drives when an unpaved spot within the preferred run fits", citation: "Project inference; MassGIS impervious land cover" },
+  { id: "site.delivery_access_20ft", status: "inference", use: "ranks", text: "Within 20 ft of a paved drive, for delivery and fire access", citation: "Project inference; NFPA 855 (2020) 4.4.3.8" },
   { id: "util.overhead_line_20ft", status: "confirmed", use: "flags", text: "Prefer 20 ft from overhead lines of unconfirmed voltage", citation: "29 CFR 1926.1408(a)(2) Option 2" },
   { id: "env.wetland_buffer_100ft", status: "secondary", use: "flags", text: "Within 100 ft of a wetland needs a Conservation Commission filing", citation: "310 CMR 10.02(2)(b)" },
   { id: "fire.access_road_150ft", status: "confirmed", use: "flags", text: "More than 150 ft from a mapped public road: fire access must come by site drives", citation: "NFPA 855 (2020) 4.4.3.8; NFPA 1 (2021) 18.2.3.2.2" },
@@ -348,6 +351,8 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
   const toWetland = distanceField(inWetland, w, h);
   // Paved parking and drives: a pad there takes stalls or blocks an aisle, so unpaved ground ranks ahead.
   const paved = fill(record.features.filter((f) => f.kind === "constraint" && f.field === "paved_area_sqft").flatMap(polygonsOf).map(turnRings));
+  const anyPaving = paved.some((v) => v === 1);
+  const toPaving = distanceField(paved, w, h);
   const run = (x: number, y: number) => (entrancePoint ? Math.hypot(center(x, y)[0] - entrancePoint[0], center(x, y)[1] - entrancePoint[1]) : toBuilding[y * w + x]!);
   const toExposure = (i: number) => Math.min(toLotLine[i]!, toBuilding[i]!, toRoad[i]! - halfRoad);
 
@@ -379,9 +384,10 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
   const block = (x: number, y: number, bw: number, bh: number) => sums[(y + bh) * (w + 1) + x + bw]! - sums[y * (w + 1) + x + bw]! - sums[(y + bh) * (w + 1) + x]! + sums[y * (w + 1) + x]!;
   const long = Math.ceil((PAD.depthFt + PAD.workingFt) / CELL), short = Math.ceil(PAD.widthFt / CELL);
   const marks = new Int32Array((w + 1) * (h + 1));
-  type Placement = { x: number; y: number; bw: number; bh: number; run: number; flags: string[]; remote: boolean; paved: boolean };
-  // Within the preferred run, unpaved ground first; then shortest run in 10 ft steps; then fewer flags; then run.
-  const rank = (p: Placement) => [p.run > PREFERRED_RUN_FT ? 1 : 0, p.paved ? 1 : 0, Math.round(p.run / 10), p.flags.length, p.run];
+  type Placement = { x: number; y: number; bw: number; bh: number; run: number; flags: string[]; remote: boolean; paved: boolean; reachable: boolean };
+  // Within the preferred run, unpaved ground first; then beside a drive for delivery; then the shorter run in
+  // 10 ft steps; then fewer flags; then the shortest run.
+  const rank = (p: Placement) => [p.run > PREFERRED_RUN_FT ? 1 : 0, p.paved ? 1 : 0, p.reachable ? 0 : 1, Math.round(p.run / 10), p.flags.length, p.run];
   const before = (a: Placement, b: Placement) => {
     const ra = rank(a), rb = rank(b);
     const k = ra.findIndex((v, index) => v !== rb[index]);
@@ -393,7 +399,7 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
     for (let y = 0; y + bh <= h; y++) for (let x = 0; x + bw <= w; x++) {
       if (block(x, y, bw, bh) !== bw * bh) continue;
       marks[y * (w + 1) + x]! += 1; marks[y * (w + 1) + x + bw]! -= 1; marks[(y + bh) * (w + 1) + x]! -= 1; marks[(y + bh) * (w + 1) + x + bw]! += 1;
-      let nearest = Infinity, buffer = false, access = false, line = false, onPaving = false, exposure = Infinity;
+      let nearest = Infinity, buffer = false, access = false, line = false, onPaving = false, exposure = Infinity, drive = Infinity;
       for (let yy = y; yy < y + bh; yy++) for (let xx = x; xx < x + bw; xx++) {
         const i = yy * w + xx;
         if (yy === y || yy === y + bh - 1 || xx === x || xx === x + bw - 1) nearest = Math.min(nearest, run(xx, yy));
@@ -401,10 +407,11 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
         if (toRoad[i]! > FIRE_ACCESS_FT + halfRoad) access = true;
         if (toLine[i]! < LINE_PREFERRED_FT) line = true;
         if (paved[i]) onPaving = true;
+        drive = Math.min(drive, toPaving[i]!);
         exposure = Math.min(exposure, toExposure(i));
       }
       const flags = [buffer && "env.wetland_buffer_100ft", access && "fire.access_road_150ft", line && "util.overhead_line_20ft"].filter((f): f is string => Boolean(f));
-      const placement = { x, y, bw, bh, run: nearest, flags, remote: exposure > REMOTE_FT, paved: onPaving };
+      const placement = { x, y, bw, bh, run: nearest, flags, remote: exposure > REMOTE_FT, paved: onPaving, reachable: !anyPaving || drive <= DELIVERY_FT };
       placements.push(placement);
       if (!best || before(placement, best)) best = placement;
     }
@@ -430,8 +437,8 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
     const mid = (p: Placement) => [p.x + p.bw / 2, p.y + p.bh / 2];
     const [bx, by] = mid(top);
     for (const p of placements) {
-      const [r0, r1] = rank(p);
-      if (r0 !== tier || r1 !== paving || p.flags.length > top.flags.length || p.run > top.run + RECOMMENDED_RUN_SLACK_FT) continue;
+      const [r0, r1, r2] = rank(p);
+      if (r0 !== tier || r1 !== paving || r2 !== rank(top)[2] || p.flags.length > top.flags.length || p.run > top.run + RECOMMENDED_RUN_SLACK_FT) continue;
       const [px, py] = mid(p);
       if (Math.hypot(px! - bx!, py! - by!) * CELL > RECOMMENDED_REACH_FT) continue;
       for (let yy = p.y; yy < p.y + p.bh; yy++) for (let xx = p.x; xx < p.x + p.bw; xx++) recommendedCells[yy * w + xx] = 1;

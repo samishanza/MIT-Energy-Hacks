@@ -172,7 +172,10 @@ async function collectAndRecord(
   const pins = previous.filter(
     (feature) => (feature.kind === "capture_pin" || feature.kind === "existing_equipment") && !feature.attributes?.["basis"],
   );
-  const kept = shapesOfFailedSources(previous, collection).filter((feature) => !pins.includes(feature));
+  // Look back past runs where the same source also failed, to the last one that drew its shapes.
+  const latestVersion = deps.store.readVersion(siteId, "latest")?.version ?? 0;
+  const history = Array.from({ length: Math.min(latestVersion, 30) }, (_, i) => deps.store.readVersion(siteId, latestVersion - i)?.features ?? []);
+  const kept = shapesOfFailedSources(history, collection).filter((feature) => !pins.includes(feature));
   const sourceRuns = deps.snapshot
     ? collection.sourceRuns.map((run) => (run.status === "done" ? { ...run, status: "snapshot" as const } : run))
     : collection.sourceRuns;
@@ -189,14 +192,22 @@ async function collectAndRecord(
 
 // A source that didn't answer this time keeps its shapes from the last run, as its values already carry
 // over: a timed-out land cover service shouldn't erase the paved areas the battery zone avoids.
+// `history` is the feature lists of earlier versions, newest first; each field takes its shapes from the
+// newest version that has any.
 export function shapesOfFailedSources(
-  previous: MapFeature[],
+  history: MapFeature[][],
   collection: { sourceRuns: { sourceId: string; status: string }[]; observations: Observation[]; features: MapFeature[] },
 ): MapFeature[] {
   const failedSources = new Set(collection.sourceRuns.filter((run) => run.status !== "done").map((run) => run.sourceId));
   const failedFields = new Set(collection.observations.filter((o) => failedSources.has(o.source.id) && o.kind === "no_value").map((o) => o.field));
   const drawnNow = new Set(collection.features.map((feature) => feature.field));
-  return previous.filter((feature) => failedFields.has(feature.field) && !drawnNow.has(feature.field));
+  const kept: MapFeature[] = [];
+  for (const field of failedFields) {
+    if (drawnNow.has(field)) continue;
+    const found = history.find((features) => features.some((feature) => feature.field === field));
+    if (found) kept.push(...found.filter((feature) => feature.field === field));
+  }
+  return kept;
 }
 
 export function latestOrFail(deps: ApiDeps, siteId: string): RecordVersion {
