@@ -37,6 +37,7 @@ export async function collectLidarEquipment(
   roadName: string,
   address: string,
   ctx: CollectContext,
+  pavedAreas: MapFeature[] = [],
 ): Promise<LidarCollection | null> {
   if (buildings.length === 0) return null;
   const source = config.source;
@@ -84,7 +85,10 @@ export async function collectLidarEquipment(
   const registered = registration.applied
     ? ` Lidar positions are moved ${shift} to register the lidar to the mapped building outline: ${registration.reason}.`
     : ` No registration shift is applied (${registration.reason}).`;
-  const detection = detectEquipment(points, outlines, roads);
+  const paved = pavedAreas.flatMap((feature) =>
+    feature.geometry.type === "Polygon" ? [feature.geometry.coordinates[0] as Point[]] : feature.geometry.type === "MultiPolygon" ? (feature.geometry.coordinates as Point[][][]).map((polygon) => polygon[0]!) : [],
+  ).map((ring) => ring.map(local));
+  const detection = detectEquipment(points, outlines, roads, paved);
   const retrievedAt = ctx.now();
   const shared = (equipment: string, reason: string) => ({
     equipment_type: text(equipment),
@@ -129,6 +133,7 @@ export async function collectLidarEquipment(
       },
     }),
   );
+  // Ranked by how transformer-like each box is; the first is the best lead, and every one stays a candidate.
   const pads = detection.padMounts.map((pad, index): MapFeature => ({
     id: `lidar-pad-mount-${index + 1}`,
     kind: "existing_equipment",
@@ -138,14 +143,48 @@ export async function collectLidarEquipment(
     attributes: {
       ...shared(
         "pad_mount_transformer_candidate",
-        `A solid, flat-topped box about ${pad.widthM} by ${pad.depthM} m and ${pad.heightM.toFixed(1)} m tall, ${Math.round(pad.wallM * FEET)} ft from the building, with nothing overhanging. It could be a transformer, a generator, or other equipment.`,
+        `A flat-topped box about ${pad.widthM} by ${pad.depthM} m and ${pad.heightM.toFixed(1)} m tall, ${Math.round(pad.wallM * FEET)} ft from the building, with nothing overhanging, not car-sized, and not inside a paved lot. Ranked ${index + 1} of ${detection.padMounts.length} by flat top, fill, single returns, nearness to the building, and a height near a three-phase pad-mount's. It could be a transformer, a generator, an HVAC unit, or other equipment.`,
       ),
+      candidate_rank: { type: "quantity", value: index + 1, unit: "rank" },
       height_ft: { type: "quantity", value: Math.round(pad.heightM * FEET * 10) / 10, unit: "ft" },
       width_ft: { type: "quantity", value: Math.round(pad.widthM * FEET * 10) / 10, unit: "ft" },
       depth_ft: { type: "quantity", value: Math.round(pad.depthM * FEET * 10) / 10, unit: "ft" },
     },
   }));
   features.push(...pads);
+  detection.lightPoles.forEach((light, index) =>
+    features.push({
+      id: `lidar-light-pole-${index + 1}`,
+      kind: "existing_equipment",
+      field: "detected_grid_equipment",
+      geometry: { type: "Point", coordinates: lonLat(light.at) },
+      label: "(E) LIGHT POLE",
+      attributes: {
+        ...shared(
+          "light_pole",
+          `A compact head ${light.heightM.toFixed(1)} m up (${light.headReturns} returns across ${light.headSpanM.toFixed(1)} m) on a thin column or nothing, over open ground, with no crown around it. A flagpole or sign can look the same, and a light under a tree is missed.`,
+        ),
+        height_ft: { type: "quantity", value: Math.round(light.heightM * FEET), unit: "ft" },
+      },
+    }),
+  );
+  detection.hydrants.forEach((hydrant, index) =>
+    features.push({
+      id: `lidar-hydrant-${index + 1}`,
+      kind: "existing_equipment",
+      field: "detected_grid_equipment",
+      geometry: { type: "Point", coordinates: lonLat(hydrant.at) },
+      label: "(E) HYDRANT",
+      attributes: {
+        ...shared(
+          "hydrant",
+          `A small isolated object ${hydrant.heightM.toFixed(1)} m tall (${hydrant.returns} return${hydrant.returns === 1 ? "" : "s"}) over open ground, ${Math.round(hydrant.roadM * FEET)} ft from a road or paved edge. The lidar gives a hydrant only a return or two, so a post, bollard, or small shrub looks the same: a weak candidate.`,
+        ),
+        basis: text("inferred"),
+        height_ft: { type: "quantity", value: Math.round(hydrant.heightM * FEET * 10) / 10, unit: "ft" },
+      },
+    }),
+  );
 
   const observations: Observation[] = [];
   const counts = [
@@ -153,6 +192,8 @@ export async function collectLidarEquipment(
     `${detection.conductors.length} conductor span${detection.conductors.length === 1 ? "" : "s"}`,
     detection.drop ? "a likely service drop" : "no service drop",
     `${detection.padMounts.length} equipment box${detection.padMounts.length === 1 ? "" : "es"}`,
+    `${detection.lightPoles.length} light pole${detection.lightPoles.length === 1 ? "" : "s"}`,
+    `${detection.hydrants.length} possible hydrant${detection.hydrants.length === 1 ? "" : "s"}`,
   ];
   observations.push(
     observe(origin(retrievedAt), ctx, {

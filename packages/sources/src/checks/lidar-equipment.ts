@@ -14,11 +14,15 @@ import type { LidarPoint } from "../ept.ts";
 //   the usual span, as a single column near the middle with wire running to both. Unless its own shape passes the
 //   pole test, it is reported as inferred, not measured.
 // - A service drop is a narrow, continuous run of returns from a pole to a wall, below the roof.
-// - An equipment box is a solid, flat-topped object 1 to 2.4 m tall and 1 to 3 m across, not vegetation, mostly
-//   single returns, with nothing overhanging, away from walls and roads.
+// - An equipment box is a flat-topped block 0.8 to 2.5 m tall and 0.8 to 3.2 m across, not tall vegetation, with
+//   nothing overhanging, off the street, not car-sized, and not well inside a paved lot. Boxes are ranked by how
+//   transformer-like they are.
+// - A light pole is a compact head 4 to 13 m up over open ground, with only a thin column under it and no crown around.
+// - A hydrant candidate is a small isolated object 0.5 to 1.1 m tall over open ground near a road or paved edge. The
+//   lidar gives a hydrant only a return or two, so these are weak.
 //
-// Tuned against one supplied engineered plan set, the 2025 orthophoto, and the 2021 lidar at that site. It can
-// still miss equipment, and every result is a detection to confirm.
+// Tuned against engineered plan sets for two Massachusetts sites, their 2025 orthophotos, and the 2021 lidar. Lights
+// and hydrants under a tree's crown are missed, and every result is a detection to confirm.
 
 type Point = [number, number];
 // `street` is false for a road a distribution line doesn't follow, such as a parking-lot aisle or a service drive.
@@ -30,8 +34,20 @@ export type Pole = { at: Point; heightM: number; roadFeet: number; road: string;
 export type Span = { from: Point; to: Point; returns: number; coverage: number; heightM: number; lengthM: number };
 // A box found by shape. 3DEP often labels low equipment as low or medium vegetation, so the class doesn't decide;
 // solidity, a flat top, and a filled rectangle do, and the tests it passed are kept.
-export type PadMount = { at: Point; widthM: number; depthM: number; heightM: number; wallM: number; fill: number; singleReturns: number; topSpreadM: number; labelledVegetation: boolean };
-export type Detection = { poles: Pole[]; conductors: Span[]; drop: (Span & { pole: Pole; wall: Point; roofM: number | null }) | null; padMounts: PadMount[] };
+export type PadMount = { at: Point; widthM: number; depthM: number; heightM: number; wallM: number; fill: number; singleReturns: number; topSpreadM: number; labelledVegetation: boolean; score: number };
+// A light standard: a compact head 4 to 13 m up over open ground, with almost nothing under it but the thin pole.
+export type LightPole = { at: Point; heightM: number; headReturns: number; headSpanM: number };
+// A hydrant: a small, isolated object 0.4 to 1.2 m tall over open ground, near a road or drive.
+// `roadM` is the distance to the nearest road centreline or paved edge.
+export type Hydrant = { at: Point; heightM: number; returns: number; roadM: number };
+export type Detection = {
+  poles: Pole[];
+  conductors: Span[];
+  drop: (Span & { pole: Pole; wall: Point; roofM: number | null }) | null;
+  padMounts: PadMount[];
+  lightPoles: LightPole[];
+  hydrants: Hydrant[];
+};
 
 // High noise (18) is kept, because 3DEP projects often put wire returns there, but it is read only as wire evidence.
 const NOT_ABOVE_GROUND = new Set([2, 6, 7, 9]);
@@ -162,8 +178,19 @@ const median = (values: number[]) => {
   return sorted[Math.floor(sorted.length / 2)];
 };
 
-export function detectEquipment(points: LidarPoint[], buildings: Point[][], roads: Road[]): Detection {
-  if (points.length === 0) return { poles: [], conductors: [], drop: null, padMounts: [] };
+const insideRing = (p: Point, ring: Point[]) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]!, b = ring[j]!;
+    if (a[1] > p[1] !== b[1] > p[1] && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+};
+
+// `paved` holds the outer rings of paved parking and drives, in the same frame, when known. A box well inside one is
+// a parked car, not equipment.
+export function detectEquipment(points: LidarPoint[], buildings: Point[][], roads: Road[], paved: Point[][] = []): Detection {
+  if (points.length === 0) return { poles: [], conductors: [], drop: null, padMounts: [], lightPoles: [], hydrants: [] };
   const ground = groundModel(points);
   const roadLines = roads.map((road) => road.line);
   const streets = roads.filter((road) => road.street !== false);
@@ -402,18 +429,20 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
     }
   }
 
-  // Equipment boxes: solid, flat-topped, and filled out to a rectangle, with nothing overhanging, away from walls
-  // and roads. Low and medium vegetation classes are allowed, since 3DEP gives them to transformers and
-  // generators; tall vegetation isn't.
+  // Equipment boxes: a flat-topped block 0.8 to 2.5 m tall and 0.8 to 3.2 m across, filled out to a rectangle, with
+  // nothing overhanging, not tall vegetation, mostly single returns, off the street, and not a parked car. 3DEP labels
+  // most cabinets as low or medium vegetation, so the class doesn't reject a box. A car is the common look-alike: its roof is a flat block of the same height, so a box whose whole low
+  // footprint is car-sized, or that sits well inside a paved lot, is dropped.
   const size = 0.5;
   const cellOf = (x: number, y: number) => Grid.key(Math.floor(x / size), Math.floor(y / size));
   const overhang = new Set<number>();
-  const low = new Map<number, { i: number; j: number; tops: number; single: number; count: number; vegetation: number }>();
+  type Cell = { i: number; j: number; tops: number; single: number; count: number; vegetation: number };
+  const low = new Map<number, Cell>();
   kept.forEach((p, index) => {
     if (noise[index]) return;
     const h = hs[index]!;
     if (h > 2.8) overhang.add(cellOf(p.x, p.y));
-    if (h < 0.6 || h > 2.6 || p.classification === 5) return;
+    if (h < 0.4 || h > 2.6 || p.classification === 5) return;
     const key = cellOf(p.x, p.y);
     const cell = low.get(key) ?? { i: Math.floor(p.x / size), j: Math.floor(p.y / size), tops: 0, single: 0, count: 0, vegetation: 0 };
     cell.tops = Math.max(cell.tops, h);
@@ -422,42 +451,142 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
     if ((p.returns ?? 1) === 1) cell.single++;
     low.set(key, cell);
   });
-  const seen = new Set<number>();
-  const padMounts: PadMount[] = [];
-  for (const [key, start] of low) {
-    if (seen.has(key)) continue;
+  // `joins` sees the group's mean top so far, so a block doesn't creep into a taller fence one step at a time.
+  const flood = (start: Cell, joins: (meanTop: number, to: Cell) => boolean, seen: Set<number>) => {
     const group = [start];
-    seen.add(key);
+    let sum = start.tops;
+    seen.add(Grid.key(start.i, start.j));
     for (let k = 0; k < group.length; k++) {
       for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
         const next = Grid.key(group[k]!.i + di, group[k]!.j + dj);
         const cell = low.get(next);
-        // Only cells at about the same height join, so a cabinet stands apart from a taller generator or fence.
-        if (cell && !seen.has(next) && Math.abs(cell.tops - group[k]!.tops) <= 0.35) { seen.add(next); group.push(cell); }
+        if (cell && !seen.has(next) && joins(sum / group.length, cell)) { seen.add(next); group.push(cell); sum += cell.tops; }
       }
     }
-    if (group.length < 4) continue;
+    return group;
+  };
+  // The extent of a group along its own long axis, so a car parked at an angle still measures 4.5 by 1.8 m.
+  const extent = (group: Cell[]) => {
+    const cx = group.reduce((s, c) => s + c.i, 0) / group.length, cy = group.reduce((s, c) => s + c.j, 0) / group.length;
+    let sxx = 0, syy = 0, sxy = 0;
+    for (const c of group) { sxx += (c.i - cx) ** 2; syy += (c.j - cy) ** 2; sxy += (c.i - cx) * (c.j - cy); }
+    const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+    const u: Point = [Math.cos(angle), Math.sin(angle)];
+    const a = group.map((c) => (c.i - cx) * u[0] + (c.j - cy) * u[1]), b = group.map((c) => -(c.i - cx) * u[1] + (c.j - cy) * u[0]);
+    return { long: (Math.max(...a) - Math.min(...a) + 1) * size, short: (Math.max(...b) - Math.min(...b) + 1) * size };
+  };
+  // Every low object, joined at any height, to measure its full footprint.
+  const objectOf = new Map<number, { long: number; short: number }>();
+  const anySeen = new Set<number>();
+  for (const cell of low.values()) {
+    if (anySeen.has(Grid.key(cell.i, cell.j))) continue;
+    const object = flood(cell, () => true, anySeen);
+    const shape = extent(object);
+    for (const member of object) objectOf.set(Grid.key(member.i, member.j), shape);
+  }
+  const carSized = (shape: { long: number; short: number }) => shape.long >= 3.4 && shape.long <= 5.8 && shape.short >= 1.4 && shape.short <= 2.3;
+  const deepInPaved = (p: Point) => paved.some((ring) => insideRing(p, ring) && nearestOnLines(p, [ring]).distance >= 1.5);
+  const seen = new Set<number>();
+  const padMounts: PadMount[] = [];
+  for (const [key, start] of low) {
+    if (seen.has(key)) continue;
+    // Only cells near the group's mean height join, so a cabinet stands apart from a taller generator or fence.
+    const group = flood(start, (meanTop, to) => Math.abs(to.tops - meanTop) <= 0.35, seen);
+    if (group.length < 3) continue;
     const is = group.map((cell) => cell.i), js = group.map((cell) => cell.j);
     const widthM = (Math.max(...is) - Math.min(...is) + 1) * size;
     const depthM = (Math.max(...js) - Math.min(...js) + 1) * size;
-    if (widthM < 1 || depthM < 1 || widthM > 3 || depthM > 3) continue;
+    if (Math.min(widthM, depthM) < 0.8 || Math.max(widthM, depthM) > 3.2) continue;
     const tops = group.map((cell) => cell.tops).sort((a, b) => a - b);
     const heightM = tops[Math.floor(tops.length / 2)]!;
     const mean = tops.reduce((sum, t) => sum + t, 0) / tops.length;
     const spread = Math.sqrt(tops.reduce((sum, t) => sum + (t - mean) ** 2, 0) / tops.length);
-    if (heightM < 0.9 || heightM > 2.4 || spread > 0.15) continue;
+    if (heightM < 0.8 || heightM > 2.5 || spread > 0.3) continue;
     const fill = group.length / ((Math.max(...is) - Math.min(...is) + 1) * (Math.max(...js) - Math.min(...js) + 1));
-    if (fill < 0.6) continue;
+    if (fill < 0.5) continue;
     const returns = group.reduce((sum, cell) => sum + cell.count, 0);
     const single = group.reduce((sum, cell) => sum + cell.single, 0) / returns;
-    if (single < 0.7) continue;
+    // A bush lets pulses through to the ground, so most of its returns are one of several; a cabinet's edges beside a
+    // fence give some multiple returns too, so the bar is half.
+    if (single < 0.5) continue;
     const labelledVegetation = group.reduce((sum, cell) => sum + cell.vegetation, 0) / returns > 0.5;
     if (group.some((cell) => { for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) if (overhang.has(Grid.key(cell.i + di, cell.j + dj))) return true; return false; })) continue;
+    if (group.some((cell) => carSized(objectOf.get(Grid.key(cell.i, cell.j))!))) continue;
     const middle: Point = [((Math.min(...is) + Math.max(...is) + 1) / 2) * size, ((Math.min(...js) + Math.max(...js) + 1) / 2) * size];
+    if (deepInPaved(middle) || buildings.some((ring) => insideRing(middle, ring))) continue;
     const wall = buildings.length ? nearestOnLines(middle, buildings).distance : Infinity;
-    if (wall < 2 || wall > 40) continue;
-    if (roadLines.length && nearestOnLines(middle, roadLines).distance < 5) continue;
-    padMounts.push({ at: middle, widthM, depthM, heightM, wallM: wall, fill, singleReturns: single, topSpreadM: spread, labelledVegetation });
+    if (wall < 1 || wall > 40) continue;
+    if (streetLines.length && nearestOnLines(middle, streetLines).distance < 4) continue;
+    // Higher for a flatter, fuller, single-return block close to the building it feeds, and for one near 1.5 m tall,
+    // the middle of the usual height of a three-phase pad-mounted cabinet.
+    const score = fill + (1 - spread / 0.3) + single + Math.max(0, 1 - wall / 40) + Math.max(0, 1 - Math.abs(heightM - 1.5) / 0.7);
+    padMounts.push({ at: middle, widthM, depthM, heightM, wallM: wall, fill, singleReturns: single, topSpreadM: spread, labelledVegetation, score });
   }
-  return { poles, conductors, drop, padMounts: padMounts.sort((a, b) => a.wallM - b.wallM).slice(0, 5) };
+
+  // Open ground: ground returns, for tests that need clear pavement or lawn around an object.
+  const grounds = points.filter((p) => p.classification === 2);
+  const groundGrid = new Grid(Float64Array.from(grounds, (p) => p.x), Float64Array.from(grounds, (p) => p.y));
+  const open = (p: Point, radius: number) => groundGrid.near(p[0], p[1], radius).length;
+  // Ground returns expected per square metre here, so the open-ground tests scale with the collection's density.
+  // The median over the occupied 1 m cells, so wooded and built-over parts of the read don't dilute it.
+  const groundCells = new Map<number, number>();
+  for (const p of grounds) { const key = Grid.key(Math.floor(p.x), Math.floor(p.y)); groundCells.set(key, (groundCells.get(key) ?? 0) + 1); }
+  const groundDensity = median([...groundCells.values()]) ?? 0;
+  const nearWall = (p: Point, d: number) => buildings.length > 0 && nearestOnLines(p, buildings).distance < d;
+
+  // Light standards: the head is the highest return within 2.5 m, 4 to 13 m up, no wider than a lamp on its arm;
+  // what lies under it, from 2.5 m up (above a parked van), is a thin column (a pole) or nothing, where a crown fills
+  // its depth and width; little stands from 2.5 m up to just over the head from 1.5 to 4 m around it (cars and people
+  // are lower, and wires overhead are higher); and open ground is below.
+  // A utility pole's top is reported as a pole. A flagpole passes too, so every result is a candidate.
+  const lightPoles: LightPole[] = [];
+  const extentOf = (indices: number[]) => {
+    if (indices.length < 2) return 0;
+    const ex = indices.map((j) => xs[j]!), ey = indices.map((j) => ys[j]!);
+    return Math.max(Math.max(...ex) - Math.min(...ex), Math.max(...ey) - Math.min(...ey));
+  };
+  for (let i = 0; i < kept.length; i++) {
+    const top = hs[i]!;
+    if (noise[i] || top < 4 || top > 13) continue;
+    const p = at(i);
+    if (nearWall(p, 1.5) || byBuilding(p) || buildings.some((ring) => insideRing(p, ring))) continue;
+    if (within(p, 2.5, (h) => h > top + 1e-6).length) continue;
+    const head = within(p, 1.5, (h) => h >= top - 1.5);
+    if (head.length < 3) continue;
+    const headSpanM = extentOf(head);
+    if (headSpanM > 2.5) continue;
+    if (extentOf(within(p, 1.5, (h) => h >= 2.5 && h < top - 1.5)) > 1) continue;
+    if (within(p, 4, (h, j) => h >= 2.5 && h <= top + 1 && distance(at(j), p) > 1.5).length > 4) continue;
+    if (open(p, 2) < 0.4 * groundDensity * Math.PI * 4) continue;
+    const centre: Point = [median(head.map((j) => xs[j]!))!, median(head.map((j) => ys[j]!))!];
+    if (poles.some((pole) => distance(pole.at, centre) < 3) || lightPoles.some((light) => distance(light.at, centre) < 4)) continue;
+    lightPoles.push({ at: centre, heightM: top, headReturns: head.length, headSpanM });
+  }
+
+  // Hydrant candidates: the top of a return group 0.5 to 1.1 m up (a hydrant's bonnet is about 0.6 to 0.9 m up; at
+  // 3DEP density it often gives a single return), at most one other return above 0.25 m from 0.5 to 1.5 m around, nothing above 1.3 m within 1.5 m (a sign or
+  // light on its post, or a branch overhead), open ground around, off and outside the buildings, and within 12 m of
+  // a road or drive or 4 m of a paved lot's edge. Posts, bollards, small shrubs, and stray returns pass too, so these are weak candidates.
+  const hydrants: Hydrant[] = [];
+  const insideBuilding = (p: Point) => buildings.some((ring) => insideRing(p, ring));
+  for (let i = 0; i < kept.length; i++) {
+    const h0 = hs[i]!;
+    if (noise[i] || h0 < 0.5 || h0 > 1.1) continue;
+    const p = at(i);
+    const body = within(p, 0.35, (h) => h >= 0.3 && h <= 1.2);
+    if (body.some((j) => hs[j]! > h0)) continue;
+    if (within(p, 1.5, (h, j) => h > 0.25 && distance(at(j), p) > 0.5).length > 1) continue;
+    if (within(p, 1.5, (h) => h > 1.3).length) continue;
+    if (nearWall(p, 1.5) || byBuilding(p) || insideBuilding(p)) continue;
+    // Beside a street or drive centreline, or at the edge of a paved lot.
+    const road = roadLines.length ? nearestOnLines(p, roadLines).distance : Infinity;
+    const edge = paved.length ? nearestOnLines(p, paved).distance : Infinity;
+    if (road > 12 && edge > 4) continue;
+    if (open(p, 1.5) < 0.5 * groundDensity * Math.PI * 2.25) continue;
+    const centre: Point = [median(body.map((j) => xs[j]!))!, median(body.map((j) => ys[j]!))!];
+    if (hydrants.some((other) => distance(other.at, centre) < 3)) continue;
+    hydrants.push({ at: centre, heightM: h0, returns: body.length, roadM: Math.min(road, edge) });
+  }
+
+  return { poles, conductors, drop, padMounts: padMounts.sort((a, b) => b.score - a.score).slice(0, 5), lightPoles, hydrants };
 }

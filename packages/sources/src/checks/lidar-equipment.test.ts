@@ -83,7 +83,7 @@ describe("finding grid equipment in lidar by shape", () => {
   });
 
   it("finds nothing in an empty cloud", () => {
-    expect(detectEquipment([], [building], [road])).toEqual({ poles: [], conductors: [], drop: null, padMounts: [] });
+    expect(detectEquipment([], [building], [road])).toEqual({ poles: [], conductors: [], drop: null, padMounts: [], lightPoles: [], hydrants: [] });
   });
 
   it("reports the pole in the crown as inferred and the poles in the open as measured", () => {
@@ -236,5 +236,56 @@ describe("equipment boxes by shape", () => {
     expect(cabinet).toMatchObject({ labelledVegetation: true });
     expect(cabinet!.heightM).toBeCloseTo(1.4, 1);
     expect(found.padMounts.some((pad) => pad.at[0] > 139)).toBe(false);
+  });
+
+  it("keeps a cabinet apart from the taller fence around it, and drops a parked car and a box well inside a paved lot", () => {
+    const lot: [number, number][] = [[150, 5], [195, 5], [195, 28], [150, 28], [150, 5]];
+    const found = detectEquipment(
+      scene((add) => {
+        // A 2 x 2 m cabinet 1.6 m tall with a few multiple returns at its edge, inside a 2.4 m fence 0.5 m out.
+        for (let x = 120; x <= 122; x += 0.25) for (let y = 40; y <= 42; y += 0.25) add(x, y, 1.5 + ((x * 4 + y) % 3) * 0.05, 3, x === 122 ? 2 : 1);
+        for (let x = 119; x <= 123; x += 0.25) { add(x, 39.5, 2.4, 4); add(x, 42.5, 2.4, 4); }
+        for (let y = 39.5; y <= 42.5; y += 0.25) { add(119.5, y, 2.4, 4); add(122.5, y, 2.4, 4); }
+        // A parked car on open ground: a 1.4 m roof over a 1.0 m hood and trunk, 4.6 by 1.8 m.
+        for (let x = 140; x <= 144.6; x += 0.25) for (let y = 40; y <= 41.8; y += 0.25) add(x, y, x > 141.2 && x < 143.4 ? 1.4 : 1.0);
+        // A 1.5 m box in the middle of a paved lot.
+        for (let x = 170; x <= 171.5; x += 0.25) for (let y = 15; y <= 16.5; y += 0.25) add(x, y, 1.5);
+      }),
+      [building],
+      [road],
+      [lot],
+    );
+    expect(found.padMounts.map((pad) => rounded(pad.at))).toEqual([[121, 41]]);
+    expect(found.padMounts[0]!.heightM).toBeCloseTo(1.6, 0);
+  });
+});
+
+describe("light poles and hydrants by shape", () => {
+  // A lamp head: a small cluster at the top of a thin pole.
+  const light = (add: Add, x: number, y: number, top: number) => {
+    for (let h = 0.5; h < top - 0.5; h += 1.5) add(x, y, h, 1, 1);
+    for (let dx = -0.3; dx <= 0.9; dx += 0.3) for (let dy = -0.2; dy <= 0.2; dy += 0.2) add(x + dx, y + dy, top - 0.1, 1, 1);
+  };
+  const found = detectEquipment(
+    scene((add) => {
+      light(add, 130, 20, 9);
+      light(add, 160, 25, 5);
+      crown(add, 180, 20, 8, 3); // a small tree: a crown fills its depth
+      add(140, 3, 0.85, 3, 1); // a hydrant at the curb: a single return 0.85 m up
+      add(170, 3, 0.85, 3, 1); for (let a = 0; a < 6; a++) add(170 + Math.cos(a), 3 + Math.sin(a), 0.6, 3, 2); // a shrub's twig
+      add(190, 3, 0.8, 1, 1); add(190.2, 3, 2.2, 1, 1); // a sign post
+    }),
+    [building],
+    [road],
+  );
+
+  it("finds lamp heads on thin poles over open ground, and not a small tree", () => {
+    expect(found.lightPoles.map((p) => rounded(p.at)).sort((a, b) => a[0]! - b[0]!)).toEqual([[130, 20], [160, 25]]);
+    expect(found.lightPoles.map((p) => Math.round(p.heightM)).sort()).toEqual([5, 9]);
+  });
+
+  it("marks a lone low object at the curb as a possible hydrant, and not a shrub or a sign post", () => {
+    expect(found.hydrants.map((p) => rounded(p.at))).toEqual([[140, 3]]);
+    expect(found.hydrants[0]!.roadM).toBeCloseTo(3, 0);
   });
 });

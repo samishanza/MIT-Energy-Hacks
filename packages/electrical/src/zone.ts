@@ -26,6 +26,8 @@ const DELIVERY_FT = 20;
 export const RECOMMENDED_REACH_FT = 60;
 // How far from the building to look for the utility supply that sets the likely service wall.
 const SUPPLY_SEARCH_FT = 400;
+// A ground transformer usually stands within about 50 ft of the wall its service enters.
+const TRANSFORMER_SEARCH_FT = 50;
 const CELL = 2;
 const FEET_PER_DEGREE = (6371008.8 * Math.PI * 3.280839895) / 180;
 const EXPOSURE_FT = 10;
@@ -102,7 +104,7 @@ export type BessZone = {
   // Spots about as good as the best pad, around it: where the battery would realistically go.
   recommended: MapFeature | null;
   pad: BessPad | null;
-  target: "main switchboard" | "service entrance" | "building wall" | "building wall nearest the utility transformer" | "building wall nearest the utility supply";
+  target: "main switchboard" | "service entrance" | "building wall" | "building wall nearest the utility transformer" | "building wall nearest the likeliest transformer" | "building wall nearest the utility supply";
   // When nothing qualifies, the rule that removed the last cells.
   reason: string | null;
 };
@@ -282,31 +284,37 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
   const lots = parcels.map(turnRings);
   const houses = buildings.map(turnRings);
   let entrancePoint = entrance && entrance.geometry.type === "Point" ? turn(entrance.geometry.coordinates as Point) : null;
-  // Without a known entrance, the service most likely enters on the wall nearest the utility supply:
-  // the closest pole or overhead line. That wall point stands in for the entrance, marked as assumed.
-  // Next best: the utility transformer that feeds the building, placed from a photo or a drawing, or a
-  // pad-mount a drawing shows. The service runs from it, so the wall nearest it is the likely entrance.
+  // Without a known entrance, the transformer that feeds the building shows where the service most likely
+  // enters: the wall nearest it. First one placed from a photo or drawn on a plan set, then the ground box the
+  // lidar ranked likeliest. That wall point stands in for the entrance, marked as assumed.
+  const nearestWall = (p: Point, limit: number): Point | null => {
+    let best: Point | null = null, gap = Infinity;
+    for (const polygon of houses) {
+      const q = nearestOnRing(p, polygon[0]!);
+      const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (d < gap && d <= limit) { gap = d; best = q; }
+    }
+    return best;
+  };
   if (!entrancePoint) {
-    const transformer = record.features.find(
+    const known = record.features.find(
       (f) =>
         f.geometry.type === "Point" &&
         ((f.kind === "capture_pin" && f.field === "utility_transformer_location") ||
           (f.kind === "existing_equipment" && f.attributes?.equipment_type?.type === "text" && f.attributes.equipment_type.value === "pad_mount_transformer")),
     );
-    if (transformer) {
-      const at = turn(transformer.geometry.coordinates as Point);
-      let gap = Infinity;
-      for (const polygon of houses) {
-        const q = nearestOnRing(at, polygon[0]!);
-        const d = Math.hypot(q[0] - at[0], q[1] - at[1]);
-        if (d < gap && d <= SUPPLY_SEARCH_FT) {
-          gap = d;
-          entrancePoint = q;
-        }
-      }
-      if (entrancePoint) target = "building wall nearest the utility transformer";
-    }
+    const wall = known ? nearestWall(turn(known.geometry.coordinates as Point), SUPPLY_SEARCH_FT) : null;
+    if (wall) { entrancePoint = wall; target = "building wall nearest the utility transformer"; }
   }
+  if (!entrancePoint) {
+    const likeliest = record.features.find(
+      (f) => isPadMount(f) && f.geometry.type === "Point" && f.attributes?.candidate_rank?.type === "quantity" && f.attributes.candidate_rank.value === 1,
+    );
+    const wall = likeliest ? nearestWall(turn(likeliest.geometry.coordinates as Point), TRANSFORMER_SEARCH_FT) : null;
+    if (wall) { entrancePoint = wall; target = "building wall nearest the likeliest transformer"; }
+  }
+  // Otherwise the service most likely enters on the wall nearest the utility supply: the closest pole or overhead
+  // line. That wall point stands in for the entrance, marked as assumed.
   if (!entrancePoint) {
     const supply = record.features
       .filter((f) => isOverhead(f) || isSupplyPole(f))
@@ -583,7 +591,9 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
           basis: text("concept"),
           confidence_reason: text(
             `The part of the feasible zone within a ${PREFERRED_RUN_FT} ft routed run (about ${Math.round(PREFERRED_STRAIGHT_FT)} ft in a straight line) of the ${target}.` +
-              (target === "building wall nearest the utility supply"
+              (target === "building wall nearest the likeliest transformer"
+                ? " The service entrance isn't known, so it's assumed to be on the wall nearest the equipment box the lidar ranked likeliest to be the transformer; placing the switchboard moves this zone."
+                : target === "building wall nearest the utility supply"
                 ? " The service entrance isn't known, so it's assumed to be on the wall nearest the utility pole or overhead line; placing the entrance moves this zone."
                 : ""),
           ),
