@@ -130,6 +130,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
     .filter((e) => inside(e.at, view, 20));
   const wetlands = record.features.filter((f) => f.kind === 'constraint' && f.field === 'wetlands_nearby' && f.geometry.type !== 'Point');
+  const paved = record.features.filter((f) => f.kind === 'constraint' && f.field === 'paved_area_sqft' && f.geometry.type !== 'Point');
   const isFeasible = (f: MapFeature) => (attributeText(f, 'zone_kind') ?? '').startsWith('FEASIBLE_BESS');
   const zoneKind = (f: MapFeature) => attributeText(f, 'zone_kind') ?? '';
   // The preferred zone is hatched; the wider feasible area, with longer runs, is a dashed outline.
@@ -178,6 +179,11 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     if (!at) continue;
     callouts.push({ anchor: at, lines: [`(E) WETLAND: ${(attributeText(w, 'wetland_type') ?? '').toUpperCase()}`.replace(/: $/, '')], color: WATER });
   }
+  for (const p of paved) {
+    const pts = polygonsOfFeature(p, frame).flatMap((poly) => poly.outer.map(toSheet));
+    const at = firstInside(pts, view, 0.6);
+    if (at) callouts.push({ anchor: at, lines: ['(E) PAVED PARKING AND DRIVES'] });
+  }
   for (const o of open) {
     const pts = polygonsOfFeature(o, frame).flatMap((p) => p.outer.map(toSheet));
     if (pts.length) callouts.push({ anchor: centroid(pts), lines: ['OPEN GROUND'] });
@@ -212,6 +218,8 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   for (const c of concept) {
     callouts.push({ anchor: c.at, lines: [plainLabel(c.f.label).toUpperCase()], color: NEW });
   }
+  // Where symbols are drawn, so dimension text stays off them.
+  const symbolPoints = [...equipment.map((e) => e.at), ...concept.map((c) => c.at), ...substations.map((s) => s.at)];
   for (const t of trenches) {
     const at = firstInside(linesOf(t).flatMap(sheetLine), view, 0.5);
     if (at) callouts.push({ anchor: at, lines: ['(N) TRENCH ROUTE'], color: NEW });
@@ -325,6 +333,10 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
               <image key={t.key} href={t.href} x={t.x} y={t.y} width={t.w} height={t.h} preserveAspectRatio="none" />
             ))}
           </g>
+
+          {paved.flatMap((p) => polygonsOfFeature(p, frame)).map((p, i) => (
+            <path key={`paved-${i}`} d={`${path(p.outer.map(toSheet))} ${(p.holes ?? []).map((h) => path(h.map(toSheet))).join(' ')}`} fillRule="evenodd" fill="#d9d9d6" stroke="#8c8c88" strokeWidth={1.5} opacity={0.85} />
+          ))}
 
           {open.flatMap((o) => polygonsOfFeature(o, frame)).map((p, i) => (
             <path key={`open-${i}`} d={path(p.outer.map(toSheet))} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" opacity={0.9} />
@@ -498,7 +510,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             if (!line || line.length < 2) return null;
             const a = toSheet(toLocal(frame, line[0]!));
             const b = toSheet(toLocal(frame, line.at(-1)!));
-            return <Dimension key={`dim-${i}`} a={a} b={b} text={dimensionText(d.label ?? '')} />;
+            return <Dimension key={`dim-${i}`} a={a} b={b} text={dimensionText(d.label ?? '')} avoid={symbolPoints} />;
           })}
 
           {fall !== null && slope ? <FallArrow at={{ x: view.x + view.w - 230, y: view.y + 150 }} degrees={fall} text={`${slope} AVG. FALL`} /> : null}
@@ -618,27 +630,46 @@ interface Callout {
 interface PlacedCallout extends Callout {
   box: { x: number; y: number; w: number; h: number };
   side: 'left' | 'right';
+  gutter: number;
 }
 
 const CALLOUT_FONT = 22;
 const LINE_H = 27;
 const textWidth = (s: string, size = CALLOUT_FONT) => s.length * size * 0.64;
 
-/** Stack callouts in two columns at the plan's edges, each on a leader to its feature. */
+/**
+ * Stack callouts in two columns at the plan's edges, each on a leader to its feature. Boxes never overlap: each
+ * column stacks down from its anchors, then pushes up from the bottom, and when a column can't hold every box the
+ * last-added ones, which matter least, are left off. Features off the plan get no callout.
+ */
 function placeCallouts(callouts: Callout[], v: typeof VIEW): PlacedCallout[] {
+  const GAP = 14;
   const mid = v.x + v.w / 2;
+  const top = v.y + 24, bottom = v.y + v.h - 20;
+  const shown = callouts.map((c, order) => ({ ...c, order })).filter((c) => inside(c.anchor, v, -4));
   const placed: PlacedCallout[] = [];
   for (const side of ['left', 'right'] as const) {
-    const column = callouts.filter((c) => (side === 'left' ? c.anchor.x < mid : c.anchor.x >= mid)).sort((a, b) => a.anchor.y - b.anchor.y);
-    let next = v.y + 30;
-    for (const c of column) {
-      const w = Math.max(...c.lines.map((l) => textWidth(l))) + 24;
-      const h = c.lines.length * LINE_H + 14;
-      const y = Math.min(Math.max(c.anchor.y - h / 2, next), v.y + v.h - h - 20);
-      const x = side === 'left' ? v.x + 24 : v.x + v.w - 24 - w;
-      placed.push({ ...c, box: { x, y, w, h }, side });
-      next = y + h + 16;
+    let column = shown.filter((c) => (side === 'left' ? c.anchor.x < mid : c.anchor.x >= mid));
+    const size = (c: Callout) => ({ w: Math.max(...c.lines.map((l) => textWidth(l))) + 24, h: c.lines.length * LINE_H + 14 });
+    while (column.length && column.reduce((sum, c) => sum + size(c).h + GAP, 0) > bottom - top) {
+      column = column.filter((c) => c.order !== Math.max(...column.map((d) => d.order)));
     }
+    column.sort((a, b) => a.anchor.y - b.anchor.y);
+    const ys: number[] = [];
+    column.forEach((c, i) => {
+      const h = size(c).h;
+      ys[i] = Math.max(c.anchor.y - h / 2, i === 0 ? top : ys[i - 1]! + size(column[i - 1]!).h + GAP);
+    });
+    for (let i = column.length - 1; i >= 0; i--) {
+      const limit = i === column.length - 1 ? bottom : ys[i + 1]! - GAP;
+      ys[i] = Math.min(ys[i]!, limit - size(column[i]!).h);
+    }
+    const boxes = column.map((c, i) => {
+      const { w, h } = size(c);
+      return { c, box: { x: side === 'left' ? v.x + 24 : v.x + v.w - 24 - w, y: ys[i]!, w, h } };
+    });
+    const gutter = side === 'left' ? Math.max(...boxes.map((b) => b.box.x + b.box.w)) + 26 : Math.min(...boxes.map((b) => b.box.x)) - 26;
+    for (const { c, box } of boxes) placed.push({ anchor: c.anchor, lines: c.lines, color: c.color, box, side, gutter });
   }
   return placed;
 }
@@ -646,10 +677,11 @@ function placeCallouts(callouts: Callout[], v: typeof VIEW): PlacedCallout[] {
 function CalloutBox({ callout }: { callout: PlacedCallout }) {
   const { box, side, anchor, lines, color = INK } = callout;
   const from = { x: side === 'left' ? box.x + box.w : box.x, y: box.y + box.h / 2 };
+  // Out to the column's gutter first, clear of every box in the column, then to the feature.
   return (
     <g>
       <polyline
-        points={`${from.x},${from.y} ${from.x + (side === 'left' ? 30 : -30)},${from.y} ${anchor.x},${anchor.y}`}
+        points={`${from.x},${from.y} ${callout.gutter},${from.y} ${anchor.x},${anchor.y}`}
         fill="none"
         stroke={color}
         strokeWidth={2}
@@ -706,7 +738,9 @@ function OffSheetTable({ x, y, w, view, references }: { x: number; y: number; w:
 
 // ------------------------------------------------------------------ drafting parts
 
-function Dimension({ a, b, text }: { a: Pt; b: Pt; text: string }) {
+// The label sits at the middle of the line, or slides along it to clear the drawn equipment; with no clear spot,
+// the line is drawn without its text rather than over a symbol.
+function Dimension({ a, b, text, avoid = [] }: { a: Pt; b: Pt; text: string; avoid?: Pt[] }) {
   const ang = Math.atan2(b.y - a.y, b.x - a.x);
   const deg = (ang * 180) / Math.PI;
   const upright = deg > 90 || deg < -90 ? deg + 180 : deg;
@@ -714,15 +748,17 @@ function Dimension({ a, b, text }: { a: Pt; b: Pt; text: string }) {
     const t = ang + Math.PI / 4;
     return <line x1={p.x - Math.cos(t) * 16} y1={p.y - Math.sin(t) * 16} x2={p.x + Math.cos(t) * 16} y2={p.y + Math.sin(t) * 16} stroke={INK} strokeWidth={3} />;
   };
-  const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const half = (text.length * 24 * 0.62) / 2 + 30;
+  const clear = (p: Pt) => avoid.every((q) => Math.hypot(q.x - p.x, q.y - p.y) > half);
+  const m = [0.5, 0.35, 0.65, 0.2, 0.8].map((t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })).find(clear);
   return (
     <g>
       <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={INK} strokeWidth={1.6} />
       {tick(a)}
       {tick(b)}
-      <text x={m.x} y={m.y} dy={-10} fontSize={24} fontWeight={700} textAnchor="middle" fill={INK} stroke="#fff" strokeWidth={7} paintOrder="stroke" transform={`rotate(${upright} ${m.x} ${m.y})`}>
+      {m ? <text x={m.x} y={m.y} dy={-10} fontSize={24} fontWeight={700} textAnchor="middle" fill={INK} stroke="#fff" strokeWidth={7} paintOrder="stroke" transform={`rotate(${upright} ${m.x} ${m.y})`}>
         {text}
-      </text>
+      </text> : null}
     </g>
   );
 }
@@ -1005,6 +1041,7 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
     ...(inMassachusetts
       ? [{ label: "100' WETLAND BUFFER ZONE (310 CMR 10.02)", symbol: (sx: number, sy: number) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={WATER} strokeWidth={2.5} strokeDasharray="28 14" /> }]
       : []),
+    { label: '(E) PAVED PARKING AND DRIVES (MAPPED)', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="#d9d9d6" stroke="#8c8c88" strokeWidth={1.5} /> },
     { label: 'OPEN GROUND', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" /> },
     {
       label: 'DIMENSION',

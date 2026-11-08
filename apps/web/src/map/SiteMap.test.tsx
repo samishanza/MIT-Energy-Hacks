@@ -214,7 +214,7 @@ describe("site map", () => {
 
   it("says which kinds this run didn't collect", () => {
     setup({ record: worcesterRecord() });
-    expect(screen.getByText(/Not collected for this site: roads, substations, eligibility zones\./)).toBeTruthy();
+    expect(screen.getByText(/Not collected for this site: roads, substations, paved parking and drives, eligibility zones\./)).toBeTruthy();
   });
 
   it("toggles a layer off and back on from the legend", () => {

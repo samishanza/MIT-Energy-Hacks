@@ -20,6 +20,7 @@ export type LayerKey =
   | "substations"
   | "fire_stations"
   | "wetlands"
+  | "paved"
   | "constraints"
   | "roads"
   | "feasible"
@@ -42,6 +43,7 @@ export const LAYERS: { key: LayerKey; label: string }[] = [
   { key: "substations", label: "Substations" },
   { key: "fire_stations", label: "Fire stations" },
   { key: "wetlands", label: "Wetlands" },
+  { key: "paved", label: "Paved parking and drives" },
   { key: "constraints", label: "Other mapped constraints" },
   { key: "roads", label: "Roads" },
 ];
@@ -94,6 +96,7 @@ export function layerOf(feature: MapFeature): LayerKey {
     case "constraint":
       if (/fire_station/.test(feature.field)) return "fire_stations";
       if (/wetland/.test(feature.field)) return "wetlands";
+      if (/paved/.test(feature.field)) return "paved";
       return "constraints";
   }
 }
@@ -238,6 +241,20 @@ export const FEATURE_LAYERS = [
     source: FEATURE_SOURCE,
     filter: onLayer("roads"),
     paint: { "line-color": ["case", selected, SELECTION_COLOR, "#ffffff"], "line-width": 2, "line-opacity": 0.9, "line-dasharray": [6, 1.5, 1.5, 1.5] },
+  },
+  {
+    id: "paved-fill",
+    type: "fill",
+    source: FEATURE_SOURCE,
+    filter: onLayer("paved"),
+    paint: { "fill-color": ["case", selected, SELECTION_COLOR, "#6b6b6b"], "fill-opacity": 0.35 },
+  },
+  {
+    id: "paved-outline",
+    type: "line",
+    source: FEATURE_SOURCE,
+    filter: onLayer("paved"),
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#3d3d3d"], "line-width": 1.2 },
   },
   {
     id: "constraint-fill",

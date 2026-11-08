@@ -52,6 +52,7 @@ const MAY_BE_UNCOLLECTED: { keys: LayerKey[]; words: string }[] = [
   { keys: ["substations"], words: "substations" },
   { keys: ["fire_stations"], words: "fire stations" },
   { keys: ["wetlands"], words: "wetlands" },
+  { keys: ["paved"], words: "paved parking and drives" },
   { keys: ZONE_TIERS.map((tier) => `zone_${tier}` as const), words: "eligibility zones" },
 ];
 
