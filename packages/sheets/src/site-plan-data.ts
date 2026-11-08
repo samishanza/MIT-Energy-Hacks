@@ -174,6 +174,8 @@ export function siteDataRows(record: RecordVersion): DataRow[] {
     row(record, 'FLOOR AREA (ASSESSOR)', 'building_area_sqft'),
     row(record, 'STORIES / EST. HEIGHT', 'building_stories'),
     row(record, 'YEAR BUILT', 'year_built'),
+    row(record, 'PAVED PARKING AND DRIVES', 'paved_area_sqft'),
+    row(record, 'PARKING STALLS (IMAGERY)', 'parking_stall_count'),
     row(record, 'LAND COVER', 'land_cover'),
     row(record, 'GROUND ELEVATION', 'ground_elevation_ft'),
     row(record, 'AVG. SLOPE ACROSS PARCEL', 'site_slope_pct'),

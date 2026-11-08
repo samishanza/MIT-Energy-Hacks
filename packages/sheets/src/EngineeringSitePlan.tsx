@@ -131,6 +131,8 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     .filter((e) => inside(e.at, view, 20));
   const wetlands = record.features.filter((f) => f.kind === 'constraint' && f.field === 'wetlands_nearby' && f.geometry.type !== 'Point');
   const paved = record.features.filter((f) => f.kind === 'constraint' && f.field === 'paved_area_sqft' && f.geometry.type !== 'Point');
+  const stallRows = record.features.filter((f) => f.field === 'parking_stalls' && f.geometry.type === 'Polygon');
+  const stripes = record.features.filter((f) => f.field === 'parking_stalls' && f.geometry.type === 'MultiLineString');
   const isFeasible = (f: MapFeature) => (attributeText(f, 'zone_kind') ?? '').startsWith('FEASIBLE_BESS');
   const zoneKind = (f: MapFeature) => attributeText(f, 'zone_kind') ?? '';
   // The preferred zone is hatched; the wider feasible area, with longer runs, is a dashed outline.
@@ -183,6 +185,14 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     const pts = polygonsOfFeature(p, frame).flatMap((poly) => poly.outer.map(toSheet));
     const at = firstInside(pts, view, 0.6);
     if (at) callouts.push({ anchor: at, lines: ['(E) PAVED PARKING AND DRIVES'] });
+  }
+  // One callout for the striping, on the longest row, as a drawing marks a typical condition.
+  const longestRow = [...stallRows].sort((a, b) => Number((b.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0) - Number((a.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0))[0];
+  if (longestRow) {
+    const pts = polygonsOfFeature(longestRow, frame).flatMap((poly) => poly.outer.map(toSheet));
+    const at = pts.length ? centroid(pts) : null;
+    const total = stallRows.reduce((sum, f) => sum + Number((f.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0), 0);
+    if (at && inside(at, view, 20)) callouts.push({ anchor: at, lines: ['(E) STRIPED PARKING, TYP.', `${total} STALLS SEEN IN IMAGERY`] });
   }
   for (const o of open) {
     const pts = polygonsOfFeature(o, frame).flatMap((p) => p.outer.map(toSheet));
@@ -336,6 +346,10 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
           {paved.flatMap((p) => polygonsOfFeature(p, frame)).map((p, i) => (
             <path key={`paved-${i}`} d={`${path(p.outer.map(toSheet))} ${(p.holes ?? []).map((h) => path(h.map(toSheet))).join(' ')}`} fillRule="evenodd" fill="#d9d9d6" stroke="#8c8c88" strokeWidth={1.5} opacity={0.85} />
+          ))}
+
+          {stripes.flatMap((f) => linesOf(f)).map((line, i) => (
+            <path key={`stripe-${i}`} d={path(sheetLine(line), false)} fill="none" stroke={INK} strokeWidth={1.4} />
           ))}
 
           {open.flatMap((o) => polygonsOfFeature(o, frame)).map((p, i) => (
@@ -1042,6 +1056,14 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
       ? [{ label: "100' WETLAND BUFFER ZONE (310 CMR 10.02)", symbol: (sx: number, sy: number) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={WATER} strokeWidth={2.5} strokeDasharray="28 14" /> }]
       : []),
     { label: '(E) PAVED PARKING AND DRIVES (MAPPED)', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="#d9d9d6" stroke="#8c8c88" strokeWidth={1.5} /> },
+    {
+      label: '(E) PARKING STRIPING (FROM IMAGERY)',
+      symbol: (sx, sy) => (
+        <g stroke={INK} strokeWidth={1.4}>
+          {[0, 1, 2, 3, 4].map((k) => <line key={k} x1={sx + 50 + k * 20} y1={sy - 14} x2={sx + 50 + k * 20} y2={sy + 14} />)}
+        </g>
+      ),
+    },
     { label: 'OPEN GROUND', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" /> },
     {
       label: 'DIMENSION',
