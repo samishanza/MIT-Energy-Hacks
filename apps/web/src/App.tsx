@@ -6,6 +6,7 @@ import { SiteMap } from "./map/SiteMap";
 import { AttentionList } from "./panels/AttentionList";
 import { ElectricalSheet } from "./panels/ElectricalSheet";
 import { StreetViewPanel } from "./panels/StreetViewPanel";
+import { ReviewAgentPanel } from "./panels/ReviewAgentPanel";
 import { demoSpecsFor } from "./app/demoSpecs";
 import { EvidencePanel } from "./panels/EvidencePanel";
 import { FactsPanel } from "./panels/FactsPanel";
@@ -318,6 +319,9 @@ export function App({ api }: { api: EngineerApi }) {
             <div className="menus">
               <Menu label="Needs attention" count={attentionItems(record).length} alert={attentionItems(record).length > 0}>
                 {(close) => <AttentionList record={record} selectedFields={selected.fields} onSelect={pick(close)} />}
+              </Menu>
+              <Menu label="Review agent">
+                {() => <ReviewAgentPanel record={record} actorName={actorName} onActorName={updateActor} onRecord={(next) => void afterAction(next)} />}
               </Menu>
               <Menu label="Public facts" count={factsFound(record)}>
                 {(close) => (
