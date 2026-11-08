@@ -2,8 +2,6 @@ import type { BaseMap, MapFeature, Site, Value } from "@eqore/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { plainLabel, workArea, workPoints } from "@eqore/sheets";
 import { equipmentSolids, equipmentTag, polePoints, solidsCollection } from "./equipment3d";
-import { gridPath } from "../app/gridPath";
-import { Google3DView } from "./Google3DView";
 import { declutter, priorityOf, type PlacedLabel } from "./declutter";
 import { symbolSvg } from "./symbols";
 import {
@@ -116,9 +114,6 @@ export function SiteMap(props: SiteMapProps) {
   const [aerialFailed, setAerialFailed] = useState(false);
   // The view is the electrical work: environmental layers start off and stay one click away.
   const [hidden, setHidden] = useState<Set<LayerKey>>(() => new Set<LayerKey>(["wetlands", "fire_stations", "constraints", "zone_unknown", "feasible_outer"]));
-  const [threeD, setThreeD] = useState(false);
-  // Google's 3D city when it loads; our own 3D models on the aerial when it doesn't.
-  const [googleFailed, setGoogleFailed] = useState(false);
   // On a phone the legend would cover most of the map, so it starts closed there.
   const [legendOpen, setLegendOpen] = useState(() => window.innerWidth > 760);
   // A plan-set drawing aligned onto this site, when one was prepared (scripts/plan-overlay.py).
@@ -143,7 +138,6 @@ export function SiteMap(props: SiteMapProps) {
 
   const heights = useMemo(() => buildingHeights(features, values), [features, values]);
   const visible = useMemo(() => features.filter((feature) => !hidden.has(layerOf(feature))), [features, hidden]);
-  const trace = useMemo(() => gridPath({ features, values }), [features, values]);
   const isSelected = (feature: MapFeature) =>
     selectedFeatureId ? feature.id === selectedFeatureId : selectedFields.includes(feature.field);
 
@@ -163,8 +157,7 @@ export function SiteMap(props: SiteMapProps) {
     });
     instance.addControl(new ScaleControl({ unit: "imperial" }), "bottom-right");
     // Orbit like a model view: right-drag or Ctrl-drag turns and tilts, the compass returns to north.
-    // Top left, clear of the 3D view button at top right and the legend at bottom left.
-    instance.addControl(new NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), "top-left");
+    instance.addControl(new NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), "top-right");
     instance.on("load", () => {
       instance.addSource(FEATURE_SOURCE, { type: "geojson", data: toFeatureCollection([]), promoteId: "id" });
       for (const layer of FEATURE_LAYERS) instance.addLayer(layer);
@@ -416,28 +409,6 @@ export function SiteMap(props: SiteMapProps) {
           <p>Click the map to place this equipment. It's recorded as placed by hand.</p>
           <button type="button" onClick={onCancelPlace}>
             Cancel placing
-          </button>
-        </div>
-      ) : null}
-      <div className="map-tools">
-        <button type="button" aria-pressed={threeD} className={threeD ? "on" : ""} onClick={() => setThreeD((on) => !on)} disabled={googleFailed} title={googleFailed ? "Google's 3D map isn't enabled for this key" : undefined}>
-          3D view
-        </button>
-      </div>
-      {threeD && !googleFailed && site.location ? (
-        <div className="google-3d-frame">
-          <Google3DView
-            features={visible}
-            center={site.location}
-            trace={trace}
-            onSelect={(field, id) => onSelectRef.current(field, id)}
-            onFail={() => {
-              setGoogleFailed(true);
-              setThreeD(false);
-            }}
-          />
-          <button type="button" className="google-3d-exit" onClick={() => setThreeD(false)}>
-            Exit 3D
           </button>
         </div>
       ) : null}

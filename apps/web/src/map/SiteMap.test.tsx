@@ -257,17 +257,16 @@ describe("site map", () => {
     expect(drawn().map((f) => f.properties.id)).not.toContain("zone-remote");
   });
 
-  it("offers one 3D view control and no outbound links", () => {
+  it("has no 3D view button and no outbound links, for a clean screen", () => {
     setup({ record: worcesterRecord() });
     expect(screen.queryByRole("link", { name: /Google Earth|Street View/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "3D view" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "3D view" })).toBeNull();
   });
 
-  it("raises buildings and draws the equipment models on the aerial, and offers Google's 3D view", () => {
+  it("raises buildings and draws the equipment models on the aerial", () => {
     setup({ record: worcesterRecord() });
     expect(lastMap().layout["building-3d"]).toBe("visible");
     expect(lastMap().layout["equipment-3d"]).toBeUndefined();
-    expect(screen.getByRole("button", { name: "3D view" })).toBeTruthy();
   });
 
   it("offers a way out of placing", () => {
