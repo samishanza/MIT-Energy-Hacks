@@ -71,6 +71,21 @@ function withoutSuperseded(observations: Observation[]): Observation[] {
       }
     }
   });
+  // A later answer to the same question, from the same source and for the same field, replaces what the
+  // source read before: the latest run's readings are current, and older ones stay only as evidence.
+  // Only readings count as an answer, so a failure or an empty response never takes anything back.
+  const questionOf = (observation: Observation) => JSON.stringify([observation.source.id, observation.field, observation.identity.query]);
+  const latest = new Map<string, string>();
+  for (const observation of observations) {
+    if (observation.kind !== "reading" || observation.source.kind === "human_evidence") continue;
+    const question = questionOf(observation);
+    const at = latest.get(question);
+    if (!at || Date.parse(observation.retrievedAt) > Date.parse(at)) latest.set(question, observation.retrievedAt);
+  }
+  for (const observation of observations) {
+    if (observation.kind !== "reading" || observation.source.kind === "human_evidence") continue;
+    if (Date.parse(observation.retrievedAt) < Date.parse(latest.get(questionOf(observation))!)) superseded.add(observation);
+  }
   return superseded.size ? observations.filter((observation) => !superseded.has(observation)) : observations;
 }
 

@@ -71,3 +71,32 @@ describe("a source taking back its own reading", () => {
     expect(value).toMatchObject({ state: "inferred", current: { type: "text", value: "B-2" } });
   });
 });
+
+describe("a later run of a source", () => {
+  const territory = (id: string, utility: string, retrievedAt: string, query = "point -71.4,42.2"): Observation => ({
+    ...reading(id, "serving_utility", utility),
+    retrievedAt,
+    locator: { query, attribute: "NAME", objectId: utility },
+    identity: { sourceId: "source", query, contentHash: `${id}-${utility}` },
+  });
+  const firstRun = ["A", "B", "C"].map((utility) => territory(`run1-${utility}`, utility, "2026-11-07T10:00:00Z"));
+
+  it("replaces the earlier run's readings: candidates A, B, C, then only A, gives A", () => {
+    const value = deriveValue(definition("serving_utility"), [...firstRun, territory("run2-A", "A", "2026-11-07T12:00:00Z")]);
+    expect(value).toMatchObject({ state: "inferred", current: { type: "text", value: "A" } });
+  });
+
+  it("keeps several readings from the same answer as candidates", () => {
+    expect(deriveValue(definition("serving_utility"), firstRun).state).toBe("conflicting");
+  });
+
+  it("leaves readings to a different question alone, such as another feeder's detail query", () => {
+    const value = deriveValue(definition("serving_utility"), [territory("x", "A", "2026-11-07T10:00:00Z", "feeder 1"), territory("y", "B", "2026-11-07T12:00:00Z", "feeder 2")]);
+    expect(value.state).toBe("conflicting");
+  });
+
+  it("leaves a person's evidence alone", () => {
+    const photo = (id: string, text: string, retrievedAt: string): Observation => ({ ...territory(id, text, retrievedAt), source: { id: "source", name: "Photo", kind: "human_evidence", dataOrigin: "real" } });
+    expect(deriveValue(definition("serving_utility"), [photo("p1", "A", "2026-11-07T10:00:00Z"), photo("p2", "B", "2026-11-07T12:00:00Z")]).state).toBe("conflicting");
+  });
+});
