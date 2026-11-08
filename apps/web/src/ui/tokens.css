@@ -1467,3 +1467,34 @@ legend {
 .key-plan { background: repeating-linear-gradient(45deg, #0a143c 0 2px, transparent 2px 5px); border: 1px solid #0a143c; }
 .legend-plan input[type="range"] { display: block; width: 100%; margin: 2px 0 4px; }
 .key-feasible_outer { background: transparent; border: 2px dashed #0b5cad; }
+
+/* Street view modes, the interactive walk to the grid, and the 3D path tour. */
+.street-modes { display: flex; gap: 6px; margin-bottom: 8px; }
+.street-modes button { padding: 4px 12px; border: 1px solid var(--ink); background: var(--white); font: 600 13px var(--font); cursor: pointer; }
+.street-modes button.on { background: var(--ink); color: var(--white); }
+.street-walk { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 10px; height: calc(100% - 40px); min-height: 420px; }
+.street-walk-frame { position: relative; min-height: 420px; background: #222; }
+.street-walk-pano { position: absolute; inset: 0; }
+.street-walk-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.street-walk-steps, .grid-tour { padding: 10px 12px; background: var(--white); border: 1px solid var(--rule); font-size: 13px; overflow: auto; }
+.street-walk-steps h3, .grid-tour h3 { margin: 0 0 6px; font-size: 14px; }
+.street-walk-steps ol, .grid-tour ol { margin: 0 0 8px; padding: 0; list-style: none; }
+.street-walk-steps li button, .grid-tour li button { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; padding: 5px 6px; border: 0; border-left: 3px solid transparent; background: none; font: 13px var(--font); text-align: left; cursor: pointer; }
+.street-walk-steps li button.on, .grid-tour li button.on { border-left-color: #ffb000; background: #fff6e0; font-weight: 600; }
+.grid-tour-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: #888; }
+.grid-tour-dot.basis-detected { background: #1d7a3e; }
+.grid-tour-dot.basis-mapped { background: #0b5cad; }
+.grid-tour-dot.basis-inferred { background: #c77700; }
+.grid-tour-dot.basis-not_public { background: #fff; border: 1px dashed #666; }
+.grid-tour-gap { flex-basis: 100%; padding-left: 15px; color: #555; font-size: 12px; font-weight: 400; }
+.grid-tour-detail { margin: 0 0 8px; line-height: 1.4; }
+.grid-tour-buttons { display: flex; gap: 6px; }
+.grid-tour-buttons button { padding: 4px 12px; border: 1px solid var(--ink); background: var(--white); font: 600 13px var(--font); cursor: pointer; }
+.grid-tour-buttons button:disabled { opacity: 0.4; cursor: default; }
+.grid-tour { position: absolute; left: 12px; top: 12px; z-index: 51; width: 300px; max-height: calc(100% - 60px); }
+@media (max-width: 760px) {
+  .street-walk { grid-template-columns: 1fr; height: auto; }
+  .grid-tour { width: auto; right: 12px; max-height: 45%; }
+}
+.street-walk-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.grid-tour-title { flex: 1 1 0; min-width: 0; }
