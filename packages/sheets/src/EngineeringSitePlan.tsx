@@ -28,6 +28,7 @@ import {
   feederIdOf,
   plainLabel,
   drawnEquipment,
+  workArea,
 } from './site-plan-data.ts';
 
 // Sheet units: 100 per inch on a 36 x 24 in sheet.
@@ -518,8 +519,12 @@ function layout(record: RecordVersion): Drawing | null {
   const polygons = polygonsOfFeature(lot.feature, lot.frame);
   const outer = polygons.sort((a, b) => polygonAreaSqft(b) - polygonAreaSqft(a))[0];
   if (!outer) return null;
-  const b = bounds(outer.outer);
-  const margin = 1.3;
+  // Frame the electrical work area when there is one, so the sheet isn't mostly open land.
+  const area = workArea(record.features);
+  const b = area
+    ? bounds([toLocal(lot.frame, [area[0], area[3]]), toLocal(lot.frame, [area[2], area[1]])])
+    : bounds(outer.outer);
+  const margin = area ? 1.05 : 1.3;
   const scale = chooseScale((b.maxX - b.minX) * margin, (b.maxY - b.minY) * margin, VIEW.w / 100, VIEW.h / 100);
   const k = 100 / scale;
   const cx = (b.minX + b.maxX) / 2;

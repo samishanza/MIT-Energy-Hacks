@@ -190,13 +190,13 @@ describe("site map", () => {
     expect(onSelect).toHaveBeenCalledWith("lot_width_ft", "d");
   });
 
-  it("fits the view to the parcel once, not again on each new version", () => {
+  it("fits the view to the building's work area, inside the parcel, once", () => {
     const record = worcesterRecord();
     const { rerender } = setup({ record });
     expect(lastMap().fitted).toHaveLength(1);
     const [[west, south], [east, north]] = lastMap().fitted[0] as [[number, number], [number, number]];
-    expect(west).toBeCloseTo(-71.77324, 4);
-    expect(east).toBeCloseTo(-71.76742, 4);
+    expect(west).toBeGreaterThan(-71.77324);
+    expect(east).toBeLessThan(-71.76742);
     expect(south).toBeLessThan(north);
     rerender({ record: { ...record, version: record.version + 1 } });
     expect(lastMap().fitted).toHaveLength(1);
@@ -208,8 +208,7 @@ describe("site map", () => {
     for (const name of ["Dimension lines", "Buildings", "Lot", "Utility lines", "Fire stations", "Wetlands"]) {
       expect(legend.getByRole("checkbox", { name: new RegExp(name) })).toBeTruthy();
     }
-    expect(new Set(drawn().map((f) => f.properties.layer))).toEqual(new Set(["lot", "buildings", "utility", "dimensions", "wetlands"]));
-    expect(screen.getAllByRole("button", { name: /FIRE DEPARTMENT/ })).toHaveLength(3);
+    expect(new Set(drawn().map((f) => f.properties.layer))).toEqual(new Set(["lot", "buildings", "utility", "dimensions"]));
     expect(screen.getByRole("button", { name: "1,571 ft" })).toBeTruthy();
   });
 
@@ -220,13 +219,15 @@ describe("site map", () => {
 
   it("toggles a layer off and back on from the legend", () => {
     setup({ record: worcesterRecord() });
+    // Environmental layers start off; the view is the electrical work.
     const wetlands = screen.getByRole("checkbox", { name: /Wetlands/ });
-    fireEvent.click(wetlands);
     expect(drawn().some((f) => f.properties.layer === "wetlands")).toBe(false);
-    fireEvent.click(screen.getByRole("checkbox", { name: /Fire stations/ }));
-    expect(screen.queryAllByRole("button", { name: /FIRE DEPARTMENT/ })).toHaveLength(0);
     fireEvent.click(wetlands);
     expect(drawn().some((f) => f.properties.layer === "wetlands")).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Fire stations/ }));
+    expect(screen.getAllByRole("button", { name: /FIRE DEPARTMENT/ })).toHaveLength(3);
+    fireEvent.click(wetlands);
+    expect(drawn().some((f) => f.properties.layer === "wetlands")).toBe(false);
   });
 
   it("draws eligibility zones by tier, with a legend entry for each tier present", () => {

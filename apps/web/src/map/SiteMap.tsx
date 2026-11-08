@@ -1,6 +1,6 @@
 import type { BaseMap, MapFeature, Site, Value } from "@eqore/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { plainLabel } from "@eqore/sheets";
+import { plainLabel, workArea } from "@eqore/sheets";
 import { equipmentSolids, equipmentTag, polePoints, solidsCollection } from "./equipment3d";
 import { Google3DView } from "./Google3DView";
 import { declutter, priorityOf, type PlacedLabel } from "./declutter";
@@ -88,7 +88,8 @@ export function SiteMap(props: SiteMapProps) {
   placeRef.current = { placingField, onPlace };
   const [loaded, setLoaded] = useState(false);
   const [aerialFailed, setAerialFailed] = useState(false);
-  const [hidden, setHidden] = useState<Set<LayerKey>>(new Set());
+  // The view is the electrical work: environmental layers start off and stay one click away.
+  const [hidden, setHidden] = useState<Set<LayerKey>>(() => new Set<LayerKey>(["wetlands", "fire_stations", "constraints", "zone_unknown"]));
   const [threeD, setThreeD] = useState(false);
   // Google's 3D city when it loads; our own 3D models on the aerial when it doesn't.
   const [googleFailed, setGoogleFailed] = useState(false);
@@ -215,10 +216,16 @@ export function SiteMap(props: SiteMapProps) {
   const parcel = features.find((feature) => feature.kind === "property_line");
   useEffect(() => {
     if (!loaded || !parcel || fitted.current) return;
-    const bounds = boundsOf([parcel]);
+    // Frame the building, its electrical service, and the battery area, not the whole parcel.
+    const area = workArea(features);
+    const bounds = area ? ([[area[0], area[1]], [area[2], area[3]]] as [[number, number], [number, number]]) : boundsOf([parcel]);
     if (!bounds) return;
     fitted.current = true;
-    map.current?.fitBounds(bounds, { padding: 48, duration: 0, maxZoom: 19 });
+    map.current?.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 20 });
+    // The tilted view shows more ground than the box it was fitted to, so step in to match.
+    const zoom = map.current?.getZoom?.();
+    if (area && zoom !== undefined) map.current?.setZoom?.(Math.min(zoom + 0.5, 20.5));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parcel, loaded]);
 
   // HTML labels are never dropped by label collision and need no glyph files offline.
