@@ -142,13 +142,14 @@ export function App({ api }: { api: EngineerApi }) {
   const select = (field: string, featureId?: string) => setSelected({ fields: [field], featureId: featureId ?? null });
 
   // Only the most recent request to show a record may land, however the responses are ordered.
+  // A skipped older version must not take the token from a newer request still waiting on its check.
   const showRequest = useRef(0);
   const show = useCallback(
     async (next: RecordVersion) => {
-      showRequest.current += 1;
-      const request = showRequest.current;
       const shown = current.current.record;
       if (shown && shown.site.id === next.site.id && next.version < shown.version) return null;
+      showRequest.current += 1;
+      const request = showRequest.current;
       setRecord(next);
       const nextReport = await api.readReadiness(next.site.id, next.version);
       if (request !== showRequest.current) return null;

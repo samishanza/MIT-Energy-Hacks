@@ -227,14 +227,29 @@ export async function streetView(record: RecordVersion, fetchImpl: FetchLike, ke
   };
 }
 
+/**
+ * Where Google's nearest outdoor panorama to a point stands, and when it was taken, so the browser
+ * can pick the panorama that sees a piece of equipment best. Only its position and date, never pixels.
+ */
+export async function streetViewMetadata(fetchImpl: FetchLike, key: string, lat: number, lng: number): Promise<{ status: string; lat?: number; lng?: number; date?: string | null }> {
+  const meta = new URL("https://maps.googleapis.com/maps/api/streetview/metadata");
+  meta.searchParams.set("location", `${lat},${lng}`);
+  meta.searchParams.set("radius", "50");
+  meta.searchParams.set("source", "outdoor");
+  meta.searchParams.set("key", key);
+  const body = (await (await fetchImpl(meta.toString())).json()) as { status?: string; date?: string; location?: { lat: number; lng: number } };
+  return body.status === "OK" && body.location ? { status: "OK", lat: body.location.lat, lng: body.location.lng, date: body.date ?? null } : { status: body.status ?? "UNKNOWN" };
+}
+
 /** The photo itself, passed through so the key stays on the server. Not stored. */
-export async function streetViewImage(fetchImpl: FetchLike, key: string, q: { lat: string; lng: string; heading: string; pitch: string }): Promise<Response> {
+export async function streetViewImage(fetchImpl: FetchLike, key: string, q: { lat: string; lng: string; heading: string; pitch: string; fov?: string }): Promise<Response> {
   const url = new URL("https://maps.googleapis.com/maps/api/streetview");
   url.searchParams.set("size", `${VIEW.width}x${VIEW.height}`);
   url.searchParams.set("location", `${Number(q.lat)},${Number(q.lng)}`);
   url.searchParams.set("heading", String(Number(q.heading)));
   url.searchParams.set("pitch", String(Number(q.pitch)));
-  url.searchParams.set("fov", String(VIEW.fov));
+  // A narrower field of view zooms in on distant equipment; Google allows 10 to 120 degrees.
+  url.searchParams.set("fov", String(q.fov ? Math.max(20, Math.min(120, Number(q.fov))) : VIEW.fov));
   url.searchParams.set("source", "outdoor");
   url.searchParams.set("key", key);
   const upstream = await fetchImpl(url.toString());

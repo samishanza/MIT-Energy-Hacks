@@ -2,6 +2,7 @@ import type { BaseMap, MapFeature, Site, Value } from "@eqore/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { plainLabel, workArea } from "@eqore/sheets";
 import { equipmentSolids, equipmentTag, polePoints, solidsCollection } from "./equipment3d";
+import { gridPath } from "../app/gridPath";
 import { Google3DView } from "./Google3DView";
 import { declutter, priorityOf, type PlacedLabel } from "./declutter";
 import { symbolSvg } from "./symbols";
@@ -119,6 +120,7 @@ export function SiteMap(props: SiteMapProps) {
 
   const heights = useMemo(() => buildingHeights(features, values), [features, values]);
   const visible = useMemo(() => features.filter((feature) => !hidden.has(layerOf(feature))), [features, hidden]);
+  const trace = useMemo(() => gridPath({ features, values }), [features, values]);
   const isSelected = (feature: MapFeature) =>
     selectedFeatureId ? feature.id === selectedFeatureId : selectedFields.includes(feature.field);
 
@@ -394,6 +396,7 @@ export function SiteMap(props: SiteMapProps) {
           <Google3DView
             features={visible}
             center={site.location}
+            trace={trace}
             onSelect={(field, id) => onSelectRef.current(field, id)}
             onFail={() => {
               setGoogleFailed(true);
