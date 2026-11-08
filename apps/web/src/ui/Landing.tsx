@@ -6,7 +6,8 @@ import { Icon } from "./icons";
 
 export const DEMO_SITES: { address: string; note: string }[] = [
   { address: "79 Lowland St, Holliston, MA 01746", note: "Engineered plan set on file" },
-  { address: "71 McKeon Rd, Worcester, MA 01610", note: "Public data only" },
+  { address: "299 Vassar St, Cambridge, MA 02139", note: "MIT · Planning Board utility plan and city permits on file" },
+  { address: "71 McKeon Rd, Worcester, MA 01610", note: "City bid drawings on file" },
   { address: "76 East Worcester St, Worcester, MA 01604", note: "City bid drawings on file" },
   { address: "26 Albany St, Worcester, MA 01604", note: "City bid drawings on file" },
 ];
