@@ -125,7 +125,7 @@ describe("where the battery should go", () => {
     });
     const placed = feature("pin-t", "capture_pin", "utility_transformer_location", { type: "Point", coordinates: ll([390, 270]) });
     const { preferred, target } = feasibleBessZone(site([pole(380, 300), box1, placed]));
-    expect(target).toBe("building wall nearest the placed transformer");
+    expect(target).toBe("building wall nearest the utility transformer");
     for (const [x, y] of pointsOf(preferred!)) expect(Math.hypot(x - 390, y - 250)).toBeLessThanOrEqual(PREFERRED_STRAIGHT_FT + 4);
   });
 
@@ -170,6 +170,14 @@ describe("where the battery should go", () => {
     // Beside the drive (within 20 ft of its edges, off it), not out in the grass beyond.
     expect(x > 140 || x < 120).toBe(true);
     expect(Math.min(Math.abs(x - 140), Math.abs(x - 120))).toBeLessThan(20 + 14);
+  });
+
+  it("without an entrance, measures from the wall nearest a known utility transformer, ahead of the nearest pole", () => {
+    // The pole is north by the road; the transformer a photo placed is south-west of the building.
+    const transformer = feature("xfmr", "capture_pin", "utility_transformer_location", { type: "Point", coordinates: ll([180, 130]) });
+    const { preferred, target } = feasibleBessZone(site([pole(380, 300), transformer]));
+    expect(target).toBe("building wall nearest the utility transformer");
+    for (const [x, y] of pointsOf(preferred!)) expect(Math.hypot(x - 200, y - 150)).toBeLessThanOrEqual(PREFERRED_STRAIGHT_FT + 30);
   });
 
   it("falls back to every wall when there's no entrance and no supply nearby", () => {

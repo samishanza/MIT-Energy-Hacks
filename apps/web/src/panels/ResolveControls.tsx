@@ -48,7 +48,14 @@ export function ResolveControls(props: ResolveControlsProps) {
   if (!canConfirm(value) && !canChoose(value) && !canEnter(value)) return null;
 
   const siteId = record.site.id;
-  const observations = record.observations.filter((o) => o.field === value.field);
+  // The same reading from the same source, repeated across runs, is one thing to cite.
+  const groups = new Map<string, { label: string; ids: string[] }>();
+  for (const observation of record.observations.filter((o) => o.field === value.field)) {
+    const label = `${observationWord(observation)}${observation.value ? `: ${formatValue(observation.value)}` : ""}, ${observation.source.name}`;
+    const group = groups.get(label) ?? { label, ids: [] };
+    group.ids.push(observation.id);
+    groups.set(label, group);
+  }
 
   const evidence = (): EvidenceRef[] => [
     ...cited.map((observationId) => ({ kind: "observation" as const, observationId })),
@@ -83,7 +90,7 @@ export function ResolveControls(props: ResolveControlsProps) {
                 checked={candidateId === candidate.id}
                 onChange={() => setCandidateId(candidate.id)}
               />
-              <span className="mono">{formatValue(candidate.value)}</span>
+              <span className="candidate-value">{formatValue(candidate.value)}</span>
               <span className="candidate-source">{candidate.sourceName}</span>
               {candidate.attributes ? (
                 <span className="candidate-details">
@@ -97,28 +104,20 @@ export function ResolveControls(props: ResolveControlsProps) {
         </fieldset>
       ) : null}
 
-      <label className="field">
-        <span>Verifier name</span>
-        <input value={actorName} onChange={(event) => onActorName(event.target.value)} />
-      </label>
-      <p className="note">Self-entered. This prototype has no login.</p>
-
       <fieldset className="evidence-picks">
         <legend>Evidence you looked at</legend>
-        {observations.map((observation) => (
-          <label key={observation.id} className="evidence-pick">
+        {[...groups.values()].map((group) => (
+          <label key={group.ids[0]} className="evidence-pick">
             <input
               type="checkbox"
-              checked={cited.includes(observation.id)}
+              checked={group.ids.every((id) => cited.includes(id))}
               onChange={(event) =>
-                setCited(
-                  event.target.checked ? [...cited, observation.id] : cited.filter((o) => o !== observation.id),
-                )
+                setCited(event.target.checked ? [...new Set([...cited, ...group.ids])] : cited.filter((o) => !group.ids.includes(o)))
               }
             />
             <span>
-              {observationWord(observation)}
-              {observation.value ? `: ${formatValue(observation.value)}` : ""}, {observation.source.name}
+              {group.label}
+              {group.ids.length > 1 ? <span className="evidence-times"> · {group.ids.length} readings</span> : null}
             </span>
           </label>
         ))}
@@ -127,6 +126,12 @@ export function ResolveControls(props: ResolveControlsProps) {
           <input value={note} onChange={(event) => setNote(event.target.value)} />
         </label>
       </fieldset>
+
+      <label className="field">
+        <span>Verifier name</span>
+        <input value={actorName} onChange={(event) => onActorName(event.target.value)} />
+      </label>
+      <p className="note">Self-entered. This prototype has no login.</p>
 
       <div className="resolve-actions">
         {canConfirm(value) ? (
@@ -159,11 +164,11 @@ export function ResolveControls(props: ResolveControlsProps) {
         <div className="entry">
           <label className="field">
             <span>Value</span>
-            <input className="mono" value={entry} onChange={(event) => setEntry(event.target.value)} />
+            <input value={entry} onChange={(event) => setEntry(event.target.value)} />
           </label>
           <label className="field field-unit">
             <span>Unit</span>
-            <input className="mono" value={unit} onChange={(event) => setUnit(event.target.value)} />
+            <input value={unit} onChange={(event) => setUnit(event.target.value)} />
           </label>
           <button
             type="button"

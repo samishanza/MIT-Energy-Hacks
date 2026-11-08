@@ -39,7 +39,7 @@ address → collection (public sources, lidar, imagery; fixed code)
 ## What changes in the drawing
 
 The battery zone is measured from a placed switchboard, then a detected service entrance, then a transformer a person
-placed (`building wall nearest the placed transformer`), then the lidar's likeliest box, then the nearest supply. So
+placed or drawn on a plan set (`building wall nearest the utility transformer`), then the lidar's likeliest box, then the nearest supply. So
 an accepted transformer or switchboard pin moves the zone and the site plan at the next version.
 
 ## Running the detector loop

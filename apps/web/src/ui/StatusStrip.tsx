@@ -1,5 +1,5 @@
 import { type ReadinessReport, type RecordVersion, type RunProgress } from "@eqore/contract";
-import { conflictCounts, factsFound, gridRequestLine, isFound, verifiedCount } from "../app/facts";
+import { conflictCounts, factsFound, gridRequestLine, verifiedCount } from "../app/facts";
 import { ProvenanceTag } from "./marks";
 
 export interface StatusStripProps {
@@ -27,19 +27,20 @@ function unverified(record: RecordVersion): string {
     : `${counted(verified, "value", "values")} verified by a person. Everything else is unverified.`;
 }
 
-/** One line: what the data is, and progress while a run is reading sources. */
+/**
+ * A few words in the header, only when there's something to say: progress while a run reads
+ * sources, and the labels a person must not miss (synthetic data, a recorded snapshot).
+ * Real public data is the normal case and isn't labeled here.
+ */
 export function StatusStrip({ record, progress, running }: StatusStripProps) {
-  const hasReal = record ? record.values.some((value) => !value.synthetic && isFound(value)) : false;
   const answered = progress?.sourceRuns.filter((run) => run.status !== "pending").length ?? 0;
+  const synthetic = Boolean(record && !running && record.synthetic);
+  const snapshot = Boolean(record && !running && record.snapshot);
+  if (!running && !synthetic && !snapshot) return null;
   return (
     <section className="status-strip" aria-label="Site status">
-      {record && !running ? (
-        <p className="labels">
-          {hasReal ? <ProvenanceTag synthetic={false} /> : null}
-          {record.synthetic ? <ProvenanceTag synthetic /> : null}
-          {record.snapshot ? <span className="tag">Recorded snapshot</span> : null}
-        </p>
-      ) : null}
+      {synthetic ? <ProvenanceTag synthetic /> : null}
+      {snapshot ? <span className="tag">Recorded snapshot</span> : null}
       {running ? (
         <p className="summary" role="status">
           {progress && progress.sourceRuns.length > 0

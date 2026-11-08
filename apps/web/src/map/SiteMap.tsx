@@ -39,6 +39,8 @@ export interface SiteMapProps {
   onPlace?: (field: string, longitude: number, latitude: number) => void;
   onCancelPlace?: () => void;
   focusField?: string | null;
+  /** Called when the person pans, zooms, or turns the map, not when the app moves it. */
+  onUserMove?: () => void;
   /** Drafting-style callout per feature id, as the site plan writes them. */
   featureLabels?: Record<string, string>;
 }
@@ -78,8 +80,16 @@ const MAY_BE_UNCOLLECTED: { keys: LayerKey[]; words: string }[] = [
   { keys: ZONE_TIERS.map((tier) => `zone_${tier}` as const), words: "eligibility zones" },
 ];
 
+const PIN_LABELS: Record<string, string> = {
+  switchboard_location: "(E) MAIN SWITCHBOARD",
+  meter_location: "(E) UTILITY METER",
+  utility_transformer_location: "(E) UTILITY TRANSFORMER",
+};
+
 function pointLabel(feature: MapFeature) {
-  if (feature.kind === "capture_pin") return "Photo, unconfirmed";
+  // A pin placed to mark equipment says what it marks; who placed it, and from what, is in its details.
+  // A photo still waiting for review says so.
+  if (feature.kind === "capture_pin") return PIN_LABELS[feature.field] ?? "Photo, unconfirmed";
   if (feature.kind === "existing_equipment") return feature.label ?? "(E) Existing equipment";
   return feature.label ?? feature.field.replace(/_/g, " ");
 }
@@ -108,6 +118,8 @@ export function SiteMap(props: SiteMapProps) {
   const fitted = useRef<string | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onUserMoveRef = useRef(props.onUserMove);
+  onUserMoveRef.current = props.onUserMove;
   const placeRef = useRef({ placingField, onPlace });
   placeRef.current = { placingField, onPlace };
   const [loaded, setLoaded] = useState(false);
@@ -158,6 +170,20 @@ export function SiteMap(props: SiteMapProps) {
     instance.addControl(new ScaleControl({ unit: "imperial" }), "bottom-right");
     // Orbit like a model view: right-drag or Ctrl-drag turns and tilts, the compass returns to north.
     instance.addControl(new NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), "top-right");
+    // Only a person's drag, wheel, or pinch carries an original event; the app's own easing doesn't.
+    // A click that ends a pan is the pan, not a pick.
+    let panned = false;
+    instance.on("mousedown", () => {
+      panned = false;
+    });
+    instance.on("touchstart", () => {
+      panned = false;
+    });
+    instance.on("movestart", (event: { originalEvent?: unknown }) => {
+      if (!event.originalEvent) return;
+      panned = true;
+      onUserMoveRef.current?.();
+    });
     instance.on("load", () => {
       instance.addSource(FEATURE_SOURCE, { type: "geojson", data: toFeatureCollection([]), promoteId: "id" });
       for (const layer of FEATURE_LAYERS) instance.addLayer(layer);
@@ -191,6 +217,10 @@ export function SiteMap(props: SiteMapProps) {
       if ((event as { sourceId?: string }).sourceId === BASE_SOURCE) setAerialFailed(true);
     });
     instance.on("click", (event) => {
+      if (panned) {
+        panned = false;
+        return;
+      }
       const placing = placeRef.current;
       if (placing.placingField) {
         placing.onPlace?.(placing.placingField, event.lngLat.lng, event.lngLat.lat);
@@ -414,14 +444,19 @@ export function SiteMap(props: SiteMapProps) {
       ) : null}
       <div className="map-legend">
         <button type="button" className="legend-toggle" aria-expanded={legendOpen} onClick={() => setLegendOpen((open) => !open)}>
-          Layers
+          <span className="is-label">Layers</span>
+          <span className="is-caption">
+            {present.filter((layer) => !hidden.has(layer.key)).length} of {present.length}
+          </span>
         </button>
         <ul className="legend-list" aria-label="Map layers" hidden={!legendOpen}>
           {planOverlay ? (
             <li className="legend-plan">
-              <label>
+              <label className="is-toggle">
                 <input type="checkbox" checked={planShown} onChange={() => setPlanShown((shown) => !shown)} />
-                <span className="key key-plan" aria-hidden="true" /> {planOverlay.label}
+                <span className="is-toggle__sw" aria-hidden="true" />
+                <span className="is-toggle__name">{planOverlay.label}</span>
+                <span className="key key-plan" aria-hidden="true" />
               </label>
               {planShown ? (
                 <input type="range" min={0.2} max={1} step={0.05} value={planOpacity} aria-label="Plan set opacity" onChange={(e) => setPlanOpacity(Number(e.target.value))} />
@@ -430,10 +465,14 @@ export function SiteMap(props: SiteMapProps) {
           ) : null}
           {present.map((layer) => (
             <li key={layer.key}>
-              <label>
+              <label className="is-toggle">
                 <input type="checkbox" checked={!hidden.has(layer.key)} onChange={() => toggle(layer.key)} />
-                <span className={`key key-${layer.key}`} aria-hidden="true" /> {layer.label}
-                <span className="legend-count"> {counts.get(layer.key)}</span>
+                <span className="is-toggle__sw" aria-hidden="true" />
+                <span className="is-toggle__name">
+                  {layer.label}
+                  <span className="legend-count"> {counts.get(layer.key)}</span>
+                </span>
+                <span className={`key key-${layer.key}`} aria-hidden="true" />
               </label>
             </li>
           ))}

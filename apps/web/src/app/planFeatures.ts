@@ -86,7 +86,8 @@ export function planMapFeatures(collection: PlanFeatureCollection): MapFeature[]
   for (const f of collection.features) {
     const p = f.properties ?? { type: "" };
     const id = `plan-${p.type}-${++n}`;
-    const point = POINT_TYPES[p.type];
+    // A transformer the drawing says is on a pole is a pole-top can, not a pad-mount on the ground.
+    const point = p.type === "transformer" && /pole/i.test(p.label ?? "") ? { equipment: "service_tap", label: "(E) POLE-MOUNTED TRANSFORMER" } : POINT_TYPES[p.type];
     if (point && f.geometry.type === "Point") {
       out.push({
         id,

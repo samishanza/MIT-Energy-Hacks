@@ -139,7 +139,7 @@ export async function collectLidarEquipment(
     kind: "existing_equipment",
     field: "detected_grid_equipment",
     geometry: { type: "Point", coordinates: lonLat(pad.at) },
-    label: index === 0 ? "(E) EQUIPMENT BOX, LIKELIEST TRANSFORMER" : "(E) EQUIPMENT BOX",
+    label: "(E) EQUIPMENT BOX",
     attributes: {
       ...shared(
         "pad_mount_transformer_candidate",
@@ -174,7 +174,7 @@ export async function collectLidarEquipment(
       kind: "existing_equipment",
       field: "detected_grid_equipment",
       geometry: { type: "Point", coordinates: lonLat(hydrant.at) },
-      label: "(E) HYDRANT?",
+      label: "(E) HYDRANT",
       attributes: {
         ...shared(
           "hydrant",

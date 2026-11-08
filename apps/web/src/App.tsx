@@ -6,6 +6,7 @@ import { SiteMap } from "./map/SiteMap";
 import { AttentionList } from "./panels/AttentionList";
 import { ElectricalSheet } from "./panels/ElectricalSheet";
 import { StreetViewPanel } from "./panels/StreetViewPanel";
+import { ReviewAgentPanel } from "./panels/ReviewAgentPanel";
 import { demoSpecsFor } from "./app/demoSpecs";
 import { EvidencePanel } from "./panels/EvidencePanel";
 import { FactsPanel } from "./panels/FactsPanel";
@@ -14,6 +15,8 @@ import { conceptSiteLayout } from "@eqore/electrical";
 import { loadPlanFeatures, planMapFeatures, withPlanSet } from "./app/planFeatures";
 import { Menu } from "./ui/Menu";
 import { RecordSummary, StatusStrip } from "./ui/StatusStrip";
+import { Icon } from "./ui/icons";
+import { Landing } from "./ui/Landing";
 
 const ACTOR_KEY = "eqore.actorName";
 
@@ -129,6 +132,9 @@ export function App({ api }: { api: EngineerApi }) {
   const [record, setRecord] = useState<RecordVersion | null>(null);
   const [report, setReport] = useState<ReadinessReport | null>(null);
   const [selected, setSelected] = useState<Selection>(NOTHING);
+  // The details dock folds to a rail when the map is moved or on request, and opens on a new pick.
+  const [dockCollapsed, setDockCollapsed] = useState(false);
+  useEffect(() => setDockCollapsed(false), [selected]);
   const [actorName, setActorName] = useState(loadActor);
   const [placingField, setPlacingField] = useState<string | null>(null);
   const [focusField, setFocusField] = useState<string | null>(null);
@@ -290,24 +296,32 @@ export function App({ api }: { api: EngineerApi }) {
     close();
   };
 
+  // Before any site opens, the landing holds the address field; after, the top bar does.
+  const landing = !mapSite && !candidates;
+  const addressForm = (large: boolean) => (
+    <form className={`address is-address${large ? " is-address--lg" : ""}`} onSubmit={submitAddress}>
+      <Icon name={large ? "pin" : "search"} small={!large} />
+      <input aria-label="Site address" placeholder="Enter a site address" value={address} onChange={(event) => setAddress(event.target.value)} />
+      <button type="submit" className="primary" disabled={running}>
+        Run site {large ? <Icon name="arrow" small /> : null}
+      </button>
+    </form>
+  );
+
   return (
-    <div className="app">
+    <div className={`app${landing ? " app-landing" : ""}`}>
       <header className="header">
-        <form className="address" onSubmit={submitAddress}>
-          <label className="field">
-            <span>Site address</span>
-            <input value={address} onChange={(event) => setAddress(event.target.value)} />
-          </label>
-          <button type="submit" className="primary" disabled={running}>
-            Run site
-          </button>
-        </form>
+        <img className="brand-logo" src="/insite-logo.png" alt="InSite" />
+        {landing ? null : addressForm(false)}
         {record && !live ? (
           <div className="site-summary">
             <p className="site-address">{record.site.address}</p>
             <div className="menus">
               <Menu label="Needs attention" count={attentionItems(record).length} alert={attentionItems(record).length > 0}>
                 {(close) => <AttentionList record={record} selectedFields={selected.fields} onSelect={pick(close)} />}
+              </Menu>
+              <Menu label="Review agent">
+                {() => <ReviewAgentPanel record={record} actorName={actorName} onActorName={updateActor} onRecord={(next) => void afterAction(next)} />}
               </Menu>
               <Menu label="Public facts" count={factsFound(record)}>
                 {(close) => (
@@ -344,9 +358,8 @@ export function App({ api }: { api: EngineerApi }) {
             </div>
           </div>
         ) : null}
+        <StatusStrip record={live ? null : record} progress={progress} running={running} />
       </header>
-
-      <StatusStrip record={live ? null : record} progress={progress} running={running} />
 
       {record?.snapshot && !live ? (
         <div role="status" aria-label="Snapshot" className="snapshot-banner">
@@ -398,9 +411,20 @@ export function App({ api }: { api: EngineerApi }) {
         </section>
       ) : null}
 
+      {landing ? (
+        <Landing
+          form={addressForm(true)}
+          disabled={running}
+          onTry={(next) => {
+            setAddress(next);
+            void run({ address: next });
+          }}
+        />
+      ) : null}
+
       {mapSite ? (
         <main className="workspace">
-          <div className={`map-region${dockOpen ? " dock-open" : ""}`}>
+          <div className={`map-region${dockOpen ? (dockCollapsed ? " dock-collapsed" : " dock-open") : ""}`}>
             <div className="view-tabs" role="tablist" aria-label="Site view">
               <button type="button" role="tab" aria-selected={view === "map"} className={view === "map" ? "on" : ""} onClick={() => setView("map")}>
                 Map
@@ -432,7 +456,8 @@ export function App({ api }: { api: EngineerApi }) {
                 selectedFields={live ? [] : selected.fields}
                 selectedFeatureId={live ? null : selected.featureId}
                 onSelect={select}
-                dockOpen={dockOpen}
+                dockOpen={dockOpen && !dockCollapsed}
+                onUserMove={() => setDockCollapsed(true)}
                 placingField={placingField}
                 onPlace={(field, longitude, latitude) => void place(field, longitude, latitude)}
                 onCancelPlace={() => setPlacingField(null)}
@@ -452,6 +477,9 @@ export function App({ api }: { api: EngineerApi }) {
                 onRecord={(next) => void afterAction(next)}
                 onClose={() => setSelected(NOTHING)}
                 onPlace={setPlacingField}
+                collapsed={dockCollapsed}
+                onCollapse={() => setDockCollapsed(true)}
+                onExpand={() => setDockCollapsed(false)}
               />
             ) : null}
           </div>

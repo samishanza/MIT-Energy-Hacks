@@ -288,7 +288,8 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   const kinds = new Map<string, typeof equipment>();
   for (const e of equipment) {
     if (e.type in TYPICAL) kinds.set(e.type, [...(kinds.get(e.type) ?? []), e]);
-    else callout([e.at], [plainLabel(e.f.label).toUpperCase()], UTILITY, 1, EXTENT[e.type] ?? EXTENT.SERVICE_ENTRANCE);
+    // A drawing's new items, "(N) …", are blue like the concept layout; existing electrical is red.
+    else callout([e.at], [plainLabel(e.f.label).toUpperCase()], /^\(N\)/i.test(e.f.label ?? '') ? NEW : UTILITY, 1, EXTENT[e.type] ?? EXTENT.SERVICE_ENTRANCE);
   }
   // One callout per kind of item, marked typical, as a drawing marks a repeated condition.
   for (const [type, items] of kinds) {
@@ -624,7 +625,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
           ))}
 
           {equipment.map((e, i) => (
-            <EquipmentSymbol key={`eq-${i}`} type={e.type} at={e.at} />
+            <EquipmentSymbol key={`eq-${i}`} type={e.type} at={e.at} isNew={/^\(N\)/i.test(e.f.label ?? '')} k={k} />
           ))}
 
           {concept.map((c, i) =>
@@ -1076,8 +1077,10 @@ function LetteredSymbol({ at, letter, color, box = false }: { at: Pt; letter: st
   );
 }
 
-function EquipmentSymbol({ type, at }: { type: string; at: Pt }) {
+function EquipmentSymbol({ type, at, isNew = false, k = 1.6 }: { type: string; at: Pt; isNew?: boolean; k?: number }) {
   switch (type) {
+    case 'BESS_PAD':
+      return <PadSymbol at={at} k={k} />;
     case 'UTILITY_POLE':
       return <PoleSymbol at={at} />;
     case 'SERVICE_TAP':
@@ -1099,7 +1102,7 @@ function EquipmentSymbol({ type, at }: { type: string; at: Pt }) {
     case 'SIGN':
       return <SignSymbol at={at} />;
     default:
-      return <SwitchgearSymbol at={at} />;
+      return <SwitchgearSymbol at={at} color={isNew ? NEW : UTILITY} />;
   }
 }
 
@@ -1134,11 +1137,11 @@ function TransformerSymbol({ at, inferred = false }: { at: Pt; inferred?: boolea
   );
 }
 
-function SwitchgearSymbol({ at, inferred = false }: { at: Pt; inferred?: boolean }) {
+function SwitchgearSymbol({ at, inferred = false, color = UTILITY }: { at: Pt; inferred?: boolean; color?: string }) {
   return (
     <g strokeDasharray={inferred ? '7 5' : undefined}>
-      <rect x={at.x - 26} y={at.y - 12} width={52} height={24} fill="#fff" stroke={UTILITY} strokeWidth={3} />
-      <line x1={at.x - 26} y1={at.y + 12} x2={at.x + 26} y2={at.y - 12} stroke={UTILITY} strokeWidth={2} />
+      <rect x={at.x - 26} y={at.y - 12} width={52} height={24} fill="#fff" stroke={color} strokeWidth={3} />
+      <line x1={at.x - 26} y1={at.y + 12} x2={at.x + 26} y2={at.y - 12} stroke={color} strokeWidth={2} />
     </g>
   );
 }
