@@ -154,7 +154,7 @@ export function SiteMap(props: SiteMapProps) {
         return;
       }
       const { x, y } = event.point;
-      for (const layer of HIT_LAYERS) {
+      for (const layer of ["poles", "equipment-3d", ...HIT_LAYERS]) {
         const [hit] = instance.queryRenderedFeatures(
           [
             [x - HIT_RADIUS, y - HIT_RADIUS],
@@ -164,7 +164,7 @@ export function SiteMap(props: SiteMapProps) {
         );
         const field = hit?.properties?.field as string | undefined;
         if (field) {
-          onSelectRef.current(field, hit?.properties?.id as string | undefined);
+          onSelectRef.current(field, (hit?.properties?.featureId ?? hit?.properties?.id) as string | undefined);
           return;
         }
       }

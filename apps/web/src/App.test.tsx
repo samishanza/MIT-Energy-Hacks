@@ -198,7 +198,7 @@ describe("the site view", () => {
       mapProps.current!.onSelect!("feeder" as never, "f-feeder" as never);
     });
     expect(mapProps.current?.selectedFeatureId).toBe("f-feeder");
-    expect(within(screen.getByRole("complementary")).getByRole("region", { name: "Selected item" })).toBeTruthy();
+    expect(within(screen.getByRole("complementary")).getByRole("region", { name: "Equipment specifications" })).toBeTruthy();
   });
 
   it("says when the server doesn't offer a file yet, and keeps the map", async () => {

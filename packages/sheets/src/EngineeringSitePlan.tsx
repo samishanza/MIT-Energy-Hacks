@@ -27,6 +27,7 @@ import {
   lineClassOf,
   feederIdOf,
   plainLabel,
+  drawnEquipment,
 } from './site-plan-data.ts';
 
 // Sheet units: 100 per inch on a 36 x 24 in sheet.
@@ -123,7 +124,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   const servicePaths = utilityLines.filter((f) => lineClassOf(f) === 'service');
   const detectedLines = utilityLines.filter((f) => lineClassOf(f) === 'detected');
   const trenches = utilityLines.filter((f) => attributeText(f, 'basis') === 'CONCEPT');
-  const equipment = record.features
+  const equipment = drawnEquipment(record.features)
     .filter((f) => f.kind === 'existing_equipment' && f.geometry.type === 'Point' && attributeText(f, 'basis') !== 'CONCEPT')
     .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
     .filter((e) => inside(e.at, view, 20));
@@ -446,8 +447,10 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
           {equipment.map((e, i) =>
             e.type === 'UTILITY_POLE' ? (
               <PoleSymbol key={`eq-${i}`} at={e.at} />
-            ) : e.type === 'SERVICE_TAP' || e.type === 'PAD_MOUNT_TRANSFORMER_CANDIDATE' ? (
+            ) : e.type === 'SERVICE_TAP' ? (
               <TransformerSymbol key={`eq-${i}`} at={e.at} />
+            ) : e.type === 'PAD_MOUNT_TRANSFORMER_CANDIDATE' ? (
+              <rect key={`eq-${i}`} x={e.at.x - 14} y={e.at.y - 12} width={28} height={24} fill="#fff" stroke={UTILITY} strokeWidth={2.5} />
             ) : (
               <SwitchgearSymbol key={`eq-${i}`} at={e.at} />
             ),

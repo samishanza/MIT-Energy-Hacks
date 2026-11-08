@@ -1,4 +1,5 @@
 import type { MapFeature } from "@eqore/contract";
+import { drawnEquipment } from "@eqore/sheets";
 
 // Simple solid models of the electrical equipment, at true size, for the 3D views.
 // Each is a footprint polygon with a base and top height in meters, so MapLibre's
@@ -72,7 +73,7 @@ export function equipmentTag(f: MapFeature): { tag: string; name: string } | nul
     case "service_tap":
       return { tag: "T", name: "Pole-mounted transformer" };
     case "pad_mount_transformer_candidate":
-      return { tag: "T", name: "Pad-mount transformer" };
+      return { tag: "EQ", name: "Equipment box" };
     case "service_entrance":
       return { tag: "MDP", name: "Service entrance, main distribution panel" };
     case "bess_pad":
@@ -86,25 +87,8 @@ export function equipmentTag(f: MapFeature): { tag: string; name: string } | nul
   }
 }
 
-/**
- * Equipment worth drawing. Lidar finds many boxes beside a building, most of them HVAC units,
- * so only the pad-mount candidate nearest the service entrance is drawn as a transformer.
- */
-export function drawableEquipment(features: MapFeature[]): MapFeature[] {
-  const entrance = features.find((f) => typeOf(f) === "service_entrance" && f.geometry.type === "Point");
-  const pads = features.filter((f) => typeOf(f) === "pad_mount_transformer_candidate" && f.geometry.type === "Point");
-  let keep: MapFeature | null = null;
-  if (entrance && pads.length) {
-    const e = entrance.geometry.coordinates as LonLat;
-    const dist = (f: MapFeature) => {
-      const c = f.geometry.coordinates as LonLat;
-      return Math.hypot((c[0] - e[0]) * 82_000, (c[1] - e[1]) * M_PER_DEG);
-    };
-    const best = [...pads].sort((a, b) => dist(a) - dist(b))[0]!;
-    if (dist(best) <= 40) keep = best;
-  }
-  return features.filter((f) => typeOf(f) !== "pad_mount_transformer_candidate" || f === keep);
-}
+/** The equipment the site plan draws too, so the map and the sheet show the same items. */
+export const drawableEquipment = drawnEquipment;
 
 export function equipmentSolids(all: MapFeature[]): Solid[] {
   const features = drawableEquipment(all);
@@ -139,7 +123,7 @@ export function equipmentSolids(all: MapFeature[]): Solid[] {
           break;
         }
         case "pad_mount_transformer_candidate":
-          add(f, "box", { color: "#2f6b45", base: 0, top: 1.5, ring: box(at, 1.8, 1.7) });
+          add(f, "box", { color: "#8f9aa3", base: 0, top: 1.5, ring: box(at, 1.8, 1.7) });
           break;
         case "service_entrance":
           add(f, "gear", { color: "#9aa3ab", base: 0, top: 2.3, ring: box(at, 2.4, 0.7) });

@@ -1477,3 +1477,15 @@ legend {
 .street-details h3 { margin: 0 0 4px; font-size: 14px; }
 .street-details p { margin: 0 0 4px; font-size: 13px; }
 .street-about { margin-top: 8px; font-size: 13px; }
+
+/* Equipment specification card in the details panel. */
+.equipment-specs h3 { margin: 0 0 8px; font-size: 16px; }
+.equipment-specs table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.equipment-specs th { width: 42%; padding: 5px 8px 5px 0; border-bottom: 1px solid var(--rule); text-align: left; font-weight: 600; color: var(--ink-soft); vertical-align: top; }
+.equipment-specs td { padding: 5px 0; border-bottom: 1px solid var(--rule); }
+.equipment-specs td.by { color: var(--ink-soft); font-style: italic; }
+.equipment-label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0 6px; font-size: 13px; }
+.equipment-basis { margin-top: 10px; font-size: 12.5px; }
+.equipment-basis dl { margin: 6px 0 0; }
+.equipment-basis dt { font-weight: 600; text-transform: capitalize; }
+.equipment-basis dd { margin: 0 0 6px; color: var(--ink-soft); }

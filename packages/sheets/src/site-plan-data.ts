@@ -321,3 +321,26 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
   }
   return labels;
 }
+
+const equipmentTypeOf = (f: MapFeature) => String((f.attributes?.['equipment_type'] as { value?: unknown } | undefined)?.value ?? '');
+
+/**
+ * The equipment both the map and the site plan draw, so they always show the same items.
+ * Lidar finds many boxes beside a building, most of them HVAC units, so only the one nearest
+ * the service entrance is kept, named for what can be said of it: an equipment box.
+ */
+export function drawnEquipment(features: MapFeature[]): MapFeature[] {
+  const entrance = features.find((f) => equipmentTypeOf(f) === 'service_entrance' && f.geometry.type === 'Point');
+  const boxes = features.filter((f) => equipmentTypeOf(f) === 'pad_mount_transformer_candidate' && f.geometry.type === 'Point');
+  let keep: MapFeature | null = null;
+  if (entrance && boxes.length) {
+    const [ex, ey] = entrance.geometry.coordinates as [number, number];
+    const dist = (f: MapFeature) => {
+      const [x, y] = f.geometry.coordinates as [number, number];
+      return Math.hypot((x - ex) * 82_000, (y - ey) * 111_320);
+    };
+    const best = [...boxes].sort((a, b) => dist(a) - dist(b))[0]!;
+    if (dist(best) <= 40) keep = best;
+  }
+  return features.filter((f) => equipmentTypeOf(f) !== 'pad_mount_transformer_candidate' || f === keep);
+}
