@@ -80,8 +80,16 @@ const MAY_BE_UNCOLLECTED: { keys: LayerKey[]; words: string }[] = [
   { keys: ZONE_TIERS.map((tier) => `zone_${tier}` as const), words: "eligibility zones" },
 ];
 
+const PIN_LABELS: Record<string, string> = {
+  switchboard_location: "(E) MAIN SWITCHBOARD",
+  meter_location: "(E) UTILITY METER",
+  utility_transformer_location: "(E) UTILITY TRANSFORMER",
+};
+
 function pointLabel(feature: MapFeature) {
-  if (feature.kind === "capture_pin") return "Photo, unconfirmed";
+  // A pin placed to mark equipment says what it marks; who placed it, and from what, is in its details.
+  // A photo still waiting for review says so.
+  if (feature.kind === "capture_pin") return PIN_LABELS[feature.field] ?? "Photo, unconfirmed";
   if (feature.kind === "existing_equipment") return feature.label ?? "(E) Existing equipment";
   return feature.label ?? feature.field.replace(/_/g, " ");
 }
