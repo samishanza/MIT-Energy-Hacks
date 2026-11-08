@@ -65,23 +65,26 @@ export function openPortal(deps: CaptureDeps, token: string): LinkRow {
   return { id: String(row.id), siteId: String(row.site_id), expiresAt: String(row.expires_at), uploadsUsed: Number(row.uploads_used), maxUploads: Number(row.max_uploads) };
 }
 
-// What each kind still needs, in words a customer reads: no values, sources, or engineering data.
-const status = (record: RecordVersion, fields: readonly string[], onFile?: string): "needed" | "received" | "confirmed" => {
+// What each kind still needs, in words a customer reads: no values, sources, or engineering data. Received means the
+// customer sent that kind of document (a value public data inferred isn't something they sent); confirmed means a
+// person verified every field it covers.
+const status = (record: RecordVersion, fields: readonly string[], onFile: string | undefined, sent: boolean): "needed" | "received" | "confirmed" => {
   const states = [...fields, ...(onFile ? [onFile] : [])].map((field) => record.values.find((v) => v.field === field)?.state ?? "missing");
   if (states.length && states.every((s) => s === "verified")) return "confirmed";
-  return states.some((s) => s === "inferred" || s === "verified" || s === "conflicting") ? "received" : "needed";
+  return sent ? "received" : "needed";
 };
 
 export function readPortal(deps: CaptureDeps, token: string) {
   const link = openPortal(deps, token);
   const record = latestOrFail(deps, link.siteId);
+  const sentKinds = new Set((db(deps).prepare("SELECT DISTINCT kind FROM portal_uploads WHERE site_id = ?").all(link.siteId) as Row[]).map((row) => String(row.kind)));
   const uploads = (db(deps).prepare("SELECT kind, file_name, received_at, state FROM portal_uploads WHERE link_id = ? ORDER BY received_at").all(link.id) as Row[])
     .map((row) => ({ kind: String(row.kind), fileName: String(row.file_name), receivedAt: String(row.received_at), state: String(row.state) }));
   return {
     address: record.site.address,
     expiresAt: link.expiresAt,
     uploadsLeft: Math.max(0, link.maxUploads - link.uploadsUsed),
-    documents: DOCUMENT_KINDS.map((d) => ({ kind: d.kind, label: d.label, hint: d.hint, status: d.kind === "other" ? (uploads.some((u) => u.kind === "other") ? "received" : "optional") : status(record, d.fields, "onFile" in d ? d.onFile : undefined) })),
+    documents: DOCUMENT_KINDS.map((d) => ({ kind: d.kind, label: d.label, hint: d.hint, status: d.kind === "other" ? (sentKinds.has("other") ? "received" : "optional") : status(record, d.fields, "onFile" in d ? d.onFile : undefined, sentKinds.has(d.kind)) })),
     uploads,
   };
 }

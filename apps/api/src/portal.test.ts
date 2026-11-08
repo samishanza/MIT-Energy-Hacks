@@ -48,6 +48,8 @@ describe("the customer document portal", () => {
     expect(page.address).toMatch(/100 Research Dr/);
     expect(page.documents.map((d) => d.kind)).toEqual(["utility_bill", "switchgear_label", "transformer_nameplate", "electrical_drawings", "other"]);
     expect(page.documents.find((d) => d.kind === "switchgear_label")!.status).toBe("needed");
+    // The utility's name is inferred from public data, but the customer hasn't sent a bill.
+    expect(page.documents.find((d) => d.kind === "utility_bill")!.status).toBe("needed");
     expect(JSON.stringify(page)).not.toMatch(/observation|source|National Grid/);
     // Only a hash of the token is stored.
     expect(JSON.stringify(t.deps.store.db.prepare("SELECT * FROM portal_links").all())).not.toContain(t.token.slice(0, 20));
