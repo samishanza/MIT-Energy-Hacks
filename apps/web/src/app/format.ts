@@ -1,4 +1,4 @@
-import type { FitnessGrade, Method, Observation, ObservedValue, Owner, SourceRun, Value, ValueState } from "@eqore/contract";
+import type { FitnessGrade, Method, Observation, ObservedValue, Owner, Value, ValueState } from "@eqore/contract";
 
 export function formatValue(value: ObservedValue | null | undefined): string {
   if (!value) return "No value yet";
@@ -51,14 +51,6 @@ export const OWNER_WORDS: Record<Owner, string> = {
   customer: "the customer",
   engineer: "the engineer",
   qualified_person: "a qualified person",
-};
-
-export const SOURCE_RUN_WORDS: Record<SourceRun["status"], string> = {
-  pending: "Pending",
-  done: "Done",
-  missing: "Missing",
-  snapshot: "Snapshot",
-  person_only: "Person only",
 };
 
 export const CHECK_WORDS = { agrees: "agrees", disagrees: "disagrees", not_checked: "not checked" } as const;

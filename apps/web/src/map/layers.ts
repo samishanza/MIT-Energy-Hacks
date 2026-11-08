@@ -83,7 +83,7 @@ export function layerOf(feature: MapFeature): LayerKey {
     case "candidate_area":
       {
         const kind = String((feature.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value ?? "");
-        if (kind === "feasible_bess_preferred") return "feasible";
+        if (kind === "feasible_bess_recommended") return "feasible";
         if (kind.startsWith("feasible_bess")) return "feasible_outer";
       }
       return `zone_${zoneTier(feature)}`;

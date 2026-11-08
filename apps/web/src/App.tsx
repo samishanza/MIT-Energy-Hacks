@@ -97,6 +97,20 @@ function saveFile(blob: Blob, name: string) {
 // stays where public data drew it.
 function withVerifiedDimensions(record: RecordVersion) {
   return record.features.map((feature) => {
+    // A main switchboard a person placed is drawn as the existing switchboard it is.
+    if (feature.kind === "capture_pin" && feature.field === "switchboard_location" && feature.geometry.type === "Point") {
+      return {
+        ...feature,
+        kind: "existing_equipment" as const,
+        label: "(E) MAIN SWITCHBOARD",
+        attributes: {
+          ...feature.attributes,
+          equipment_type: { type: "text" as const, value: "service_entrance" },
+          basis: { type: "text" as const, value: "placed by a person" },
+          confidence_reason: { type: "text" as const, value: "Placed by hand from a document or a site visit; the record's switchboard location value carries the source." },
+        },
+      };
+    }
     if (feature.kind !== "dimension_line") return feature;
     const value = record.values.find((v) => v.field === feature.field);
     if (value?.state !== "verified" || value.current?.type !== "quantity" || value.current.unit !== "ft") return feature;
@@ -128,13 +142,14 @@ export function App({ api }: { api: EngineerApi }) {
   const select = (field: string, featureId?: string) => setSelected({ fields: [field], featureId: featureId ?? null });
 
   // Only the most recent request to show a record may land, however the responses are ordered.
+  // A skipped older version must not take the token from a newer request still waiting on its check.
   const showRequest = useRef(0);
   const show = useCallback(
     async (next: RecordVersion) => {
-      showRequest.current += 1;
-      const request = showRequest.current;
       const shown = current.current.record;
       if (shown && shown.site.id === next.site.id && next.version < shown.version) return null;
+      showRequest.current += 1;
+      const request = showRequest.current;
       setRecord(next);
       const nextReport = await api.readReadiness(next.site.id, next.version);
       if (request !== showRequest.current) return null;

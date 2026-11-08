@@ -1,5 +1,5 @@
 import { appendEquipmentLabel } from "./equipment-labels.ts";
-import { mapsKey, streetView, streetViewImage } from "./street-view.ts";
+import { mapsKey, streetView, streetViewImage, streetViewMetadata } from "./street-view.ts";
 import { Hono, type MiddlewareHandler } from "hono";
 import { ENGINEER_PORT, WEB_PORT, routes } from "@eqore/contract";
 import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps } from "./capture.ts";
@@ -77,6 +77,19 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
   });
   // The browser's Google 3D view needs the key. This API only answers the local app.
   app.get("/api/maps-config", (c) => c.json({ key: mapsKey() }));
+  // Not in the contract: a pass-through for the street walk, which picks a panorama per piece of equipment.
+  app.get("/api/street-view/metadata", async (c) => {
+    const key = mapsKey();
+    const lat = Number(c.req.query("lat"));
+    const lng = Number(c.req.query("lng"));
+    if (!key) return c.json({ status: "NO_KEY" });
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return c.json({ status: "INVALID_REQUEST" }, 400);
+    try {
+      return c.json(await streetViewMetadata(deps.fetch, key, lat, lng));
+    } catch {
+      return c.json({ status: "UNREACHABLE" });
+    }
+  });
   // True and false labels on detected equipment, collected for training and measuring the detector.
   app.post("/api/equipment-labels", async (c) => c.json(appendEquipmentLabel(await c.req.json(), deps.now())));
   app.get(routes.readStreetView.path, async (c) => {
@@ -86,8 +99,8 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
   app.get(routes.streetViewImage.path, async (c) => {
     const key = mapsKey();
     if (!key) return c.text("No Google Maps key is configured.", 404);
-    const q = { lat: c.req.query("lat") ?? "", lng: c.req.query("lng") ?? "", heading: c.req.query("heading") ?? "0", pitch: c.req.query("pitch") ?? "0" };
-    if (![q.lat, q.lng, q.heading, q.pitch].every((v) => v !== "" && Number.isFinite(Number(v)))) return c.text("lat, lng, heading, and pitch must be numbers.", 400);
+    const q = { lat: c.req.query("lat") ?? "", lng: c.req.query("lng") ?? "", heading: c.req.query("heading") ?? "0", pitch: c.req.query("pitch") ?? "0", fov: c.req.query("fov") };
+    if (![q.lat, q.lng, q.heading, q.pitch, q.fov ?? "90"].every((v) => v !== "" && Number.isFinite(Number(v)))) return c.text("lat, lng, heading, pitch, and fov must be numbers.", 400);
     return streetViewImage(deps.fetch, key, q);
   });
   app.get(routes.exportKml.path, (c) => {

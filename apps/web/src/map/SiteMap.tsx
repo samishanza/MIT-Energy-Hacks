@@ -2,6 +2,7 @@ import type { BaseMap, MapFeature, Site, Value } from "@eqore/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { plainLabel, workArea, workPoints } from "@eqore/sheets";
 import { equipmentSolids, equipmentTag, polePoints, solidsCollection } from "./equipment3d";
+import { gridPath } from "../app/gridPath";
 import { Google3DView } from "./Google3DView";
 import { declutter, priorityOf, type PlacedLabel } from "./declutter";
 import { symbolSvg } from "./symbols";
@@ -142,6 +143,7 @@ export function SiteMap(props: SiteMapProps) {
 
   const heights = useMemo(() => buildingHeights(features, values), [features, values]);
   const visible = useMemo(() => features.filter((feature) => !hidden.has(layerOf(feature))), [features, hidden]);
+  const trace = useMemo(() => gridPath({ features, values }), [features, values]);
   const isSelected = (feature: MapFeature) =>
     selectedFeatureId ? feature.id === selectedFeatureId : selectedFields.includes(feature.field);
 
@@ -272,7 +274,7 @@ export function SiteMap(props: SiteMapProps) {
 
   const parcel = features.find((feature) => feature.kind === "property_line");
   // Frame again when the battery zone arrives or moves (a placed switchboard moves it), not on every edit.
-  const zone = features.find((f) => f.kind === "candidate_area" && (f.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value === "feasible_bess_preferred");
+  const zone = features.find((f) => f.kind === "candidate_area" && (f.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value === "feasible_bess_recommended");
   const zoneAt = zone ? boundsOf([zone])?.flat().map((v) => v.toFixed(4)).join(",") : "none";
   const frameKey = parcel ? `${parcel.id}:${zoneAt}` : null;
   useEffect(() => {
@@ -282,12 +284,10 @@ export function SiteMap(props: SiteMapProps) {
     const bounds = area ? ([[area[0], area[1]], [area[2], area[3]]] as [[number, number], [number, number]]) : boundsOf([parcel]);
     if (!bounds) return;
     fitted.current = frameKey;
-    // Open turned so the main building runs across the screen, as the site plan draws it.
+    // Open turned so the main building runs across the screen, as the site plan draws it. The work area is
+    // already tight (zone, building, and nearby service), so no extra step in.
     const building = workPoints(features)?.building ?? [];
     map.current?.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 20, bearing: squareBearing(building) });
-    // The tilted view shows more ground than the box it was fitted to, so step in to match.
-    const zoom = map.current?.getZoom?.();
-    if (area && zoom !== undefined) map.current?.setZoom?.(Math.min(zoom + 0.5, 20.5));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameKey, loaded]);
 
@@ -423,6 +423,7 @@ export function SiteMap(props: SiteMapProps) {
           <Google3DView
             features={visible}
             center={site.location}
+            trace={trace}
             onSelect={(field, id) => onSelectRef.current(field, id)}
             onFail={() => {
               setGoogleFailed(true);

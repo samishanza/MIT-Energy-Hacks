@@ -3,6 +3,7 @@ import { observe, type ArcgisFeature, type CollectContext, type PolygonGeometry 
 import type { LidarPoint } from "../ept.ts";
 import { normalizeStreet, streetNameOf } from "../resolve-site.ts";
 import { detectEquipment, type Road } from "./lidar-equipment.ts";
+import { describeShift, estimateShift } from "./lidar-registration.ts";
 
 type Point = [number, number];
 
@@ -14,6 +15,12 @@ export type LidarCollection = { observations: Observation[]; features: MapFeatur
 const FEET = 3.280839895;
 const BASIS = { type: "text" as const, value: "detected (lidar)" };
 const text = (value: string) => ({ type: "text" as const, value });
+
+// TIGER feature classes a distribution line follows: primary, secondary, and local streets. The local roads layer
+// also returns parking-lot roads (S1780), alleys (S1730), private and service drives (S1740, S1640), ramps, and
+// walkways, and a light standard beside a parking aisle isn't a utility pole. A road with no class keeps the test.
+const STREET_CLASSES = new Set(["S1100", "S1200", "S1400"]);
+export const followsStreet = (mtfcc: unknown) => mtfcc === undefined || mtfcc === null || mtfcc === "" || STREET_CLASSES.has(String(mtfcc));
 
 function sideOf(center: Point, point: Point): string {
   const degrees = (Math.atan2(point[0] - center[0], point[1] - center[1]) * 180) / Math.PI;
@@ -66,11 +73,25 @@ export async function collectLidarEquipment(
     .flatMap((feature) => {
       const name = String(feature.attributes[roadName] ?? "unnamed road");
       const lines = (feature.geometry!.type === "LineString" ? [feature.geometry!.coordinates] : feature.geometry!.coordinates) as Point[][];
-      return lines.map((line) => ({ name, line: line.map(local), onAddress: normalizeStreet(name) === street }));
+      const follows = followsStreet(feature.attributes.MTFCC);
+      return lines.map((line) => ({ name, line: line.map(local), onAddress: normalizeStreet(name) === street, street: follows }));
     });
-  const detection = detectEquipment(found.points, buildings.map((polygon) => (polygon.type === "Polygon" ? polygon.coordinates[0]! : polygon.coordinates[0]![0]!).map((point) => local(point as Point))), roads);
+  const outlines = buildings.map((polygon) => (polygon.type === "Polygon" ? polygon.coordinates[0]! : polygon.coordinates[0]![0]!).map((point) => local(point as Point)));
+  // The lidar is registered to the building outlines first, so every position below is in the map's frame.
+  const registration = estimateShift(found.points, outlines);
+  const points = registration.applied ? found.points.map((p) => ({ ...p, x: p.x - registration.dx, y: p.y - registration.dy })) : found.points;
+  const shift = describeShift(registration);
+  const registered = registration.applied
+    ? ` Lidar positions are moved ${shift} to register the lidar to the mapped building outline: ${registration.reason}.`
+    : ` No registration shift is applied (${registration.reason}).`;
+  const detection = detectEquipment(points, outlines, roads);
   const retrievedAt = ctx.now();
-  const shared = (equipment: string, reason: string) => ({ equipment_type: text(equipment), basis: BASIS, confidence_reason: text(reason) });
+  const shared = (equipment: string, reason: string) => ({
+    equipment_type: text(equipment),
+    basis: BASIS,
+    confidence_reason: text(reason + registered),
+    registration_shift_m: text(shift),
+  });
 
   const features: MapFeature[] = [];
   detection.poles.forEach((pole, index) =>
@@ -84,9 +105,12 @@ export async function collectLidarEquipment(
         ...shared(
           "utility_pole",
           pole.inCanopy
-            ? `A compact top ${pole.heightM.toFixed(1)} m up inside a tree's crown, on the line between two wired poles on ${pole.road} that stand about twice the usual span apart.`
-            : `A compact top ${pole.heightM.toFixed(1)} m up with a single-column body below it, ${pole.roadFeet} ft from ${pole.road}, wired to another pole.`,
+            ? `A single column ${pole.heightM.toFixed(1)} m tall inside a tree's crown, on the line between two poles on ${pole.road} that stand about twice the usual span apart, with wire running from it to both.${pole.detection === "inferred" ? " The crown hides its shape, so its place is inferred from the wires." : ""}`
+            : `A compact top ${pole.heightM.toFixed(1)} m up with a single-column body below it, ${pole.roadFeet} ft from ${pole.road}, wired to another pole. Placed at the centre of the column.`,
         ),
+        // An inferred pole's place comes from the wires, not its own shape, so it is labelled inferred, not detected.
+        ...(pole.detection === "inferred" ? { basis: text("inferred") } : {}),
+        detection: text(pole.detection),
         height_ft: { type: "quantity", value: Math.round(pole.heightM * FEET), unit: "ft" },
         in_canopy: { type: "boolean", value: pole.inCanopy },
       },
@@ -139,7 +163,7 @@ export async function collectLidarEquipment(
       method: "computed",
       sourceDate: config.sourceDate,
       grade: "reference",
-      reason: "Found by shape in public lidar, which doesn't label poles or wires. Each is a detection to confirm in the field.",
+      reason: `Found by shape in public lidar, which doesn't label poles or wires. Each is a detection to confirm in the field.${registered}`,
     }),
   );
 
@@ -189,7 +213,7 @@ export async function collectLidarEquipment(
         method: "computed",
         sourceDate: config.sourceDate,
         grade: "reference",
-        reason: `${why} Detected in public lidar, not field verified; the utility confirms the service.`,
+        reason: `${why} Detected in public lidar, not field verified; the utility confirms the service.${registered}`,
       }),
     );
   }

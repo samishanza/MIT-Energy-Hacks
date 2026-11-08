@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { EngineerApi } from "../api";
 import { inFront, onImage, projectPoint, type StreetCamera } from "../app/streetProjection";
 import { equipmentSolids, equipmentTag, overheadWires, type Solid } from "../map/equipment3d";
+import { StreetWalk } from "./StreetWalk";
 
 // One street-level photo facing the grid connection, with each piece of equipment drawn where it
 // stands: its true-size outline projected into the photo, so a pole is outlined along its height
@@ -14,7 +15,7 @@ type Item = { featureId: string; name: string; isNew: boolean; outline: string[]
 const RED = "#ff3b30";
 const BLUE = "#3d8bff";
 
-function itemsInPhoto(features: MapFeature[], camera: StreetCamera): { items: Item[]; wires: string[] } {
+export function itemsInPhoto(features: MapFeature[], camera: StreetCamera): { items: Item[]; wires: string[] } {
   const byFeature = new Map<string, Solid[]>();
   for (const s of equipmentSolids(features)) {
     // Wires are drawn as lines below, not as items.
@@ -71,7 +72,25 @@ function itemsInPhoto(features: MapFeature[], camera: StreetCamera): { items: It
   return { items: items.filter((i) => i.distanceFt <= 400).sort((a, b) => a.distanceFt - b.distanceFt).slice(0, 8), wires };
 }
 
+/** The interactive walk along the path to the grid, or the single annotated photo. */
 export function StreetViewPanel({ api, record }: { api: EngineerApi; record: RecordVersion }) {
+  const [mode, setMode] = useState<"walk" | "photo">("walk");
+  return (
+    <section className="street-view" aria-label="Street view">
+      <div className="street-modes" role="tablist" aria-label="Street view mode">
+        <button type="button" role="tab" aria-selected={mode === "walk"} className={mode === "walk" ? "on" : ""} onClick={() => setMode("walk")}>
+          Walk to the grid
+        </button>
+        <button type="button" role="tab" aria-selected={mode === "photo"} className={mode === "photo" ? "on" : ""} onClick={() => setMode("photo")}>
+          Annotated photo
+        </button>
+      </div>
+      {mode === "walk" ? <StreetWalk record={record} /> : <StreetPhoto api={api} record={record} />}
+    </section>
+  );
+}
+
+function StreetPhoto({ api, record }: { api: EngineerApi; record: RecordVersion }) {
   const [view, setView] = useState<StreetView | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [picked, setPicked] = useState<Item | null>(null);
@@ -98,9 +117,9 @@ export function StreetViewPanel({ api, record }: { api: EngineerApi; record: Rec
   if (!view) return <p className="note street-note">Finding the street photo facing the grid connection…</p>;
   if (view.status === "unavailable" || !drawn) {
     return (
-      <section className="street-view" aria-label="Street view">
+      <div className="street-photo">
         <p className="street-unavailable">Street view isn't available: {view.status === "unavailable" ? view.reason : ""}</p>
-      </section>
+      </div>
     );
   }
 
@@ -120,7 +139,7 @@ export function StreetViewPanel({ api, record }: { api: EngineerApi; record: Rec
       .map((m, i) => ({ m, x: side === "left" ? 6 : width - BOX_W - 6, y: 8 + i * (BOX_H + 5), side })),
   );
   return (
-    <section className="street-view" aria-label="Street view">
+    <div className="street-photo">
       <p className="street-caption">
         Facing {plainLabel(view.target).toLowerCase()} · photo {view.pano.date ?? "date not given"} · Imagery © Google
       </p>
@@ -174,6 +193,6 @@ export function StreetViewPanel({ api, record }: { api: EngineerApi; record: Rec
           camera shift an outline by a few pixels.
         </p>
       </details>
-    </section>
+    </div>
   );
 }

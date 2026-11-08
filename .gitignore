@@ -29,3 +29,6 @@ uploads/
 
 # Plan-set drawings aligned onto the map (customer documents)
 apps/web/public/private/
+
+# Ground truth read off customer plan sets
+private/

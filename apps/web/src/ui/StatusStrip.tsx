@@ -1,4 +1,4 @@
-import { CONCEPT_GRADE_NOTE, type ReadinessReport, type RecordVersion, type RunProgress } from "@eqore/contract";
+import { type ReadinessReport, type RecordVersion, type RunProgress } from "@eqore/contract";
 import { conflictCounts, factsFound, gridRequestLine, isFound, verifiedCount } from "../app/facts";
 import { ProvenanceTag } from "./marks";
 
@@ -27,13 +27,12 @@ function unverified(record: RecordVersion): string {
     : `${counted(verified, "value", "values")} verified by a person. Everything else is unverified.`;
 }
 
-/** One line: what this is, what the data is, and progress while a run is reading sources. */
+/** One line: what the data is, and progress while a run is reading sources. */
 export function StatusStrip({ record, progress, running }: StatusStripProps) {
   const hasReal = record ? record.values.some((value) => !value.synthetic && isFound(value)) : false;
   const answered = progress?.sourceRuns.filter((run) => run.status !== "pending").length ?? 0;
   return (
     <section className="status-strip" aria-label="Site status">
-      <p className="concept-note">{CONCEPT_GRADE_NOTE} Based on public data.</p>
       {record && !running ? (
         <p className="labels">
           {hasReal ? <ProvenanceTag synthetic={false} /> : null}

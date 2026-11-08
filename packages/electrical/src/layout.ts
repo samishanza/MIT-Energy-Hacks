@@ -94,6 +94,7 @@ export function conceptSiteLayout(record: RecordVersion, breakerLabel = "NEW BRE
   const pad = zone.pad;
   return [
     ...(zone.zone ? [zone.zone] : []),
+    ...(zone.recommended ? [zone.recommended] : []),
     ...(zone.preferred ? [zone.preferred] : []),
     ...(zone.remote ? [zone.remote] : []),
     {
