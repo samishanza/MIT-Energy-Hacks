@@ -61,13 +61,13 @@ function closest(first: Segment[], second: Segment[]): { from: Point; to: Point;
 
 const isEntrance = (feature: MapFeature) => feature.attributes?.equipment_type?.type === "text" && feature.attributes.equipment_type.value === "service_entrance";
 
-export type ShortestRun = { from: Point; to: Point; feet: number; target: "inferred service entrance" | "nearest building wall" | "building wall nearest the utility supply" };
+export type ShortestRun = { from: Point; to: Point; feet: number; target: "placed main switchboard" | "inferred service entrance" | "nearest building wall" | "building wall nearest the utility supply" };
 
 // The shortest plausible run: from the best pad in the feasible zone to where the service likely enters, in a
 // straight line. Without a lot to build the zone from, from the nearest open ground instead.
 export function shortestRun(record: RecordVersion): ShortestRun | null {
   const zone = feasibleBessZone(record);
-  if (zone.pad) return { from: zone.pad.run.from, to: zone.pad.run.to, feet: zone.pad.run.feet, target: zone.target === "service entrance" ? "inferred service entrance" : zone.target === "building wall" ? "nearest building wall" : "building wall nearest the utility supply" };
+  if (zone.pad) return { from: zone.pad.run.from, to: zone.pad.run.to, feet: zone.pad.run.feet, target: zone.target === "main switchboard" ? "placed main switchboard" : zone.target === "service entrance" ? "inferred service entrance" : zone.target === "building wall" ? "nearest building wall" : "building wall nearest the utility supply" };
   if (zone.reason && !zone.reason.startsWith("The record has no lot")) return null;
   const open = record.features.filter((feature) => feature.kind === "candidate_area");
   const entrance = record.features.find(isEntrance);

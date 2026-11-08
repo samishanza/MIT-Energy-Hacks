@@ -106,6 +106,22 @@ describe("where the battery should go", () => {
     expect(Math.hypot(x - 380, y - 250)).toBeLessThan(60);
   });
 
+  it("measures from a main switchboard a person placed, ahead of the assumed wall", () => {
+    const placed = feature("pin", "capture_pin", "switchboard_location", { type: "Point", coordinates: ll([210, 160]) });
+    const { preferred, target } = feasibleBessZone(site([pole(380, 300), placed]));
+    expect(target).toBe("main switchboard");
+    for (const [x, y] of pointsOf(preferred!)) expect(Math.hypot(x - 210, y - 160)).toBeLessThanOrEqual(PREFERRED_STRAIGHT_FT + 4);
+  });
+
+  it("puts the pad on unpaved ground when paved parking surrounds the entrance", () => {
+    // Paving covers everything within 40 ft of the west wall; grass lies beyond it.
+    const paving = feature("paved", "constraint", "paved_area_sqft", { type: "Polygon", coordinates: [box(150, 100, 200, 300)] });
+    const { pad } = feasibleBessZone(site([entrance(200, 200), paving]));
+    const [x] = feetOf(pad!.center);
+    expect(x).toBeLessThan(150);
+    expect(pad!.run.feet).toBeLessThanOrEqual(150);
+  });
+
   it("falls back to every wall when there's no entrance and no supply nearby", () => {
     expect(feasibleBessZone(site()).target).toBe("building wall");
   });
