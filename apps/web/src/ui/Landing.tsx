@@ -4,12 +4,12 @@ import { Icon } from "./icons";
 // The first screen, before any site is open: the wordmark, one line on what the tool does, the
 // address field, and the demo sites as rows. Every claim here is something the tool does now.
 
-export const DEMO_SITES: { address: string; note: string }[] = [
-  { address: "79 Lowland St, Holliston, MA 01746", note: "Engineered plan set on file" },
-  { address: "299 Vassar St, Cambridge, MA 02139", note: "MIT · Planning Board utility plan and city permits on file" },
-  { address: "71 McKeon Rd, Worcester, MA 01610", note: "City bid drawings on file" },
-  { address: "76 East Worcester St, Worcester, MA 01604", note: "City bid drawings on file" },
-  { address: "26 Albany St, Worcester, MA 01604", note: "City bid drawings on file" },
+export const DEMO_SITES: { address: string }[] = [
+  { address: "79 Lowland St, Holliston, MA 01746" },
+  { address: "299 Vassar St, Cambridge, MA 02139" },
+  { address: "71 McKeon Rd, Worcester, MA 01610" },
+  { address: "76 East Worcester St, Worcester, MA 01604" },
+  { address: "26 Albany St, Worcester, MA 01604" },
 ];
 
 export function Landing({ form, onTry, disabled }: { form: ReactNode; onTry: (address: string) => void; disabled: boolean }) {
@@ -36,7 +36,6 @@ export function Landing({ form, onTry, disabled }: { form: ReactNode; onTry: (ad
             <button key={site.address} type="button" className="try" disabled={disabled} onClick={() => onTry(site.address)}>
               <span className="try__n">{String(i + 1).padStart(2, "0")}</span>
               <span className="try__a">{site.address.replace(/, MA \d{5}$/, "")}</span>
-              <span className="try__t">{site.note}</span>
               <Icon name="arrow" small />
             </button>
           ))}
