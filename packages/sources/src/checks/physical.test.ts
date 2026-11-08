@@ -222,3 +222,13 @@ describe("finding the parcel quickly", () => {
     expect(searched).toEqual(["location"]);
   });
 });
+
+describe("an assessor's address range", () => {
+  it("takes a street number inside a lot's range as that lot", async () => {
+    const { sameAddress } = await import("../resolve-site.ts");
+    expect(sameAddress("229-299 VASSAR ST", "299 VASSAR ST")).toBe(true);
+    expect(sameAddress("229-299 VASSAR ST", "250 VASSAR ST")).toBe(true);
+    expect(sameAddress("229-299 VASSAR ST", "301 VASSAR ST")).toBe(false);
+    expect(sameAddress("229-299 VASSAR ST", "299 MAIN ST")).toBe(false);
+  });
+});

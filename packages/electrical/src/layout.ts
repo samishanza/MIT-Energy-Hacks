@@ -61,7 +61,7 @@ function closest(first: Segment[], second: Segment[]): { from: Point; to: Point;
 
 const isEntrance = (feature: MapFeature) => feature.attributes?.equipment_type?.type === "text" && feature.attributes.equipment_type.value === "service_entrance";
 
-export type ShortestRun = { from: Point; to: Point; feet: number; target: "placed main switchboard" | "inferred service entrance" | "nearest building wall" | "building wall nearest the utility transformer" | "building wall nearest the utility supply" };
+export type ShortestRun = { from: Point; to: Point; feet: number; target: "placed main switchboard" | "inferred service entrance" | "nearest building wall" | "building wall nearest the utility transformer" | "building wall nearest the likeliest transformer" | "building wall nearest the utility supply" };
 
 // The shortest plausible run: from the best pad in the feasible zone to where the service likely enters, in a
 // straight line. Without a lot to build the zone from, from the nearest open ground instead.

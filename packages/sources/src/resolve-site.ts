@@ -215,6 +215,16 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
   return { status: "needs_choice", candidates: parcels.map((parcel) => parcelCandidate(parcel, lookup)) };
 }
 
+// An assessor often writes a building's lot as a range, "229-299 VASSAR ST"; 299 Vassar St is on it.
+export function sameAddress(assessor: string, typed: string): boolean {
+  if (assessor === typed) return true;
+  const range = /^(\d+)-(\d+)\s+(.+)$/.exec(assessor);
+  const one = /^(\d+)\s+(.+)$/.exec(typed);
+  if (!range || !one || range[3] !== one[2]) return false;
+  const [lo, hi, n] = [Number(range[1]), Number(range[2]), Number(one[1])];
+  return n >= Math.min(lo, hi) && n <= Math.max(lo, hi);
+}
+
 async function parcelNearGeocode(address: string, parsed: ParsedAddress, region: RegionConfig, lookup: ParcelLookup, ctx: CollectContext): Promise<ResolveResult | null> {
   const geocode = await geocodeAddress(address, ctx);
   if (geocode.failure || geocode.matches.length !== 1) return null;
@@ -223,7 +233,7 @@ async function parcelNearGeocode(address: string, parsed: ParsedAddress, region:
   if (nearby.failure) return null;
   const town = (region.villages?.[parsed.city] ?? parsed.city).toUpperCase();
   const matching = distinctParcels(nearby.features, lookup).filter(
-    (parcel) => hasPolygon(parcel) && streetOf(parcel.attributes[lookup.addressAttribute]) === parsed.street && String(parcel.attributes[lookup.cityAttribute] ?? "").toUpperCase() === town,
+    (parcel) => hasPolygon(parcel) && sameAddress(streetOf(parcel.attributes[lookup.addressAttribute]), parsed.street) && String(parcel.attributes[lookup.cityAttribute] ?? "").toUpperCase() === town,
   );
   return matching.length === 1 ? { status: "resolved", anchor: { kind: "parcel", parcel: matching[0]!, lookup: nearby } } : null;
 }
