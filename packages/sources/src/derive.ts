@@ -121,6 +121,14 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
   const conflictKindFor = (): Value["conflictKind"] =>
     definition.comparison?.kind !== "candidates" ? "source_disagreement" : definition.field === "feeder" ? "feeder_candidates" : "listed_candidates";
 
+  // What each source said before the last time a person verified this value. Re-running a site reads the
+  // same source again; saying the same thing the person already weighed is not new evidence.
+  // Observations come oldest first, so "before" is their order, which also holds when clocks tie.
+  const lastVerified = observations.map((o) => o.kind).lastIndexOf("verification");
+  const weighed = observations.slice(0, Math.max(0, lastVerified)).filter((o) => o.kind === "reading" && o.value);
+  const alreadyWeighed = (observation: Observation) =>
+    weighed.some((earlier) => earlier.source.id === observation.source.id && agrees(definition, earlier.value!, observation.value!));
+
   for (const observation of withoutSuperseded(observations)) {
     const identity = identityKey(observation);
     const repeat = seen.has(identity);
@@ -179,7 +187,7 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
           if (!candidates.some((candidate) => agrees(definition, candidate.value, observation.value!))) {
             addCandidate(observation);
           }
-        } else if (state === "verified" && current && !agrees(definition, current, observation.value)) {
+        } else if (state === "verified" && current && !agrees(definition, current, observation.value) && !alreadyWeighed(observation)) {
           // Newer evidence disagrees. The verifier's record stays on the value.
           state = "conflicting";
           conflictKind = conflictKindFor();

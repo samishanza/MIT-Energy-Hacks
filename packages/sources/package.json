@@ -11,6 +11,7 @@
     "@eqore/geom": "^0.1.0",
     "@google/earthengine": "^1.7.51",
     "@turf/turf": "^7.4.0",
+    "jpeg-js": "^0.4.4",
     "laz-perf": "^0.0.7",
     "zod": "^4.6.7"
   },

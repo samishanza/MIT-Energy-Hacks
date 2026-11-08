@@ -123,3 +123,31 @@ describe("a later run that looked and found nothing", () => {
     expect(value.state).toBe("inferred");
   });
 });
+
+describe("a value a person verified", () => {
+  const at = (o: Observation, time: string, value?: string): Observation => ({ ...o, retrievedAt: time, ...(value ? { value: { type: "text" as const, value } } : {}) });
+  const verified = (time: string, text: string): Observation => ({
+    ...reading("v", "lot_note", text),
+    kind: "verification",
+    retrievedAt: time,
+    source: { id: "person", name: "Engineer review", kind: "human_evidence", dataOrigin: "real" },
+    identity: { sourceId: "person", query: "v", contentHash: `v-${time}` },
+    method: "person_entered",
+    verification: { verifierName: "Engineer", verifiedAt: time, evidence: [{ kind: "document", description: "Plan set" }] },
+  } as Observation);
+  const def = { ...definition("lot_note"), comparison: undefined } as FieldDefinition;
+
+  it("stays verified when a re-run reads the same public value the person already weighed", () => {
+    const first = at(reading("p1", "lot_note", "59.6"), "2026-11-07T10:00:00Z");
+    const rerun = { ...at(reading("p2", "lot_note", "59.6"), "2026-11-07T12:00:00Z"), locator: { query: "p1" }, identity: { sourceId: "source", query: "p1", contentHash: "p2" } };
+    const value = deriveValue(def, [first, verified("2026-11-07T11:00:00Z", "50.7"), rerun]);
+    expect(value.state).toBe("verified");
+    expect(value.current).toEqual({ type: "text", value: "50.7" });
+  });
+
+  it("opens a conflict again when the source says something new", () => {
+    const first = at(reading("p1", "lot_note", "59.6"), "2026-11-07T10:00:00Z");
+    const changed = { ...at(reading("p2", "lot_note", "61.0"), "2026-11-07T12:00:00Z"), locator: { query: "p1" }, identity: { sourceId: "source", query: "p1", contentHash: "p2" } };
+    expect(deriveValue(def, [first, verified("2026-11-07T11:00:00Z", "50.7"), changed]).state).toBe("conflicting");
+  });
+});

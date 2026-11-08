@@ -246,8 +246,10 @@ export function SiteMap(props: SiteMapProps) {
   }, [visible, loaded]);
 
   const parcel = features.find((feature) => feature.kind === "property_line");
-  const zoneReady = features.some((f) => f.kind === "candidate_area" && String((f.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value ?? "").startsWith("feasible_bess"));
-  const frameKey = parcel ? `${parcel.id}:${zoneReady}` : null;
+  // Frame again when the battery zone arrives or moves (a placed switchboard moves it), not on every edit.
+  const zone = features.find((f) => f.kind === "candidate_area" && (f.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value === "feasible_bess_preferred");
+  const zoneAt = zone ? boundsOf([zone])?.flat().map((v) => v.toFixed(4)).join(",") : "none";
+  const frameKey = parcel ? `${parcel.id}:${zoneAt}` : null;
   useEffect(() => {
     if (!loaded || !parcel || !frameKey || fitted.current === frameKey) return;
     // Frame the building, its electrical service, and the battery area, not the whole parcel.
