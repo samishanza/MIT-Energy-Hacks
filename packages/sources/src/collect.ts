@@ -10,7 +10,7 @@ import { measureSite, type Measurements } from "./checks/measure.ts";
 import { anchorPhysical, collectOutlines } from "./checks/physical.ts";
 import { boxOf, verticesOf } from "./geometry.ts";
 import { collectEarthEngine, earthEngineMissing, IMAGERY_SOURCE, LAND_COVER_SOURCE, TERRAIN_SOURCE } from "./earthengine.ts";
-import { collectJson } from "./json-api.ts";
+import { appliesTo, collectJson } from "./json-api.ts";
 import { collectLayer } from "./layers.ts";
 import { sourceOf, type NamedRoute, type RegionConfig } from "./registry.ts";
 import { parseAddress, type SiteAnchor } from "./resolve-site.ts";
@@ -164,7 +164,8 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   }
   if (region.roads && parcel) pending(region.roads.entry.id, region.roads.entry.name);
   for (const layer of region.layers ?? []) pending(layer.entry.id, layer.entry.name);
-  for (const json of region.jsonSources ?? []) pending(json.id, json.name);
+  const jsonSources = (region.jsonSources ?? []).filter((source) => appliesTo(source, address));
+  for (const json of jsonSources) pending(json.id, json.name);
   if (region.territories) pending(region.territories.entry.id, region.territories.entry.name);
   if (region.lidarPoints && ctx.readLidar && region.buildings && physical.parcelGeometry) pending(region.lidarPoints.source.id, region.lidarPoints.source.name);
   if (region.earthEngine) {
@@ -206,7 +207,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
     collectGrid(region, physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] }, ctx).then(landed),
     roadsRead,
     Promise.all((region.layers ?? []).map((layer) => collectLayer(layer, layerAnchor, address, ctx).then(landed))),
-    Promise.all((region.jsonSources ?? []).map((source) => collectJson(source, request, ctx).then(landed))),
+    Promise.all(jsonSources.map((source) => collectJson(source, request, ctx).then(landed))),
     collectSlope(region, physical.parcelGeometry, ctx).then((part) => (part ? landed(part) : null)),
     region.territories
       ? queryTerritories(region.territories, physical.location, ctx).then((result) => {

@@ -1,5 +1,6 @@
 import type { ArcgisEntry, FeederDetail, RegionConfig } from "../src/registry.ts";
 import { censusLocalRoads } from "./census-roads.ts";
+import { cambridgeElectricalPermits, somervilleElectricalPermits } from "../src/checks/permits.ts";
 import { hifldTerritories, hifldTransmission, usgsPointElevation } from "./national.ts";
 
 const NATIONAL_GRID = "https://systemdataportal.nationalgrid.com/arcgis/rest/services/MASDP";
@@ -355,7 +356,7 @@ export const massachusetts: RegionConfig = {
       },
     },
   ],
-  jsonSources: [usgsPointElevation],
+  jsonSources: [usgsPointElevation, cambridgeElectricalPermits, somervilleElectricalPermits],
   lidarSlope: {
     sourceDate: "2013 to 2021",
     source: {
