@@ -120,6 +120,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   const segments = utilityLines.filter((f) => lineClassOf(f) === 'segment');
   const transmission = utilityLines.filter((f) => lineClassOf(f) === 'transmission');
   const servicePaths = utilityLines.filter((f) => lineClassOf(f) === 'service');
+  const detectedLines = utilityLines.filter((f) => lineClassOf(f) === 'detected');
   const trenches = utilityLines.filter((f) => attributeText(f, 'basis') === 'CONCEPT');
   const equipment = record.features
     .filter((f) => f.kind === 'existing_equipment' && f.geometry.type === 'Point' && attributeText(f, 'basis') !== 'CONCEPT')
@@ -204,12 +205,27 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
   // How the building likely connects: inferred from the nearest mapped line, never field verified.
   for (const e of equipment) {
-    const words = (e.f.label ?? '').toUpperCase().replace(/, INFERRED, NOT FIELD VERIFIED$/, '');
-    callouts.push({ anchor: e.at, lines: [words, 'INFERRED FROM PUBLIC DATA, NOT FIELD VERIFIED'], color: UTILITY });
+    if (e.type === 'UTILITY_POLE') continue;
+    const detected = /LIDAR/.test(attributeText(e.f, 'basis') ?? '');
+    const words = (e.f.label ?? '').toUpperCase().replace(/, (INFERRED|DETECTED IN LIDAR), NOT FIELD VERIFIED$/, '');
+    callouts.push({ anchor: e.at, lines: [words, detected ? 'DETECTED IN PUBLIC LIDAR, NOT FIELD VERIFIED' : 'INFERRED FROM PUBLIC DATA, NOT FIELD VERIFIED'], color: UTILITY });
   }
   for (const s of servicePaths) {
     const at = firstInside(linesOf(s).flatMap(sheetLine), view, 0.5);
-    if (at) callouts.push({ anchor: at, lines: [`(E) LIKELY SERVICE PATH, ±${attributeText(s, 'distance_ft') ?? '?'}`, 'INFERRED, NOT FIELD VERIFIED'], color: UTILITY });
+    const drop = attributeText(s, 'line_class') === 'DETECTED SERVICE DROP';
+    if (at)
+      callouts.push({
+        anchor: at,
+        lines: drop
+          ? [`(E) OVERHEAD SERVICE DROP, ±${attributeText(s, 'distance_ft') ?? attributeText(s, 'length_ft') ?? '?'}`, 'DETECTED IN PUBLIC LIDAR, NOT FIELD VERIFIED']
+          : [`(E) LIKELY SERVICE PATH, ±${attributeText(s, 'distance_ft') ?? '?'}`, 'INFERRED, NOT FIELD VERIFIED'],
+        color: UTILITY,
+      });
+  }
+  const poles = equipment.filter((e) => e.type === 'UTILITY_POLE');
+  if (poles.length) {
+    const first = poles[0]!;
+    callouts.push({ anchor: first.at, lines: [`(E) UTILITY POLES (${poles.length}), DETECTED IN LIDAR`, 'NUMBERS AND OWNER NOT PUBLIC, NOT FIELD VERIFIED'], color: UTILITY });
   }
   const shownTransmission = transmission
     .map((t) => ({ t, at: firstInside(linesOf(t).flatMap(sheetLine), view) }))
@@ -403,6 +419,22 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             ),
           )}
 
+          {detectedLines.map((d, i) =>
+            linesOf(d).map((line, j) => {
+              const pts = sheetLine(line);
+              const ordered = pts[0]!.x <= pts.at(-1)!.x ? pts : [...pts].reverse();
+              const id = `det-${i}-${j}`;
+              return (
+                <g key={id}>
+                  <path id={id} d={path(ordered, false)} fill="none" stroke={UTILITY} strokeWidth={1.8} />
+                  <text fontSize={15} fontWeight={700} fill={UTILITY} stroke="#fff" strokeWidth={6} paintOrder="stroke" dy={5}>
+                    <textPath href={`#${id}`} startOffset="40%">OHE</textPath>
+                  </text>
+                </g>
+              );
+            }),
+          )}
+
           {servicePaths.map((sp, i) =>
             linesOf(sp).map((line, j) => (
               <path key={`svc-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={UTILITY} strokeWidth={3.5} strokeDasharray="14 10" />
@@ -413,7 +445,15 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             <SubstationSymbol key={`sub-${i}`} at={s.at} proposed={s.proposed} />
           ))}
 
-          {equipment.map((e, i) => (e.type === 'SERVICE_TAP' ? <TransformerSymbol key={`eq-${i}`} at={e.at} inferred /> : <SwitchgearSymbol key={`eq-${i}`} at={e.at} inferred />))}
+          {equipment.map((e, i) =>
+            e.type === 'UTILITY_POLE' ? (
+              <PoleSymbol key={`eq-${i}`} at={e.at} />
+            ) : e.type === 'SERVICE_TAP' || e.type === 'PAD_MOUNT_TRANSFORMER_CANDIDATE' ? (
+              <TransformerSymbol key={`eq-${i}`} at={e.at} inferred />
+            ) : (
+              <SwitchgearSymbol key={`eq-${i}`} at={e.at} inferred />
+            ),
+          )}
 
           {buildings.map((b, i) => (
             <path key={`bldg-${i}`} d={path(b.sheet)} fill="#fff" fillOpacity={0.35} stroke={INK} strokeWidth={3} />
@@ -668,6 +708,16 @@ function FallArrow({ at, degrees, text }: { at: Pt; degrees: number; text: strin
   );
 }
 
+/** Utility pole, as the samples' legend draws it: a circle within a circle. */
+function PoleSymbol({ at }: { at: Pt }) {
+  return (
+    <g>
+      <circle cx={at.x} cy={at.y} r={13} fill="#fff" stroke={UTILITY} strokeWidth={2.5} />
+      <circle cx={at.x} cy={at.y} r={5} fill={UTILITY} />
+    </g>
+  );
+}
+
 /** The concept BESS pad at true size: about 11.5 x 14 ft, the plan set's pad. */
 function PadSymbol({ at, k }: { at: Pt; k: number }) {
   const w = Math.max(14 * k, 18);
@@ -897,6 +947,7 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
     { label: '(E) LIKELY SERVICE PATH, INFERRED', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} strokeDasharray="14 10" /> },
     { label: '(N) BESS PAD, CONCEPT LOCATION, NOT A DESIGN', symbol: (sx, sy) => <PadSymbol at={{ x: sx + 90, y: sy }} k={1.6} /> },
     { label: '(N) TRENCH ROUTE, CONCEPT (STRAIGHT LINE)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" /> },
+    { label: '(E) UTILITY POLE, DETECTED IN LIDAR', symbol: (sx, sy) => <PoleSymbol at={{ x: sx + 90, y: sy }} /> },
     { label: '(E) TRANSFORMER, DASHED WHERE INFERRED', symbol: (sx, sy) => <TransformerSymbol at={{ x: sx + 90, y: sy + 2 }} inferred /> },
     { label: '(E) SERVICE ENTRANCE / SWITCHGEAR, DASHED WHERE INFERRED', symbol: (sx, sy) => <SwitchgearSymbol at={{ x: sx + 90, y: sy }} inferred /> },
     {
