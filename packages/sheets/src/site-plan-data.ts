@@ -285,6 +285,8 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
           labels[f.id] = `(E) ${attributeText(f, 'line_voltage') ?? ''} TRANSMISSION`.replace('  ', ' ');
         } else if (cls === 'service') {
           labels[f.id] = '(E) LIKELY SERVICE PATH, INFERRED';
+        } else if (attributeText(f, 'basis') === 'CONCEPT') {
+          labels[f.id] = `(N) TRENCH ROUTE, CONCEPT, ±${attributeText(f, 'distance_ft') ?? '?'}`;
         }
         break;
       }

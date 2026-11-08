@@ -54,7 +54,7 @@ describe('site plan data', () => {
 });
 
 describe('the engineering site plan', () => {
-  it('draws a G-100 sheet with its notes, legend, data table, and no proposed equipment', () => {
+  it('draws a G-100 sheet with its notes, legend, and data table, and no equipment the record does not hold', () => {
     const html = renderToStaticMarkup(createElement(EngineeringSitePlan, { record: record(), aerial: false }));
     expect(html).toContain('OVERALL SITE PLAN');
     expect(html).toContain('G-100');
@@ -63,7 +63,8 @@ describe('the engineering site plan', () => {
     expect(html).toContain('SITE DATA (PUBLIC RECORDS)');
     expect(html).toContain('NOT FOR CONSTRUCTION');
     expect(html).toContain('(E) PROPERTY LINE');
-    expect(html).not.toMatch(/\(N\)/);
+    // Without a concept layout in the record, the pad appears only in the legend.
+    expect(html.match(/\(N\) BESS PAD/g) ?? []).toHaveLength(1);
   });
 
   it('says so instead of drawing when the record has no lot', () => {

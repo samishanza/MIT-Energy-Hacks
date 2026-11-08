@@ -8,6 +8,7 @@ import { ElectricalSheet } from "./panels/ElectricalSheet";
 import { EvidencePanel } from "./panels/EvidencePanel";
 import { FactsPanel } from "./panels/FactsPanel";
 import { EngineeringSitePlan, featureLabels } from "@eqore/sheets";
+import { conceptSiteLayout } from "@eqore/electrical";
 import { Menu } from "./ui/Menu";
 import { RecordSummary, StatusStrip } from "./ui/StatusStrip";
 
@@ -237,7 +238,9 @@ export function App({ api }: { api: EngineerApi }) {
   const live = running && progress?.site ? progress : null;
   const mapSite = live?.site ?? record?.site;
   const dockOpen = !live && selected.fields.length > 0;
-  const labels = useMemo(() => (record && !live ? featureLabels(record) : undefined), [record, live]);
+  // The concept layout is drawn from the record each time, never stored, so a re-run can't carry a stale one.
+  const drawn = useMemo(() => (record ? { ...record, features: [...record.features, ...conceptSiteLayout(record)] } : null), [record]);
+  const labels = useMemo(() => (drawn && !live ? featureLabels(drawn) : undefined), [drawn, live]);
   const pick = (close: () => void) => (field: string) => {
     select(field);
     close();
@@ -368,13 +371,13 @@ export function App({ api }: { api: EngineerApi }) {
             {view === "electrical" && record && !live ? (
               <ElectricalSheet record={record} />
             ) : view === "sheet" && record && !live ? (
-              <EngineeringSitePlan record={record} />
+              <EngineeringSitePlan record={drawn ?? record} />
             ) : (
               <SiteMap
                 key={mapSite.id}
                 site={mapSite}
                 baseMap={record?.site.id === mapSite.id ? record.baseMap : null}
-                features={live ? live.features : (record?.features ?? [])}
+                features={live ? live.features : (drawn?.features ?? [])}
                 values={live ? [] : (record?.values ?? [])}
                 loading={Boolean(live)}
                 selectedFields={live ? [] : selected.fields}
