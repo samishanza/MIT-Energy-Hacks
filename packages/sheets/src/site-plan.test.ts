@@ -71,8 +71,8 @@ describe('the engineering site plan', () => {
     expect(html).toContain('SITE DATA (PUBLIC RECORDS)');
     expect(html).toContain('NOT FOR CONSTRUCTION');
     expect(html).toContain('(E) PROPERTY LINE');
-    // Without a concept layout in the record, the pad appears only in the legend.
-    expect(html.match(/\(N\) BESS PAD/g) ?? []).toHaveLength(1);
+    // Without a concept layout in the record there is no pad, and the legend lists only what is drawn.
+    expect(html.match(/\(N\) BESS PAD/g) ?? []).toHaveLength(0);
   });
 
   it('says so instead of drawing when the record has no lot', () => {
