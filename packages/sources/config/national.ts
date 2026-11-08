@@ -25,6 +25,8 @@ export const hifldTransmission: ArcgisEntry = {
 
 export const hifldTerritories: Omit<TerritorySource, "withoutMap"> = {
   nameAttribute: "NAME",
+  customersAttribute: "CUSTOMERS",
+  areaAttribute: "Shape__Area",
   // Only names checked against the companies' own filings: NSTAR Electric does business as Eversource,
   // Massachusetts Electric and Nantucket Electric as National Grid, Fitchburg Gas and Electric Light as Unitil.
   commonNames: {
@@ -46,7 +48,7 @@ export const hifldTerritories: Omit<TerritorySource, "withoutMap"> = {
     objectIdAttribute: "ID",
     attributesOnly: true,
     sourceDate: { attribute: "SOURCEDATE", format: "epoch_ms" },
-    outFields: ["ID", "NAME", "TYPE", "SOURCEDATE"],
+    outFields: ["ID", "NAME", "TYPE", "CUSTOMERS", "Shape__Area", "SOURCEDATE"],
     fields: [],
   },
 };

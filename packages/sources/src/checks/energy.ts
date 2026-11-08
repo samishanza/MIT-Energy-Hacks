@@ -5,7 +5,7 @@ import type { TerritorySource } from "../registry.ts";
 // What each configured grid source found, so the territory can be settled and a missing feeder explained.
 export type GridOutcome = { utilityName: string; feederFound: boolean; widened: boolean; searchedMeters: number; failure?: string; barredReason?: string };
 
-type Territory = { legalName: string; utility: string; feature: ArcgisFeature };
+export type Territory = { legalName: string; utility: string; feature: ArcgisFeature };
 
 export function queryTerritories(source: TerritorySource, [longitude, latitude]: [number, number], ctx: CollectContext): Promise<ArcgisResult> {
   return queryArcgis(source.entry, { kind: "point", longitude, latitude }, ctx);
@@ -21,6 +21,23 @@ function territoriesOf(source: TerritorySource, result: ArcgisResult): Territory
     if (!byUtility.has(utility)) byUtility.set(utility, { legalName, utility, feature });
   }
   return [...byUtility.values()].sort((a, b) => a.utility.localeCompare(b.utility));
+}
+
+// Overlapping territories unlikely to serve the site: those with under a tenth of the customers per area of the
+// densest territory here. That catches a polygon drawn far larger than the area a utility serves, and a transit
+// authority's traction power. They stay listed as mapped here but aren't offered as the serving utility.
+export const SPARSE_SHARE = 0.1;
+
+export function likelyServing(source: TerritorySource, territories: Territory[]): Territory[] {
+  const density = (territory: Territory) => {
+    if (!source.customersAttribute || !source.areaAttribute) return NaN;
+    const customers = Number(territory.feature.attributes[source.customersAttribute]);
+    const area = Number(territory.feature.attributes[source.areaAttribute]);
+    return customers >= 0 && area > 0 ? customers / area : NaN;
+  };
+  const densest = Math.max(0, ...territories.map(density).filter(Number.isFinite));
+  if (densest === 0) return territories;
+  return territories.filter((territory) => !(density(territory) < densest * SPARSE_SHARE));
 }
 
 const described = (territory: Territory) => (territory.utility === territory.legalName ? territory.legalName : `${territory.utility} (${territory.legalName})`);
@@ -60,15 +77,16 @@ export function servingUtility(source: TerritorySource, result: ArcgisResult, gr
 
   const withFeeder = new Set(grid.filter((outcome) => outcome.feederFound && !outcome.widened).map((outcome) => outcome.utilityName));
   const settled = territories.filter((territory) => withFeeder.has(territory.utility));
-  const named = settled.length > 0 ? settled : territories;
+  const likely = likelyServing(source, territories);
+  const named = settled.length > 0 ? settled : likely;
   for (const territory of named) {
     const others = territories.filter((other) => !named.includes(other)).map(described);
     const reason =
       settled.length > 0
         ? `${described(territory)} territory, and ${territory.utility}'s map returned a feeder here.${others.length ? ` Also mapped here: ${others.join(", ")}.` : ""}`
-        : territories.length === 1
-          ? `The only service territory mapped here. The bill confirms the utility.`
-          : `One of ${territories.length} overlapping service territories mapped here. The territory map is coarse, so some of these utilities may not serve this site. The bill names the utility.`;
+        : named.length === 1
+          ? `${territories.length === 1 ? "The only service territory mapped here." : `The main service territory mapped here. Also mapped, with far fewer customers for their area, so unlikely here: ${others.join(", ")}.`} The bill confirms the utility.`
+          : `One of ${named.length} overlapping service territories mapped here. The territory map is coarse, so some of these utilities may not serve this site. The bill names the utility.${others.length ? ` Also mapped, with far fewer customers for their area, so unlikely here: ${others.join(", ")}.` : ""}`;
     observations.push(observe(result, ctx, { field: "serving_utility", kind: "reading", value: { type: "text", value: territory.utility }, ...shared(territory), reason }));
   }
 

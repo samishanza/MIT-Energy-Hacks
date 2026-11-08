@@ -110,6 +110,9 @@ export type FeederDetail =
 export type TerritorySource = {
   entry: ArcgisEntry;
   nameAttribute: string;
+  // A territory's customer count and polygon area, whose ratio ranks overlapping territories.
+  customersAttribute?: string;
+  areaAttribute?: string;
   // Legal names to the names people use, such as MASSACHUSETTS ELECTRIC CO to National Grid.
   commonNames: Record<string, string>;
   // Why a utility with no map this tool reads has no feeder, by its common name.

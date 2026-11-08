@@ -442,7 +442,7 @@ describe("the engineer API", () => {
     expect(value(hyannis, "serving_utility").current).toEqual({ type: "text", value: "Eversource" });
     expect(checkReadiness(hyannis).share).toBeNull();
     const holliston = await run("11 Bartzak Dr, Holliston, MA");
-    expect(value(holliston, "serving_utility").state).toBe("conflicting");
+    expect(value(holliston, "serving_utility").current).toEqual({ type: "text", value: "Eversource" });
     expect(checkReadiness(holliston).share).toBeNull();
     expect(checkReadiness(await run()).share).not.toBeNull();
   });
