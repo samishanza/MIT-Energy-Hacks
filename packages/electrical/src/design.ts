@@ -54,8 +54,8 @@ export type ElectricalDesign = {
 };
 
 const STANDARD_SERVICES = [
-  { volts: 480, label: "480Y/277 V, 3-PHASE, 4-WIRE" },
-  { volts: 208, label: "208Y/120 V, 3-PHASE, 4-WIRE" },
+  { volts: 480, label: "480Y/277 V, 3Ø, 4W" },
+  { volts: 208, label: "208Y/120 V, 3Ø, 4W" },
 ];
 
 const round = (number: number, digits = 1) => Math.round(number * 10 ** digits) / 10 ** digits;
@@ -207,10 +207,10 @@ function designFor(service: { volts: number; label: string }, state: InputState,
         `${amps(continuous)} × ${CONTINUOUS_FACTOR} = ${amps(required)}; next standard overcurrent device ${ocpd ?? "none"} A`,
         feeder ? `${feeder.sets} sets × ${label(feeder.size)} Al at 75 °C = ${feeder.ampacity} A` : "No parallel set up to 6 × 600 kcmil carries it",
         ground ? `Equipment ground at ${ocpd} A: ${label(ground)} Al (Table 250.122)` : "Equipment ground beyond the transcribed rows",
+        ...(voltageNote ? [voltageNote.trim()] : []),
       ],
       result: feeder ? `${feeder.sets} × ${label(feeder.size)} Al per phase, ${feeder.ampacity} A ≥ ${amps(needed)}` : "Engineer selects the conductors",
       status: feeder ? "passes" : "fails",
-      note: voltageNote.trim() || undefined,
     });
     schedule.push({
       tag: id === "xfmr-disc" ? 3 : 4,
@@ -275,7 +275,7 @@ function designFor(service: { volts: number; label: string }, state: InputState,
     const percent = (drop / service.volts) * 100;
     calculations.push({
       id: "voltage-drop",
-      title: "7. VOLTAGE DROP, DISCONNECT TO THE PANEL (ESTIMATE)",
+      title: "7. VOLTAGE DROP, DISCONNECT TO THE PANEL",
       citation: "2023 NEC Chapter 9 Table 8; 215.2(A)(2) Informational Note suggests 3% for feeders",
       steps: [`Estimated run ${run} ft (${inputs.runLengthFt.source})`, `√3 × ${amps(continuous)} × ${round(ohms, 4)} Ω/kft × ${run} ft ÷ 1000 = ${round(drop, 2)} V`],
       result: percent <= 3 ? `${round(percent, 2)}% of ${service.volts} V, within the 3% recommendation` : `${round(percent, 2)}% of ${service.volts} V, exceeds the 3% recommendation (informational, not a code requirement)`,
@@ -302,26 +302,26 @@ function designFor(service: { volts: number; label: string }, state: InputState,
     status: "needs_input",
   });
 
-  const utilityLines = [inputs.utility.value ? inputs.utility.value.toUpperCase() : `UTILITY NOT SETTLED${inputs.utility.reason ? `: ${inputs.utility.reason.replace(/^Candidates, none settled: /, "").replace(/\.$/, "").toUpperCase()}` : ""}`, inputs.feeder.value ? `FEEDER ${inputs.feeder.value} (${inputs.feeder.state === "verified" ? "VERIFIED" : "FROM PUBLIC MAP"})` : "FEEDER BY UTILITY"];
+  const utilityLines = [inputs.utility.value ? inputs.utility.value.toUpperCase() : "NAME BY UTILITY", inputs.feeder.value ? `FEEDER ${inputs.feeder.value}` : "FEEDER BY UTILITY"];
   const items: LineItem[] = [
     { id: "utility", status: "E", title: "UTILITY GRID", lines: utilityLines, known: Boolean(inputs.utility.value) },
     {
       id: "service-transformer",
       status: "E",
       title: "UTILITY SERVICE TRANSFORMER",
-      lines: ["KVA AND IMPEDANCE BY UTILITY", inputs.servicePath.value ? "LOCATION INFERRED, NOT FIELD VERIFIED" : "LOCATION NOT FOUND"],
+      lines: ["KVA AND IMPEDANCE BY UTILITY"],
       known: false,
       inferred: Boolean(inputs.servicePath.value),
     },
-    { id: "meter", status: "E", title: "REVENUE METER", lines: [inputs.meterNumber.value ? `METER NO. ${inputs.meterNumber.value}` : "METER NO. FROM THE UTILITY BILL"], known: Boolean(inputs.meterNumber.value) },
+    { id: "meter", status: "E", title: "REVENUE METER", lines: [inputs.meterNumber.value ? `METER NO. ${inputs.meterNumber.value}` : "METER NO. BY UTILITY"], known: Boolean(inputs.meterNumber.value) },
     {
       id: "main-switchgear",
       status: "E",
       title: "MAIN DISTRIBUTION PANEL",
       lines: [
-        `SERVICE ${state === "missing" ? `${service.label} (ASSUMED)` : service.label}`,
-        bus !== null ? `BUS ${bus} A` : "BUS RATING NEEDED (NAMEPLATE)",
-        main !== null ? `MAIN ${main} A` : "MAIN BREAKER NEEDED (NAMEPLATE)",
+        `SERVICE ${service.label}`,
+        bus !== null ? `BUS ${bus} A` : "BUS BY ENGINEER",
+        main !== null ? `MAIN ${main} A` : "MAIN BY ENGINEER",
       ],
       known: bus !== null && main !== null && state !== "missing",
     },

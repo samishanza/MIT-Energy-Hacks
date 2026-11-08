@@ -157,7 +157,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     if (!at) continue;
     callouts.push({ anchor: at, lines: [`(E) ELECTRIC FEEDER ${s.line}`, ...(s.capacity ? [s.capacity] : [])], color: UTILITY });
   }
-  const frontage = roads.find((r) => /street in the address/i.test(r.label ?? ''));
+  const frontage = roads.find((r) => (r.attributes?.fronting?.type === 'boolean' && r.attributes.fronting.value) || /street in the address/i.test(r.label ?? ''));
   if (frontage) {
     const at = firstInside(linesOf(frontage).flatMap(sheetLine), view, 0.5);
     const side = printed(record, 'road_side');

@@ -204,7 +204,7 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
       kind: "utility_line",
       field: "feeder",
       geometry: segment.feature.geometry,
-      label: `${segment.feeder}: ${segment.phases ? `${segment.phases}-phase ` : ""}${segment.construction} line, as mapped`,
+      label: `${segment.feeder}: ${segment.phases ? `${segment.phases}-phase ` : ""}${segment.construction} line`,
       attributes: {
         line_class: { type: "text", value: "distribution segment" },
         feeder: { type: "text", value: segment.feeder },

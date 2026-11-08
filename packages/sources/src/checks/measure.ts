@@ -185,8 +185,8 @@ export function measureSite(input: MeasureInputs, ctx: CollectContext): Measurem
         kind: "road",
         field: "road_name",
         geometry: road.feature.geometry!,
-        label: `${road.name}${fronting ? ", the street in the address" : ""} (mapped centerline, not surveyed)`,
-        attributes: { distance_ft: { type: "quantity", value: Math.round(road.gap.feet), unit: "ft" } },
+        label: road.name,
+        attributes: { distance_ft: { type: "quantity", value: Math.round(road.gap.feet), unit: "ft" }, fronting: { type: "boolean", value: Boolean(fronting) } },
       });
     });
     if (onAddress) {

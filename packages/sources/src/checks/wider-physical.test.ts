@@ -216,7 +216,7 @@ describe("a finished record", () => {
     const { collection } = await collect("100 Research Dr, Worcester, MA");
     const roads = collection.features.filter((feature) => feature.kind === "road");
     expect(roads.length).toBeGreaterThan(0);
-    expect(roads.some((road) => road.label === "Research Dr, the street in the address (mapped centerline, not surveyed)")).toBe(true);
+    expect(roads.some((road) => road.label === "Research Dr" && road.attributes?.fronting?.type === "boolean" && road.attributes.fronting.value)).toBe(true);
     expect(roads.every((road) => road.field === "road_name" && road.attributes?.distance_ft)).toBe(true);
   });
 });
