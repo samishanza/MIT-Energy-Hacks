@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { MapFeature, ObservedValue, RecordVersion, Value } from "@eqore/contract";
 import { CONCEPT_NOTE, designFromRecord } from "./design.ts";
+import { conceptSiteLayout } from "./layout.ts";
 import { singleLineSvg } from "./single-line.ts";
 
 // A labeled synthetic record: only the parts the design reads.
@@ -78,7 +79,9 @@ describe("the concept electrical design", () => {
 
   it("labels the run length and its voltage drop as estimates", () => {
     const design = designFromRecord(unknownService);
-    expect(design.inputs.runLengthFt).toMatchObject({ state: "estimate", source: "candidate pad to the inferred service entrance" });
+    expect(design.inputs.runLengthFt).toMatchObject({ state: "estimate", source: "shortest plausible run, straight line, open ground to the inferred service entrance" });
+    // From the synthetic pad's north edge, 0.0004 degrees of latitude (about 146 ft) south of the entrance, not from its center.
+    expect(design.inputs.runLengthFt.value).toBe(146);
     const drop = design.designs[0]!.calculations.find((entry) => entry.id === "voltage-drop")!;
     expect(drop.title).toContain("(ESTIMATE)");
     expect(drop.note).toContain("Estimate");
@@ -117,5 +120,44 @@ describe("the package", () => {
     for (const name of readdirSync(dir).filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))) {
       expect(readFileSync(`${dir}/${name}`, "utf8"), name).not.toMatch(/from "node:/);
     }
+  });
+});
+
+describe("the concept site layout", () => {
+  it("places the pad, disconnect, trench route, and new breaker as concept features for the site plan to draw", () => {
+    const features = conceptSiteLayout(unknownService);
+    expect(features.map((feature) => (feature.attributes!.equipment_type as { value: string }).value)).toEqual(["bess_pad", "ac_disconnect", "trench_route", "new_breaker"]);
+    for (const feature of features) {
+      expect(feature.label).toContain("CONCEPT LOCATION, NOT A DESIGN");
+      expect(feature.attributes!.basis).toEqual({ type: "text", value: "concept" });
+    }
+    const trench = features.find((feature) => feature.id === "concept-trench-route")!;
+    expect(trench).toMatchObject({ kind: "utility_line", attributes: { line_class: { value: "proposed trench route, concept" }, distance_ft: { value: 146, unit: "ft" } } });
+  });
+
+  it("draws nothing when the record has no open ground", () => {
+    expect(conceptSiteLayout(record([]))).toEqual([]);
+  });
+});
+
+describe("single-line boxes", () => {
+  it("size to their lines, so the main panel's three lines stay inside it", () => {
+    const svg = singleLineSvg(designFromRecord(unknownService));
+    const panel = /<rect x="70" y="(\d+)" width="500" height="(\d+)"[^>]*\/><text[^>]*>\(E\) MAIN DISTRIBUTION PANEL/.exec(svg)!;
+    expect(Number(panel[2])).toBe(36 + 3 * 15 + 8);
+    const top = Number(panel[1]);
+    const lastLine = [...svg.slice(panel.index).matchAll(/<text x="84" y="(\d+)"/g)].map((match) => Number(match[1]))[3]!;
+    expect(lastLine).toBeLessThan(top + Number(panel[2]));
+  });
+
+  it("calls voltage drop over 3% a recommendation exceeded, not a failure", () => {
+    const far = record([], [
+      { id: "pad", kind: "candidate_area", field: "pad_zone_x_ft", geometry: square(-71.5, 42.2, 0.0002) },
+      { id: "b", kind: "building_outline", field: "building_outline", geometry: square(-71.5, 42.21, 0.0002) },
+    ] as MapFeature[]);
+    const drop = designFromRecord(far).designs[1]!.calculations.find((entry) => entry.id === "voltage-drop")!;
+    expect(drop.status).toBe("over_recommendation");
+    expect(drop.result).toContain("exceeds the 3% recommendation (informational, not a code requirement)");
+    expect(singleLineSvg(designFromRecord(far), 1)).toContain("OVER 3% RECOMMENDATION");
   });
 });

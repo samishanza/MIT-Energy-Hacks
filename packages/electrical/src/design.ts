@@ -1,5 +1,6 @@
-import type { MapFeature, RecordVersion, Value } from "@eqore/contract";
+import type { RecordVersion, Value } from "@eqore/contract";
 import { PLAN_SET_250KW_760KWH, type Configuration } from "./catalog.ts";
+import { shortestRun } from "./layout.ts";
 import { BUSBAR_FACTOR, CONTINUOUS_FACTOR, SIZES, ampacity, groundingConductor, label, nextStandardOcpd, resistancePerKft, type Material, type Size } from "./nec.ts";
 
 export const CONCEPT_NOTE = "CONCEPT CALCULATION, THE ENGINEER OF RECORD VERIFIES. NOT FOR CONSTRUCTION.";
@@ -13,7 +14,8 @@ export type Calculation = {
   citation: string;
   steps: string[];
   result: string;
-  status: "passes" | "fails" | "needs_input";
+  // Over a recommendation that isn't a code requirement, such as the 3% voltage drop in an informational note.
+  status: "passes" | "fails" | "needs_input" | "over_recommendation";
   note?: string;
 };
 
@@ -87,44 +89,17 @@ function serviceVolts(value: Value | undefined): SiteInput<number> {
   return { label, value: null, state: "missing", source: value?.label ?? label, reason: value?.reason ?? "No evidence of the service voltage yet. A photo of the service label or the main switchgear nameplate supplies it." };
 }
 
-type Point = [number, number];
-const FEET_PER_DEGREE = (6371008.8 * Math.PI * 3.280839895) / 180;
-
-function pointsOf(feature: MapFeature): Point[] {
-  const { geometry } = feature;
-  if (geometry.type === "Point") return [geometry.coordinates as Point];
-  if (geometry.type === "LineString") return geometry.coordinates as Point[];
-  if (geometry.type === "Polygon") return (geometry.coordinates as Point[][])[0] ?? [];
-  if (geometry.type === "MultiPolygon") return (geometry.coordinates as Point[][][]).flat(2) as unknown as Point[];
-  return (geometry.coordinates as Point[][]).flat();
-}
-
-// The straight-line distance from the pad to where the service likely enters the building: a lower bound on the run.
-function runLength(features: MapFeature[]): SiteInput<number> {
+// The shortest plausible run, from the nearest open ground to where the service likely enters: a lower bound.
+function runLength(record: RecordVersion): SiteInput<number> {
   const label = "Run length, pad to the main distribution panel";
-  const pad = features.find((feature) => feature.kind === "candidate_area");
-  const entrance = features.find((feature) => feature.attributes?.equipment_type?.type === "text" && feature.attributes.equipment_type.value === "service_entrance");
-  const building = features.find((feature) => feature.kind === "building_outline");
-  if (!pad || !(entrance ?? building)) return { label, value: null, state: "missing", source: "record geometry", reason: "The record has no candidate pad area or no building to measure to." };
-  const padPoints = pointsOf(pad);
-  const center: Point = [padPoints.reduce((sum, [x]) => sum + x, 0) / padPoints.length, padPoints.reduce((sum, [, y]) => sum + y, 0) / padPoints.length];
-  const perLon = FEET_PER_DEGREE * Math.cos((center[1] * Math.PI) / 180);
-  const local = ([x, y]: Point): Point => [(x - center[0]) * perLon, (y - center[1]) * FEET_PER_DEGREE];
-  const target = (entrance ? pointsOf(entrance) : pointsOf(building!)).map(local);
-  // The nearest point on any wall, not only the nearest corner.
-  const toSegment = ([ax, ay]: Point, [bx, by]: Point) => {
-    const dx = bx - ax;
-    const dy = by - ay;
-    const t = dx || dy ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (dx * dx + dy * dy))) : 0;
-    return Math.hypot(ax + t * dx, ay + t * dy);
-  };
-  const distance = target.length === 1 ? Math.hypot(...target[0]!) : Math.min(...target.slice(1).map((point, index) => toSegment(target[index]!, point)));
+  const run = shortestRun(record);
+  if (!run) return { label, value: null, state: "missing", source: "record geometry", reason: "The record has no open ground or no building to measure to." };
   return {
     label,
-    value: Math.round(distance),
+    value: run.feet,
     state: "estimate",
-    source: entrance ? "candidate pad to the inferred service entrance" : "candidate pad to the nearest building wall",
-    reason: "A straight line outside the building. The real route is longer, and the run inside the building to the panel isn't known.",
+    source: `shortest plausible run, straight line, open ground to the ${run.target}`,
+    reason: "The real route is longer, and the run inside the building to the panel isn't known.",
   };
 }
 
@@ -262,9 +237,9 @@ function designFor(service: { volts: number; label: string }, state: InputState,
       id: "voltage-drop",
       title: "7. VOLTAGE DROP, DISCONNECT TO THE PANEL (ESTIMATE)",
       citation: "2023 NEC Chapter 9 Table 8; 215.2(A)(2) Informational Note suggests 3% for feeders",
-      steps: [`Estimated run ${run} ft (${inputs.runLengthFt.source}, straight line)`, `√3 × ${amps(continuous)} × ${round(ohms, 4)} Ω/kft × ${run} ft ÷ 1000 = ${round(drop, 2)} V`],
-      result: `${round(percent, 2)}% of ${service.volts} V`,
-      status: percent <= 3 ? "passes" : "fails",
+      steps: [`Estimated run ${run} ft (${inputs.runLengthFt.source})`, `√3 × ${amps(continuous)} × ${round(ohms, 4)} Ω/kft × ${run} ft ÷ 1000 = ${round(drop, 2)} V`],
+      result: percent <= 3 ? `${round(percent, 2)}% of ${service.volts} V, within the 3% recommendation` : `${round(percent, 2)}% of ${service.volts} V, exceeds the 3% recommendation (informational, not a code requirement)`,
+      status: percent <= 3 ? "passes" : "over_recommendation",
       note: "Estimate: the real route is longer than a straight line, and the run inside the building isn't known.",
     });
   } else {
@@ -334,7 +309,7 @@ export function designFromRecord(record: RecordVersion, config: Configuration = 
     busRatingA: ampsInput(values.get("bus_rating"), "Busbar rating", "From the main distribution panel's nameplate, read by a qualified person."),
     faultCurrentA: ampsInput(values.get("available_fault_current_a"), "Available fault current", "The utility states it on request."),
     meterNumber: textInput(values.get("meter_number"), "Meter number", "The utility bill shows it."),
-    runLengthFt: runLength(record.features),
+    runLengthFt: runLength(record),
   };
   const known = inputs.serviceVoltage.value;
   const services = known === null ? STANDARD_SERVICES : [STANDARD_SERVICES.find((service) => service.volts === known) ?? { volts: known, label: `${known} V, 3-PHASE` }];

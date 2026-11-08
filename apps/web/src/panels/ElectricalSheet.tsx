@@ -6,6 +6,7 @@ const STATUS_WORDS: Record<Calculation["status"], string> = {
   passes: "Passes",
   fails: "Fails",
   needs_input: "Needs input",
+  over_recommendation: "Over 3% recommendation",
 };
 
 const STATE_WORDS: Record<string, string> = {
