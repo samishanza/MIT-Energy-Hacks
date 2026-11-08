@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { routes } from "@eqore/contract";
 import { MAX_FILE_BYTES, fileTooLarge, openLink, readCaptureRequest, submitCapture, type CaptureDeps } from "./capture.ts";
+import { openPortal, readPortal, submitPortal } from "./portal.ts";
 import { respondToFailures } from "./routes.ts";
 
 const STATIC_TYPES: Record<string, string> = {
@@ -43,6 +44,30 @@ export function createCaptureApp(deps: CaptureDeps, pageDir?: string): Hono {
       },
     }),
     async (c) => c.json(await submitCapture(deps, c.req.param("token")!, await c.req.parseBody())),
+  );
+
+  // The customer document portal: its page, what it still needs, and uploads, all behind the link's token.
+  app.get("/portal/:token", (c) => {
+    const wantsPage = !(c.req.header("accept") ?? "").includes("application/json");
+    if (wantsPage) {
+      const page = pageDir ? join(pageDir, "portal.html") : null;
+      return page && existsSync(page) ? c.html(readFileSync(page, "utf8")) : c.text("Not found", 404);
+    }
+    return c.json(readPortal(deps, c.req.param("token")!));
+  });
+  app.post(
+    "/portal/:token/upload",
+    async (c, next) => {
+      openPortal(deps, c.req.param("token")!);
+      await next();
+    },
+    bodyLimit({
+      maxSize: MAX_FILE_BYTES + 64 * 1024,
+      onError: () => {
+        throw fileTooLarge();
+      },
+    }),
+    async (c) => c.json(await submitPortal(deps, c.req.param("token")!, await c.req.parseBody())),
   );
 
   // The page's built scripts and styles. Names are matched strictly, so no path can leave the folder.

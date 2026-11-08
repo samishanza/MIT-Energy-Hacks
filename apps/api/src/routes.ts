@@ -6,6 +6,7 @@ import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps }
 import { checkReadiness } from "./readiness.ts";
 import { toSiteMap } from "./site-map.ts";
 import { decideProposal, listProposals, reviewSite } from "./site-agent.ts";
+import { createPortalLink, portalUploads } from "./portal.ts";
 import { toDxf, toKml } from "./export-files.ts";
 import { ApiFailure, runProgressKey, confirmValue, correctValue, movePin, resolveConflict, runSite } from "./run.ts";
 
@@ -125,6 +126,9 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
   app.post("/api/sites/:siteId/agent-review", async (c) => c.json(await reviewSite(deps, c.req.param("siteId")!)));
   app.get("/api/sites/:siteId/agent-proposals", (c) => c.json(listProposals(deps, { siteId: c.req.param("siteId")! })));
   app.post("/api/agent-proposals/:proposalId/accept", async (c) => c.json(decideProposal(deps, c.req.param("proposalId")!, "accepted", await jsonBody(c.req.raw))));
+  // The customer document portal (not in the shared contract yet): a link to send the customer, and what came in.
+  app.post("/api/sites/:siteId/portal-links", (c) => c.json(createPortalLink(deps, c.req.param("siteId")!)));
+  app.get("/api/sites/:siteId/portal-uploads", (c) => c.json(portalUploads(deps, c.req.param("siteId")!)));
   app.post("/api/agent-proposals/:proposalId/reject", async (c) => c.json(decideProposal(deps, c.req.param("proposalId")!, "rejected", await jsonBody(c.req.raw))));
 
   app.post(routes.createCaptureLink.path, async (c) => c.json(createCaptureLink(deps, c.req.param("siteId")!, await jsonBody(c.req.raw))));
