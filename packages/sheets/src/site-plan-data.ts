@@ -315,7 +315,14 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
       case 'candidate_area':
         {
           const kind = (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value;
-          labels[f.id] = kind === 'feasible_bess' ? '(N) FEASIBLE BESS ZONE' : kind === 'feasible_bess_remote' ? '(N) BESS ZONE, OVER 100 FT FROM EXPOSURES' : 'OPEN GROUND';
+          labels[f.id] =
+            kind === 'feasible_bess_preferred'
+              ? '(N) BESS ZONE'
+              : kind === 'feasible_bess'
+                ? '(N) BESS ZONE, LONGER RUN'
+                : kind === 'feasible_bess_remote'
+                  ? '(N) BESS ZONE, OVER 100 FT FROM EXPOSURES'
+                  : 'OPEN GROUND';
         }
         break;
       default:
@@ -354,7 +361,7 @@ export function drawnEquipment(features: MapFeature[]): MapFeature[] {
  * one. Both the map and the site plan frame this rather than the whole parcel.
  * Returns [west, south, east, north] in lon/lat, padded, or null without a building.
  */
-export function workArea(features: MapFeature[], padM = 25): [number, number, number, number] | null {
+export function workArea(features: MapFeature[], padM = 12): [number, number, number, number] | null {
   const ringArea = (ring: number[][]) => Math.abs(ring.reduce((s, p, i) => s + p[0]! * ring[(i + 1) % ring.length]![1]! - ring[(i + 1) % ring.length]![0]! * p[1]!, 0)) / 2;
   const outer = (f: MapFeature): number[][] => (f.geometry.type === 'Polygon' ? f.geometry.coordinates[0]! : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates[0]![0]! : []) as number[][];
   const main = features.filter((f) => f.kind === 'building_outline').sort((a, b) => ringArea(outer(b)) - ringArea(outer(a)))[0];
@@ -371,11 +378,20 @@ export function workArea(features: MapFeature[], padM = 25): [number, number, nu
         : f.geometry.type === 'MultiLineString'
           ? (f.geometry.coordinates as number[][][]).flat()
           : outer(f);
+  const hasPreferred = features.some((f) => (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value === 'feasible_bess_preferred');
+  // The frame is the building and the preferred zone, where the pad should go; the wider areas are shown but
+  // don't widen it.
+  for (const f of drawnEquipment(features)) {
+    const kind = f.kind === 'candidate_area' ? (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value : null;
+    if (kind === 'feasible_bess_preferred' || (kind === 'feasible_bess' && !hasPreferred)) pts.push(...coords(f).filter(near));
+  }
+  // Equipment widens it only beside that area, so poles and lines down the street don't pull the frame out.
+  const reach = 20 / 111_320;
+  const [x0, x1] = [Math.min(...pts.map((p) => p[0]!)) - reach * 1.4, Math.max(...pts.map((p) => p[0]!)) + reach * 1.4];
+  const [y0, y1] = [Math.min(...pts.map((p) => p[1]!)) - reach, Math.max(...pts.map((p) => p[1]!)) + reach];
   for (const f of drawnEquipment(features)) {
     const electrical = f.kind === 'existing_equipment' || /service|drop|trench|conductor/i.test(String((f.attributes?.['line_class'] as { value?: unknown } | undefined)?.value ?? ''));
-    const zone = f.kind === 'candidate_area' && (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value === 'feasible_bess';
-    // The remote area can sit far out on the lot; it's shown but doesn't widen the frame.
-    if (electrical || zone) pts.push(...coords(f).filter(near));
+    if (electrical) pts.push(...coords(f).filter((p) => p[0]! >= x0 && p[0]! <= x1 && p[1]! >= y0 && p[1]! <= y1));
   }
   const xs = pts.map((p) => p[0]!);
   const ys = pts.map((p) => p[1]!);

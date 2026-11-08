@@ -13,6 +13,13 @@ export const PAD = { widthFt: 11.5, depthFt: 14, workingFt: 3 };
 // Search within 250 ft of the point of interconnection, and prefer 150 ft or less: a cost limit, not voltage drop.
 export const MAX_RUN_FT = 250;
 export const PREFERRED_RUN_FT = 150;
+// A routed run is about 1.25 times the straight line plus 20 ft for risers and turns (docs/research/
+// 2026-11-08-bess-siting-rules.md, scoring table), so a 150 ft routed run is about 104 ft straight.
+const ROUTED_FACTOR = 1.25;
+const ROUTED_EXTRA_FT = 20;
+export const PREFERRED_STRAIGHT_FT = (PREFERRED_RUN_FT - ROUTED_EXTRA_FT) / ROUTED_FACTOR;
+// How far from the building to look for the utility supply that sets the likely service wall.
+const SUPPLY_SEARCH_FT = 400;
 const CELL = 2;
 const FEET_PER_DEGREE = (6371008.8 * Math.PI * 3.280839895) / 180;
 const EXPOSURE_FT = 10;
@@ -83,8 +90,10 @@ export type BessZone = {
   zone: MapFeature | null;
   // The part of the zone more than 100 ft from every exposure.
   remote: MapFeature | null;
+  // The part of the zone within the preferred run of the target: where the pad should go.
+  preferred: MapFeature | null;
   pad: BessPad | null;
-  target: "service entrance" | "building wall";
+  target: "service entrance" | "building wall" | "building wall nearest the utility supply";
   // When nothing qualifies, the rule that removed the last cells.
   reason: string | null;
 };
@@ -93,6 +102,20 @@ const ruleText = (id: string) => APPLIED_RULES.find((rule) => rule.id === id)!.t
 const isPadMount = (feature: MapFeature) => feature.attributes?.equipment_type?.type === "text" && /pad_mount_transformer/.test(feature.attributes.equipment_type.value);
 
 const isEntrance = (feature: MapFeature) => feature.attributes?.equipment_type?.type === "text" && feature.attributes.equipment_type.value === "service_entrance";
+const isSupplyPole = (feature: MapFeature) =>
+  feature.attributes?.equipment_type?.type === "text" && /^(utility_pole|service_tap)$/.test(feature.attributes.equipment_type.value);
+function nearestOnRing(p: Point, ring: Point[]): Point {
+  let best: Point = ring[0]!, gap = Infinity;
+  for (let i = 1; i < ring.length; i++) {
+    const a = ring[i - 1]!, e = ring[i]!;
+    const dx = e[0] - a[0], dy = e[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+    const q: Point = [a[0] + t * dx, a[1] + t * dy];
+    const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (d < gap) { gap = d; best = q; }
+  }
+  return best;
+}
 const isOverhead = (feature: MapFeature) => {
   const lineClass = feature.attributes?.line_class?.type === "text" ? feature.attributes.line_class.value : "";
   const construction = feature.attributes?.construction?.type === "text" ? feature.attributes.construction.value : "";
@@ -223,8 +246,8 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
   const parcels = record.features.filter((f) => f.kind === "property_line").flatMap(polygonsOf);
   const buildings = record.features.filter((f) => f.kind === "building_outline").flatMap(polygonsOf);
   const entrance = record.features.find(isEntrance);
-  const target = entrance ? "service entrance" : "building wall";
-  const none = (reason: string): BessZone => ({ zone: null, remote: null, pad: null, target, reason });
+  let target: BessZone["target"] = entrance ? "service entrance" : "building wall";
+  const none = (reason: string): BessZone => ({ zone: null, remote: null, preferred: null, pad: null, target, reason });
   if (!parcels.length || !buildings.length) return none("The record has no lot or no building outline to place a pad against.");
   const value = (field: string) => record.values.find((v) => v.field === field)?.current ?? null;
   const flood = value("flood_zone");
@@ -246,7 +269,25 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
   const turnRings = (polygon: Point[][]) => polygon.map((ring) => ring.map(turn));
   const lots = parcels.map(turnRings);
   const houses = buildings.map(turnRings);
-  const entrancePoint = entrance && entrance.geometry.type === "Point" ? turn(entrance.geometry.coordinates as Point) : null;
+  let entrancePoint = entrance && entrance.geometry.type === "Point" ? turn(entrance.geometry.coordinates as Point) : null;
+  // Without a known entrance, the service most likely enters on the wall nearest the utility supply:
+  // the closest pole or overhead line. That wall point stands in for the entrance, marked as assumed.
+  if (!entrancePoint) {
+    const supply = record.features
+      .filter((f) => isOverhead(f) || isSupplyPole(f))
+      .flatMap((f) => (f.geometry.type === "Point" ? [[f.geometry.coordinates as Point]] : linesOf(f)))
+      .flatMap((line) => line.map(turn));
+    let gap = Infinity;
+    for (const p of supply) for (const polygon of houses) {
+      const q = nearestOnRing(p, polygon[0]!);
+      const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (d < gap && d <= SUPPLY_SEARCH_FT) {
+        gap = d;
+        entrancePoint = q;
+      }
+    }
+    if (entrancePoint) target = "building wall nearest the utility supply";
+  }
 
   // The grid: everything within the run limit of the target, plus a margin for the wetland buffer.
   const targetPoints = entrancePoint ? [entrancePoint] : houses.flatMap((polygon) => polygon[0]!);
@@ -358,12 +399,14 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
 
   // Two-dimensional prefix sum of the placement marks gives how many placements cover each cell.
   const cover = new Int32Array(w * h);
-  const covered = new Uint8Array(w * h), remoteCells = new Uint8Array(w * h);
+  const covered = new Uint8Array(w * h), remoteCells = new Uint8Array(w * h), preferredCells = new Uint8Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x;
     cover[i] = marks[y * (w + 1) + x]! + (x > 0 ? cover[i - 1]! : 0) + (y > 0 ? cover[i - w]! : 0) - (x > 0 && y > 0 ? cover[i - w - 1]! : 0);
     covered[i] = cover[i]! > 0 ? 1 : 0;
     remoteCells[i] = covered[i] && toExposure(i) > REMOTE_FT + MARGIN ? 1 : 0;
+    const straight = entrancePoint ? Math.hypot(center(x, y)[0] - entrancePoint[0], center(x, y)[1] - entrancePoint[1]) : toBuilding[i]!;
+    preferredCells[i] = covered[i] && straight <= PREFERRED_STRAIGHT_FT ? 1 : 0;
   }
   const geometryOf = (mask: Uint8Array): MapFeature["geometry"] | null => {
     const rings = outline(mask, w, h).map((ring) => ring.map(([x, y]) => back([minU + x * CELL, minV + y * CELL])));
@@ -444,6 +487,30 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
       confidence_reason: text(`Every spot where an ${PAD.widthFt} x ${PAD.depthFt} ft pad with ${PAD.workingFt} ft of working space fits under the rules, within ${MAX_RUN_FT} ft of the ${target}, from the mapped lot, buildings, road centerlines, detected overhead lines and equipment, and mapped wetlands.`),
     },
   };
+  const preferredGeometry = geometryOf(preferredCells);
+  const preferred: MapFeature | null = preferredGeometry
+    ? {
+        id: "concept-feasible-bess-preferred",
+        kind: "candidate_area",
+        field: "candidate_areas",
+        geometry: preferredGeometry,
+        label: "(N) BESS ZONE",
+        attributes: {
+          zone_kind: text("feasible_bess_preferred"),
+          area_sqft: { type: "quantity", value: area(preferredCells), unit: "sqft" },
+          preferred_run_ft: { type: "quantity", value: PREFERRED_RUN_FT, unit: "ft" },
+          straight_line_ft: { type: "quantity", value: Math.round(PREFERRED_STRAIGHT_FT), unit: "ft" },
+          run_target: text(target),
+          basis: text("concept"),
+          confidence_reason: text(
+            `The part of the feasible zone within a ${PREFERRED_RUN_FT} ft routed run (about ${Math.round(PREFERRED_STRAIGHT_FT)} ft in a straight line) of the ${target}.` +
+              (target === "building wall nearest the utility supply"
+                ? " The service entrance isn't known, so it's assumed to be on the wall nearest the utility pole or overhead line; placing the entrance moves this zone."
+                : ""),
+          ),
+        },
+      }
+    : null;
   const remote: MapFeature | null = remoteGeometry
     ? {
         id: "concept-feasible-bess-remote",
@@ -459,5 +526,5 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
         },
       }
     : null;
-  return { zone, remote, pad, target, reason: null };
+  return { zone, remote, preferred, pad, target, reason: null };
 }

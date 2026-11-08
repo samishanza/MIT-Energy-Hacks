@@ -100,6 +100,7 @@ describe("the engineer API", () => {
       ["massgis-fire-stations", "done"],
       ["usgs-epqs", "done"],
       ["hifld-retail-territories", "done"],
+      ["massgis-land-cover-2016", "done"],
       ["earth-engine-worldcover", "done"],
       ["earth-engine-3dep", "done"],
       ["massgis-lidar-dem", "done"],

@@ -52,6 +52,7 @@ const MAY_BE_UNCOLLECTED: { keys: LayerKey[]; words: string }[] = [
   { keys: ["substations"], words: "substations" },
   { keys: ["fire_stations"], words: "fire stations" },
   { keys: ["wetlands"], words: "wetlands" },
+  { keys: ["paved"], words: "paved parking and drives" },
   { keys: ZONE_TIERS.map((tier) => `zone_${tier}` as const), words: "eligibility zones" },
 ];
 
@@ -81,7 +82,8 @@ export function SiteMap(props: SiteMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibre | null>(null);
   const highlighted = useRef<string[]>([]);
-  const fitted = useRef(false);
+  // What the view was last framed on, so it frames again once the battery zone arrives.
+  const fitted = useRef<string | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
   const placeRef = useRef({ placingField, onPlace });
@@ -89,12 +91,31 @@ export function SiteMap(props: SiteMapProps) {
   const [loaded, setLoaded] = useState(false);
   const [aerialFailed, setAerialFailed] = useState(false);
   // The view is the electrical work: environmental layers start off and stay one click away.
-  const [hidden, setHidden] = useState<Set<LayerKey>>(() => new Set<LayerKey>(["wetlands", "fire_stations", "constraints", "zone_unknown"]));
+  const [hidden, setHidden] = useState<Set<LayerKey>>(() => new Set<LayerKey>(["wetlands", "fire_stations", "constraints", "zone_unknown", "feasible_outer"]));
   const [threeD, setThreeD] = useState(false);
   // Google's 3D city when it loads; our own 3D models on the aerial when it doesn't.
   const [googleFailed, setGoogleFailed] = useState(false);
   // On a phone the legend would cover most of the map, so it starts closed there.
   const [legendOpen, setLegendOpen] = useState(() => window.innerWidth > 760);
+  // A plan-set drawing aligned onto this site, when one was prepared (scripts/plan-overlay.py).
+  // It's a customer document, so it lives in a gitignored folder and is absent everywhere else.
+  const [planOverlay, setPlanOverlay] = useState<{ image: string; corners: [number, number][]; label: string } | null>(null);
+  const [planShown, setPlanShown] = useState(true);
+  const [planOpacity, setPlanOpacity] = useState(0.85);
+
+  useEffect(() => {
+    let current = true;
+    setPlanOverlay(null);
+    fetch(`/private/plan-overlay/${site.id}.json`)
+      .then((response) => (response.ok && /json/.test(response.headers.get("content-type") ?? "") ? response.json() : null))
+      .then((meta: { image: string; corners: [number, number][]; label: string } | null) => {
+        if (current && meta?.corners?.length === 4) setPlanOverlay({ ...meta, image: `/private/plan-overlay/${meta.image}` });
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [site.id]);
 
   const heights = useMemo(() => buildingHeights(features, values), [features, values]);
   const visible = useMemo(() => features.filter((feature) => !hidden.has(layerOf(feature))), [features, hidden]);
@@ -173,7 +194,7 @@ export function SiteMap(props: SiteMapProps) {
     map.current = instance;
     return () => {
       map.current = null;
-      fitted.current = false;
+      fitted.current = null;
       setLoaded(false);
       instance.remove();
     };
@@ -185,6 +206,17 @@ export function SiteMap(props: SiteMapProps) {
     instance.addSource(BASE_SOURCE, baseSource(baseMap));
     instance.addLayer(BASE_LAYER, FEATURE_LAYERS[0]!.id);
   }, [baseMap, loaded]);
+
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance || !loaded || !planOverlay) return;
+    if (!instance.getSource("plan-overlay")) {
+      instance.addSource("plan-overlay", { type: "image", url: planOverlay.image, coordinates: planOverlay.corners as never });
+      instance.addLayer({ id: "plan-overlay", type: "raster", source: "plan-overlay", paint: { "raster-opacity": planOpacity, "raster-fade-duration": 0 } }, FEATURE_LAYERS[0]!.id);
+    }
+    instance.setLayoutProperty("plan-overlay", "visibility", planShown ? "visible" : "none");
+    instance.setPaintProperty("plan-overlay", "raster-opacity", planOpacity);
+  }, [planOverlay, planShown, planOpacity, loaded, baseMap]);
 
   useEffect(() => {
     const instance = map.current;
@@ -214,19 +246,21 @@ export function SiteMap(props: SiteMapProps) {
   }, [visible, loaded]);
 
   const parcel = features.find((feature) => feature.kind === "property_line");
+  const zoneReady = features.some((f) => f.kind === "candidate_area" && String((f.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value ?? "").startsWith("feasible_bess"));
+  const frameKey = parcel ? `${parcel.id}:${zoneReady}` : null;
   useEffect(() => {
-    if (!loaded || !parcel || fitted.current) return;
+    if (!loaded || !parcel || !frameKey || fitted.current === frameKey) return;
     // Frame the building, its electrical service, and the battery area, not the whole parcel.
     const area = workArea(features);
     const bounds = area ? ([[area[0], area[1]], [area[2], area[3]]] as [[number, number], [number, number]]) : boundsOf([parcel]);
     if (!bounds) return;
-    fitted.current = true;
+    fitted.current = frameKey;
     map.current?.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 20 });
     // The tilted view shows more ground than the box it was fitted to, so step in to match.
     const zoom = map.current?.getZoom?.();
     if (area && zoom !== undefined) map.current?.setZoom?.(Math.min(zoom + 0.5, 20.5));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parcel, loaded]);
+  }, [frameKey, loaded]);
 
   // HTML labels are never dropped by label collision and need no glyph files offline.
   useEffect(() => {
@@ -376,6 +410,17 @@ export function SiteMap(props: SiteMapProps) {
           Layers
         </button>
         <ul className="legend-list" aria-label="Map layers" hidden={!legendOpen}>
+          {planOverlay ? (
+            <li className="legend-plan">
+              <label>
+                <input type="checkbox" checked={planShown} onChange={() => setPlanShown((shown) => !shown)} />
+                <span className="key key-plan" aria-hidden="true" /> {planOverlay.label}
+              </label>
+              {planShown ? (
+                <input type="range" min={0.2} max={1} step={0.05} value={planOpacity} aria-label="Plan set opacity" onChange={(e) => setPlanOpacity(Number(e.target.value))} />
+              ) : null}
+            </li>
+          ) : null}
           {present.map((layer) => (
             <li key={layer.key}>
               <label>

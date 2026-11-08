@@ -1,7 +1,7 @@
 import { area, booleanPointInPolygon } from "@turf/turf";
 import type { MapFeature, Observation } from "@eqore/contract";
 import { observe, sourceDateOf, type ArcgisFeature, type ArcgisResult, type CollectContext, type PolygonGeometry } from "../arcgis.ts";
-import { boxOf, closestGap, closestPointOn, frameAround, segmentsOf, verticesOf, type Box, type Point, type Segment } from "../geometry.ts";
+import { boxOf, closestGap, closestPointOn, fittedRect, frameAround, segmentsOf, verticesOf, type Box, type Point, type Segment } from "../geometry.ts";
 import { normalizeStreet, streetNameOf } from "../resolve-site.ts";
 import { convertUnit } from "../units.ts";
 
@@ -52,8 +52,10 @@ export function measureSite(input: MeasureInputs, ctx: CollectContext): Measurem
   const { toFeet, toLonLat } = frameAround(parcel.geometry);
   const parcelSegments = segmentsOf(parcel.geometry, toFeet);
   const lot = boxOf(parcelSegments.flat());
-  const lotWidth = lot.maxX - lot.minX;
-  const lotDepth = lot.maxY - lot.minY;
+  // Sides of the smallest rectangle around the parcel, turned to fit it, not its north-south box.
+  const lotRect = fittedRect(parcelSegments.map(([a]) => a));
+  const lotWidth = lotRect.width;
+  const lotDepth = lotRect.depth;
   const parcelDate = sourceDateOf(lookup.entry, parcel.attributes);
   const parcelSqft = convertUnit(area(parcel.geometry), "sqm", "sqft");
 
@@ -69,11 +71,11 @@ export function measureSite(input: MeasureInputs, ctx: CollectContext): Measurem
   const quantity = (value: number, unit: string) => ({ type: "quantity" as const, value, unit });
 
   const fill = Math.round((parcelSqft / (lotWidth * lotDepth)) * 100);
-  const fitted = `Fitted, not surveyed: the lot's full east-west and north-south extent. The parcel fills about ${fill}% of that box.`;
-  record(lookup, "lot_width_ft", quantity(oneDecimal(lotWidth), "ft"), "east-west extent of the parcel polygon", datesOf(["parcel", parcelDate]), fitted, parcel.objectId);
-  record(lookup, "lot_depth_ft", quantity(oneDecimal(lotDepth), "ft"), "north-south extent of the parcel polygon", datesOf(["parcel", parcelDate]), fitted, parcel.objectId);
-  dimension("dim-lot-width", "lot_width_ft", [lot.minX, lot.minY], [lot.maxX, lot.minY], `${whole(lotWidth)} ft (fitted)`);
-  dimension("dim-lot-depth", "lot_depth_ft", [lot.minX, lot.minY], [lot.minX, lot.maxY], `${whole(lotDepth)} ft (fitted)`);
+  const fitted = `Fitted, not surveyed: the sides of the smallest rectangle around the parcel, turned ${Math.round(lotRect.bearingDeg)} degrees from north. The parcel fills about ${fill}% of it.`;
+  record(lookup, "lot_width_ft", quantity(oneDecimal(lotWidth), "ft"), "side nearer east-west of the smallest rectangle around the parcel polygon", datesOf(["parcel", parcelDate]), fitted, parcel.objectId);
+  record(lookup, "lot_depth_ft", quantity(oneDecimal(lotDepth), "ft"), "side nearer north-south of the smallest rectangle around the parcel polygon", datesOf(["parcel", parcelDate]), fitted, parcel.objectId);
+  dimension("dim-lot-width", "lot_width_ft", lotRect.corners[0], lotRect.corners[1], `${whole(lotWidth)} ft (fitted)`);
+  dimension("dim-lot-depth", "lot_depth_ft", lotRect.corners[0], lotRect.corners[3], `${whole(lotDepth)} ft (fitted)`);
 
   const buildings = input.outlines?.features ?? [];
   const outlineResult = input.outlines?.result;
@@ -82,6 +84,7 @@ export function measureSite(input: MeasureInputs, ctx: CollectContext): Measurem
   if (main && outlineResult) {
     const mainSegments = segmentsOf(main.geometry, toFeet);
     const box = boxOf(mainSegments.flat());
+    const mainRect = fittedRect(mainSegments.map(([a]) => a));
     const mainDate = sourceDateOf(outlineResult.entry, main.attributes);
     const mainSqft = convertUnit(area(main.geometry), "sqm", "sqft");
     const totalSqft = buildings.reduce((sum, building) => sum + convertUnit(area(building.geometry), "sqm", "sqft"), 0);
@@ -98,8 +101,9 @@ export function measureSite(input: MeasureInputs, ctx: CollectContext): Measurem
     const boxes: [string, number, string][] = [
       ["building_x_ft", box.minX - lot.minX, "west side of the main roofprint's box to the west side of the lot's box"],
       ["building_y_ft", lot.maxY - box.maxY, "north side of the main roofprint's box to the north side of the lot's box"],
-      ["building_width_ft", box.maxX - box.minX, "east-west extent of the main roofprint"],
-      ["building_depth_ft", box.maxY - box.minY, "north-south extent of the main roofprint"],
+      // The building's own sides, from the smallest rectangle turned to fit it.
+      ["building_width_ft", mainRect.width, "side nearer east-west of the smallest rectangle around the main roofprint"],
+      ["building_depth_ft", mainRect.depth, "side nearer north-south of the smallest rectangle around the main roofprint"],
     ];
     for (const [field, feet, attribute] of boxes) record(outlineResult, field, quantity(oneDecimal(feet), "ft"), attribute, mainDates, choice, main.objectId);
 

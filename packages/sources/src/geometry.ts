@@ -54,6 +54,34 @@ export function boxOf(points: Point[]): Box {
   return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
 
+// The smallest rectangle around a shape, turned to fit it. A turned building's north-south and east-west
+// box overstates both sides; this measures the sides as drawn. "width" is the side nearer east-west.
+export type FittedRect = { width: number; depth: number; corners: [Point, Point, Point, Point]; bearingDeg: number };
+export function fittedRect(points: Point[]): FittedRect {
+  let best: { area: number; angle: number; u0: number; u1: number; v0: number; v1: number } | null = null;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i]!, b = points[(i + 1) % points.length]!;
+    if (a[0] === b[0] && a[1] === b[1]) continue;
+    const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const c = Math.cos(angle), s = Math.sin(angle);
+    const us = points.map(([x, y]) => x * c + y * s), vs = points.map(([x, y]) => -x * s + y * c);
+    const [u0, u1, v0, v1] = [Math.min(...us), Math.max(...us), Math.min(...vs), Math.max(...vs)];
+    const area = (u1 - u0) * (v1 - v0);
+    if (!best || area < best.area - 1e-6) best = { area, angle, u0, u1, v0, v1 };
+  }
+  if (!best) return { width: 0, depth: 0, corners: [[0, 0], [0, 0], [0, 0], [0, 0]], bearingDeg: 90 };
+  let { angle, u0, u1, v0, v1 } = best;
+  // Turn by a quarter if needed so the u axis is the one nearer east-west.
+  const norm = ((angle % Math.PI) + Math.PI) % Math.PI;
+  if (norm > Math.PI / 4 && norm < (3 * Math.PI) / 4) {
+    angle -= Math.PI / 2;
+    [u0, u1, v0, v1] = [v0, v1, -u1, -u0];
+  }
+  const c = Math.cos(angle), s = Math.sin(angle);
+  const at = (u: number, v: number): Point => [u * c - v * s, u * s + v * c];
+  return { width: u1 - u0, depth: v1 - v0, corners: [at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)], bearingDeg: (((90 - (angle * 180) / Math.PI) % 180) + 180) % 180 };
+}
+
 export function closestPointOn([a, b]: Segment, point: Point): Point {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];

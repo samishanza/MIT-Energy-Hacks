@@ -20,13 +20,16 @@ export type LayerKey =
   | "substations"
   | "fire_stations"
   | "wetlands"
+  | "paved"
   | "constraints"
   | "roads"
-  | "feasible";
+  | "feasible"
+  | "feasible_outer";
 
 // Legend order, which is also the order things are picked from the top.
 export const LAYERS: { key: LayerKey; label: string }[] = [
-  { key: "feasible", label: "Feasible battery zone" },
+  { key: "feasible", label: "Battery zone" },
+  { key: "feasible_outer", label: "Battery zone, longer runs" },
   { key: "equipment", label: "Electrical equipment" },
   { key: "dimensions", label: "Dimension lines" },
   { key: "buildings", label: "Buildings" },
@@ -40,6 +43,7 @@ export const LAYERS: { key: LayerKey; label: string }[] = [
   { key: "substations", label: "Substations" },
   { key: "fire_stations", label: "Fire stations" },
   { key: "wetlands", label: "Wetlands" },
+  { key: "paved", label: "Paved parking and drives" },
   { key: "constraints", label: "Other mapped constraints" },
   { key: "roads", label: "Roads" },
 ];
@@ -77,7 +81,11 @@ export function layerOf(feature: MapFeature): LayerKey {
     case "property_line":
       return "lot";
     case "candidate_area":
-      if (String((feature.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value ?? "").startsWith("feasible_bess")) return "feasible";
+      {
+        const kind = String((feature.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value ?? "");
+        if (kind === "feasible_bess_preferred") return "feasible";
+        if (kind.startsWith("feasible_bess")) return "feasible_outer";
+      }
       return `zone_${zoneTier(feature)}`;
     case "utility_line":
       return "utility";
@@ -88,6 +96,7 @@ export function layerOf(feature: MapFeature): LayerKey {
     case "constraint":
       if (/fire_station/.test(feature.field)) return "fire_stations";
       if (/wetland/.test(feature.field)) return "wetlands";
+      if (/paved/.test(feature.field)) return "paved";
       return "constraints";
   }
 }
@@ -234,6 +243,20 @@ export const FEATURE_LAYERS = [
     paint: { "line-color": ["case", selected, SELECTION_COLOR, "#ffffff"], "line-width": 2, "line-opacity": 0.9, "line-dasharray": [6, 1.5, 1.5, 1.5] },
   },
   {
+    id: "paved-fill",
+    type: "fill",
+    source: FEATURE_SOURCE,
+    filter: onLayer("paved"),
+    paint: { "fill-color": ["case", selected, SELECTION_COLOR, "#6b6b6b"], "fill-opacity": 0.35 },
+  },
+  {
+    id: "paved-outline",
+    type: "line",
+    source: FEATURE_SOURCE,
+    filter: onLayer("paved"),
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#3d3d3d"], "line-width": 1.2 },
+  },
+  {
     id: "constraint-fill",
     type: "fill",
     source: FEATURE_SOURCE,
@@ -269,17 +292,24 @@ export const FEATURE_LAYERS = [
     paint: { "line-color": ["case", selected, SELECTION_COLOR, "#0b5cad"], "line-width": 2.5 },
   },
   {
+    id: "feasible-outer-outline",
+    type: "line",
+    source: FEATURE_SOURCE,
+    filter: ["==", ["get", "layer"], "feasible_outer"],
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#0b5cad"], "line-width": 1.5, "line-dasharray": [4, 3] },
+  },
+  {
     id: "zone-fill",
     type: "fill",
     source: FEATURE_SOURCE,
-    filter: ["all", ["==", ["get", "kind"], "candidate_area"], ["!=", ["get", "layer"], "feasible"]],
+    filter: ["all", ["==", ["get", "kind"], "candidate_area"], ["!=", ["get", "layer"], "feasible"], ["!=", ["get", "layer"], "feasible_outer"]],
     paint: { "fill-color": ["case", selected, SELECTION_COLOR, ZONE_COLOR], "fill-opacity": 0.22 },
   },
   {
     id: "zone-outline",
     type: "line",
     source: FEATURE_SOURCE,
-    filter: ["all", ["==", ["get", "kind"], "candidate_area"], ["!=", ["get", "layer"], "feasible"]],
+    filter: ["all", ["==", ["get", "kind"], "candidate_area"], ["!=", ["get", "layer"], "feasible"], ["!=", ["get", "layer"], "feasible_outer"]],
     paint: { "line-color": ["case", selected, SELECTION_COLOR, ZONE_COLOR], "line-width": 1.5, "line-dasharray": [3, 2] },
   },
   {
@@ -344,6 +374,7 @@ export const HIT_LAYERS = [
   "utility-line",
   "building-fill",
   "feasible-fill",
+  "feasible-outer-outline",
   "zone-fill",
   "wetland-fill",
   "constraint-fill",

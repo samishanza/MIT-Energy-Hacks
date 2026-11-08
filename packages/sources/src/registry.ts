@@ -1,5 +1,6 @@
 import type { FitnessGrade, MapFeature, ObservedValue, Source } from "@eqore/contract";
 import type { LidarConfig } from "./checks/lidar-collect.ts";
+import type { PavedSurfaces } from "./checks/paved.ts";
 import type { EarthEngineConfig } from "./earthengine.ts";
 import type { JsonSource } from "./json-api.ts";
 import type { Transform } from "./transforms.ts";
@@ -41,6 +42,10 @@ export type ArcgisEntry = {
   barred?: { reason: string; personRoute: string };
   // Asks for attributes only, for layers whose shapes are too large to keep, such as service territories.
   attributesOnly?: boolean;
+  // Narrows a geometry query to some features, and simplifies shapes traced from rasters, in degrees.
+  where?: string;
+  maxAllowableOffset?: number;
+  geometryPrecision?: number;
   fields: FieldMapping[];
   outFields: string[];
   // Identifies one feature across reads.
@@ -186,6 +191,7 @@ export type RegionConfig = {
   lidarSlope?: LidarSlope;
   earthEngine?: EarthEngineConfig;
   lidarPoints?: LidarConfig;
+  pavedSurfaces?: PavedSurfaces;
   imagery?: ImageryConfig;
   // Sources with no working adapter yet. They report missing with the reason.
   unavailable: NamedRoute[];

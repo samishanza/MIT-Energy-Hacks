@@ -28,3 +28,21 @@ describe("named transforms", () => {
     expect(applyTransform(series, undefined, { y0: 6.4 })).toEqual({ reason: "y1 is blank in the source" });
   });
 });
+
+describe("measuring a turned building", () => {
+  it("gives the sides of a rectangle turned 18 degrees, not its north-south box", async () => {
+    const { fittedRect } = await import("./geometry.ts");
+    const t = (18 * Math.PI) / 180;
+    const turn = ([x, y]: [number, number]): [number, number] => [x * Math.cos(t) - y * Math.sin(t), x * Math.sin(t) + y * Math.cos(t)];
+    const rect = fittedRect(([[0, 0], [460, 0], [460, 182], [0, 182]] as [number, number][]).map(turn));
+    expect(rect.width).toBeCloseTo(460, 3);
+    expect(rect.depth).toBeCloseTo(182, 3);
+  });
+
+  it("keeps width as the side nearer east-west, whichever edge the fit starts from", async () => {
+    const { fittedRect } = await import("./geometry.ts");
+    const rect = fittedRect([[0, 0], [0, 300], [-100, 300], [-100, 0]]);
+    expect(rect.width).toBeCloseTo(100, 3);
+    expect(rect.depth).toBeCloseTo(300, 3);
+  });
+});

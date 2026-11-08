@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MapFeature, RecordVersion } from "@eqore/contract";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { APPLIED_RULES, NOT_CHECKED, feasibleBessZone, MAX_RUN_FT } from "./zone.ts";
+import { APPLIED_RULES, NOT_CHECKED, feasibleBessZone, MAX_RUN_FT, PREFERRED_STRAIGHT_FT } from "./zone.ts";
 
 // A labeled synthetic site, laid out in feet east and north of a point and converted to degrees.
 const ORIGIN = [-71.5, 42.2] as const;
@@ -80,6 +80,34 @@ describe("the feasible battery zone", () => {
     const { target, pad } = feasibleBessZone(site());
     expect(target).toBe("building wall");
     expect(pad!.run.feet).toBeLessThan(16);
+  });
+});
+
+describe("where the battery should go", () => {
+  const pole = (x: number, y: number) => feature(`pole-${x}`, "existing_equipment", "grid_service_path", { type: "Point", coordinates: ll([x, y]) }, { equipment_type: { type: "text", value: "utility_pole" } });
+  const pointsOf = (f: MapFeature) => ((f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates) as [number, number][][][]).flatMap((polygon) => polygon[0]!).map(feetOf);
+
+  it("keeps the preferred zone within a 150 ft routed run, about 104 ft straight, of the entrance", () => {
+    expect(Math.round(PREFERRED_STRAIGHT_FT)).toBe(104);
+    const { zone, preferred } = feasibleBessZone(site([entrance(200, 200)]));
+    expect(preferred?.attributes?.zone_kind).toEqual({ type: "text", value: "feasible_bess_preferred" });
+    for (const [x, y] of pointsOf(preferred!)) expect(Math.hypot(x - 200, y - 200)).toBeLessThanOrEqual(PREFERRED_STRAIGHT_FT + 4);
+    const area = (f: MapFeature) => (f.attributes!["area_sqft"] as { value: number }).value;
+    expect(area(preferred!)).toBeLessThan(area(zone!) / 2);
+  });
+
+  it("without a known entrance, measures from the wall nearest the utility pole, and says it's assumed", () => {
+    // The pole is north of the building's east end, by the road.
+    const { preferred, pad, target } = feasibleBessZone(site([pole(380, 300)]));
+    expect(target).toBe("building wall nearest the utility supply");
+    expect(String((preferred!.attributes!["confidence_reason"] as { value: string }).value)).toMatch(/assumed/);
+    for (const [x, y] of pointsOf(preferred!)) expect(Math.hypot(x - 380, y - 250)).toBeLessThanOrEqual(PREFERRED_STRAIGHT_FT + 4);
+    const [x, y] = feetOf(pad!.center);
+    expect(Math.hypot(x - 380, y - 250)).toBeLessThan(60);
+  });
+
+  it("falls back to every wall when there's no entrance and no supply nearby", () => {
+    expect(feasibleBessZone(site()).target).toBe("building wall");
   });
 });
 
