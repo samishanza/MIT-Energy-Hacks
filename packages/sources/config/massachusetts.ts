@@ -381,6 +381,29 @@ export const massachusetts: RegionConfig = {
     description: "MassGIS 2025 aerial imagery, 15 cm, flown March to April 2025",
   },
   // Imagery stays MassGIS where it's configured, and lidar slope stays the current slope.
+  // Impervious land cover, for the paved parking and drives on a lot.
+  pavedSurfaces: {
+    coverAttribute: "COVERCODE",
+    imperviousCode: 2,
+    sourceDate: "2016",
+    entry: {
+      kind: "arcgis_rest",
+      id: "massgis-land-cover-2016",
+      name: "MassGIS 2016 Land Cover/Land Use",
+      serviceUrl: "https://arcgisserver.digital.mass.gov/arcgisserver/rest/services/AGOL/LandCoverLandUse2016/MapServer",
+      layer: 0,
+      searchRadiusMeters: 0,
+      licenseNote: "MassGIS 2016 Land Cover/Land Use: land cover from 2016 aerial imagery, MassGIS data with no use restrictions. Its host returned 502 for robots.txt, so no rule could be read.",
+      robotsChecked: "2026-11-08",
+      objectIdAttribute: "OBJECTID",
+      outFields: ["OBJECTID", "COVERCODE", "COVERNAME"],
+      // Impervious only, simplified to about half a metre: the shapes are traced from imagery cells.
+      where: "COVERCODE = 2",
+      maxAllowableOffset: 0.000005,
+      geometryPrecision: 6,
+      fields: [],
+    },
+  },
   // USGS 3DEP lidar, 2021 collections covering central and eastern Massachusetts, read for poles and wires.
   lidarPoints: {
     bases: ["MA_CentralEastern_1_2021", "MA_CentralEastern_2_2021"].map((name) => `https://usgs-lidar-public.s3.amazonaws.com/${name}`),

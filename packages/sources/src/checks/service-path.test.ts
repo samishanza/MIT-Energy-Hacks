@@ -28,7 +28,7 @@ describe("how the building is likely fed", () => {
       current: { type: "text", value: "Likely fed from 05_01_27W3 (3-phase underground), the nearest mapped line, about 93 ft from the building's south side" },
     });
     expect(value("grid_service_path").flags.join(" ")).toContain("not field verified");
-    const inferred = collection.features.filter((feature) => feature.attributes?.basis);
+    const inferred = collection.features.filter((feature) => feature.attributes?.basis && feature.attributes.equipment_type);
     expect(inferred.map((feature) => (feature.attributes!.equipment_type as { value: string }).value).sort()).toEqual(["service_entrance", "service_path", "service_tap"]);
     for (const feature of inferred) {
       expect(feature.label).toMatch(/^\(E\) SERVICE (FROM|TAP ON|ENTRANCE)/);
@@ -41,6 +41,6 @@ describe("how the building is likely fed", () => {
   it("says why when no mapped line is near, as at an Eversource site", async () => {
     const { collection, value } = await collect("11 Bartzak Dr, Holliston, MA");
     expect(value("grid_service_path")).toMatchObject({ state: "missing", reason: expect.stringContaining("No mapped distribution line was found near the building") });
-    expect(collection.features.filter((feature) => feature.attributes?.basis)).toEqual([]);
+    expect(collection.features.filter((feature) => feature.attributes?.basis && feature.attributes.equipment_type)).toEqual([]);
   });
 });

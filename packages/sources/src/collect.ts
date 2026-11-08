@@ -4,6 +4,7 @@ import { queryTerritories, servingUtility } from "./checks/energy.ts";
 import { area } from "@turf/turf";
 import { collectGrid } from "./checks/grid.ts";
 import { collectLidarEquipment } from "./checks/lidar-collect.ts";
+import { collectPavedSurfaces } from "./checks/paved.ts";
 import { inferServicePath } from "./checks/service-path.ts";
 import { padCandidates, type CandidateResult } from "./checks/candidates.ts";
 import { measureSite, type Measurements } from "./checks/measure.ts";
@@ -168,6 +169,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   for (const json of jsonSources) pending(json.id, json.name);
   if (region.territories) pending(region.territories.entry.id, region.territories.entry.name);
   if (region.lidarPoints && ctx.readLidar && region.buildings && physical.parcelGeometry) pending(region.lidarPoints.source.id, region.lidarPoints.source.name);
+  if (region.pavedSurfaces && physical.parcelGeometry) pending(region.pavedSurfaces.entry.id, region.pavedSurfaces.entry.name);
   if (region.earthEngine) {
     const { landCover, terrain, imagery } = region.earthEngine;
     for (const [wanted, entry] of [[landCover, LAND_COVER_SOURCE], [terrain, TERRAIN_SOURCE], [imagery, IMAGERY_SOURCE]] as const) if (wanted) pending(entry.id, entry.name);
@@ -202,7 +204,25 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       : null,
   );
 
-  const [outlines, grid, roads, layers, json, slope, territories, earth, lidar] = await Promise.all([
+  // Paved parking and drives need the buildings and roads too, to take them out of the impervious cover.
+  const pavedRead = Promise.all([outlinesRead, roadsRead]).then(([found, roadResult]) =>
+    region.pavedSurfaces && physical.parcelGeometry
+      ? collectPavedSurfaces(
+          region.pavedSurfaces,
+          physical.parcelGeometry,
+          found?.measurable.features.map((feature) => feature.geometry) ?? [],
+          (roadResult?.features ?? []).flatMap((feature) => {
+            const g = feature.geometry;
+            const lines = g?.type === "LineString" ? [g.coordinates] : g?.type === "MultiLineString" ? g.coordinates : [];
+            // Half a typical two-lane surface: the road's own width isn't read until the layers land.
+            return (lines as number[][][]).map((line) => ({ line, halfWidthM: 4 }));
+          }),
+          ctx,
+        ).then(landed)
+      : null,
+  );
+
+  const [outlines, grid, roads, layers, json, slope, territories, earth, lidar, paved] = await Promise.all([
     outlinesRead,
     collectGrid(region, physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] }, ctx).then(landed),
     roadsRead,
@@ -217,6 +237,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       : null,
     collectRaster(region, physical.parcelGeometry ?? squareAround(physical.location, 50), ctx).then((part) => (part ? landed(part) : null)),
     lidarRead,
+    pavedRead,
   ]);
 
   const collected = [...physical.observations, ...(outlines?.observations ?? []), ...grid.observations];
@@ -270,6 +291,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...measurements.observations,
       ...(service?.observations ?? []),
       ...(lidar?.observations ?? []),
+      ...(paved?.observations ?? []),
       ...candidates.observations,
       // A better local value, such as lidar slope or a 1 m point elevation, is read after Earth Engine's, so it stays current.
       ...(earth?.observations ?? []),
@@ -280,7 +302,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...unavailable,
       ...personRoutes,
     ],
-    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features), ...(service?.features ?? []), ...(lidar?.features ?? [])],
+    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features), ...(service?.features ?? []), ...(lidar?.features ?? []), ...(paved?.features ?? [])],
     baseMap: physical.baseMap,
     // A source still pending at the end was never read, such as a feeder's detail layers when no feeder was found.
     // The value it would have filled says why, so the finished record lists only sources that ran.

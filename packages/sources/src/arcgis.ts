@@ -91,7 +91,9 @@ export function queryParams(entry: ArcgisEntry, query: SpatialQuery): URLSearchP
     return params;
   }
   const { geometry, geometryType } = toEsriGeometry(query);
-  params.set("where", "1=1");
+  params.set("where", entry.where ?? "1=1");
+  if (entry.maxAllowableOffset) params.set("maxAllowableOffset", String(entry.maxAllowableOffset));
+  if (entry.geometryPrecision) params.set("geometryPrecision", String(entry.geometryPrecision));
   params.set("geometry", geometry);
   params.set("geometryType", geometryType);
   params.set("inSR", "4326");
