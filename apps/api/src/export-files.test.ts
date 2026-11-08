@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CONCEPT_GRADE_NOTE, RecordVersionSchema, routes } from "@eqore/contract";
-import { fixtureFetch } from "@eqore/sources";
+import { fittedRect, fixtureFetch } from "@eqore/sources";
 import type { CaptureDeps } from "./capture.ts";
 import { createEngineerApp } from "./routes.ts";
 import { Store } from "./store.ts";
@@ -53,11 +53,11 @@ describe("site geometry as files", () => {
     const { record, dxf, dxfText } = await exported();
     expect(dxf.headers.get("content-disposition")).toBe(`attachment; filename="${SITE}-v1.dxf"`);
     const [parcel] = polylineVertices(dxfText, "PARCEL");
-    const xs = parcel!.map(([x]) => x);
-    const ys = parcel!.map(([, y]) => y);
     const value = (field: string) => (record.values.find((entry) => entry.field === field)!.current as { value: number }).value;
-    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(value("lot_width_ft"), -1);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(value("lot_depth_ft"), -1);
+    // The lot is measured by the smallest rectangle around it, so the drawing in feet gives the same sides.
+    const rect = fittedRect(parcel!);
+    expect(rect.width).toBeCloseTo(value("lot_width_ft"), -1);
+    expect(rect.depth).toBeCloseTo(value("lot_depth_ft"), -1);
     expect(dxfText).toContain(`Origin (0,0) is longitude ${record.site.location![0]}, latitude ${record.site.location![1]}`);
     expect(polylineVertices(dxfText, "BUILDINGS").length).toBeGreaterThan(0);
     expect(polylineVertices(dxfText, "ROADS").length).toBeGreaterThan(0);
