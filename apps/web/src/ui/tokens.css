@@ -1921,3 +1921,8 @@ input:not([type="radio"], [type="checkbox"], [type="range"]) { border: 1px solid
 .review-agent__list li p { margin: 2px 0 6px; font-size: 13px; }
 .review-agent__list li input { width: 100%; margin-bottom: 4px; }
 .review-agent__list li button { margin-right: 6px; }
+.review-agent__sev { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #fff; }
+.review-agent__sev--high { background: #b5121b; }
+.review-agent__sev--medium { background: #b26a00; }
+.review-agent__sev--low { background: #5f6368; }
+.review-agent__fix { font-weight: 600; }

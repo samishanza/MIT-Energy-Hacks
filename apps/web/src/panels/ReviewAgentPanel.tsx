@@ -7,8 +7,8 @@ import { useCallback, useEffect, useState } from "react";
 
 type Proposal = {
   id: string;
-  type: "pin" | "resolve_conflict" | "question";
-  payload: { field?: string; text?: string; candidateId?: string; longitude?: number; latitude?: number };
+  type: "pin" | "resolve_conflict" | "question" | "flag";
+  payload: { field?: string; text?: string; candidateId?: string; longitude?: number; latitude?: number; step?: string; severity?: "high" | "medium" | "low"; issue?: string; suggestion?: string };
   rationale: string;
   createdAt: string;
   decision: { decision: "accepted" | "rejected"; decidedBy: string; reason: string; decidedAt: string } | null;
@@ -25,6 +25,7 @@ function headline(p: Proposal): string {
   const what = FIELD_WORDS[p.payload.field ?? ""] ?? (p.payload.field ?? "").replace(/_/g, " ");
   if (p.type === "pin") return `Place the ${what}`;
   if (p.type === "resolve_conflict") return `Settle ${what}`;
+  if (p.type === "flag") return `${(p.payload.step ?? "").replace(/_/g, " ")}: ${p.payload.issue ?? ""}`;
   return p.payload.text ?? "Question";
 }
 
@@ -95,12 +96,14 @@ export function ReviewAgentPanel({ record, actorName, onActorName, onRecord }: {
       <ol className="review-agent__list">
         {open.map((p) => (
           <li key={p.id}>
+            {p.type === "flag" ? <span className={`review-agent__sev review-agent__sev--${p.payload.severity ?? "low"}`}>{p.payload.severity}</span> : null}
             <strong>{headline(p)}</strong>
+            {p.type === "flag" && p.payload.suggestion ? <p className="review-agent__fix">Suggested fix: {p.payload.suggestion}</p> : null}
             <p>{p.rationale}</p>
             <input aria-label="Reason" placeholder="Reason" value={reasons[p.id] ?? ""} onChange={(e) => setReasons((r) => ({ ...r, [p.id]: e.target.value }))} />
             {p.type !== "question" ? (
               <button type="button" onClick={() => void decide(p, "accept")}>
-                Accept
+                {p.type === "flag" ? "Agree" : "Accept"}
               </button>
             ) : null}
             <button type="button" onClick={() => void decide(p, "reject")}>
