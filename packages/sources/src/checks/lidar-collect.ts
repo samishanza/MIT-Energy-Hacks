@@ -40,8 +40,8 @@ export async function collectLidarEquipment(
   const perLon = 111320 * Math.cos((center[1] * Math.PI) / 180);
   const local = ([lon, lat]: Point): Point => [(lon - center[0]) * perLon, (lat - center[1]) * 111320];
   const lonLat = ([x, y]: Point): Point => [center[0] + x / perLon, center[1] + y / 111320];
-  // The buildings and 40 m around them, which reaches the poles on the road in front.
-  const half = Math.min(200, Math.max(...vertices.map(local).map(([x, y]) => Math.max(Math.abs(x), Math.abs(y)))) + 40);
+  // The buildings and 60 m around them, which reaches the poles on the road in front and their neighbors.
+  const half = Math.min(220, Math.max(...vertices.map(local).map(([x, y]) => Math.max(Math.abs(x), Math.abs(y)))) + 60);
   const query = `points within ${Math.round(half)} m of ${center[0].toFixed(5)},${center[1].toFixed(5)}`;
   const origin = (retrievedAt: string) => ({ source, query, retrievedAt });
   const missing = (reason: string): LidarCollection => ({
@@ -80,8 +80,14 @@ export async function collectLidarEquipment(
       geometry: { type: "Point", coordinates: lonLat(pole.at) },
       label: "(E) UTILITY POLE",
       attributes: {
-        ...shared("utility_pole", `A column of returns ${pole.low.toFixed(1)} to ${pole.high.toFixed(1)} m above ground, half a metre wide, with open air around it, ${pole.roadFeet} ft from ${pole.road}.`),
-        height_ft: { type: "quantity", value: Math.round(pole.high * FEET), unit: "ft" },
+        ...shared(
+          "utility_pole",
+          pole.inCanopy
+            ? `A compact top ${pole.heightM.toFixed(1)} m up inside a tree's crown, on the line between two wired poles on ${pole.road} that stand about twice the usual span apart.`
+            : `A compact top ${pole.heightM.toFixed(1)} m up with a single-column body below it, ${pole.roadFeet} ft from ${pole.road}, wired to another pole.`,
+        ),
+        height_ft: { type: "quantity", value: Math.round(pole.heightM * FEET), unit: "ft" },
+        in_canopy: { type: "boolean", value: pole.inCanopy },
       },
     }),
   );
@@ -104,10 +110,15 @@ export async function collectLidarEquipment(
     field: "detected_grid_equipment",
     geometry: { type: "Point", coordinates: lonLat(pad.at) },
     label: "(E) EQUIPMENT BOX",
-    attributes: shared(
-      "pad_mount_transformer_candidate",
-      `A box about ${pad.widthM} by ${pad.depthM} m and ${pad.heightM.toFixed(1)} m tall, ${Math.round(pad.wallM * FEET)} ft from the building. It could also be other equipment, a dumpster, or a vehicle.`,
-    ),
+    attributes: {
+      ...shared(
+        "pad_mount_transformer_candidate",
+        `A solid, flat-topped box about ${pad.widthM} by ${pad.depthM} m and ${pad.heightM.toFixed(1)} m tall, ${Math.round(pad.wallM * FEET)} ft from the building, with nothing overhanging. It could be a transformer, a generator, or other equipment.`,
+      ),
+      height_ft: { type: "quantity", value: Math.round(pad.heightM * FEET * 10) / 10, unit: "ft" },
+      width_ft: { type: "quantity", value: Math.round(pad.widthM * FEET * 10) / 10, unit: "ft" },
+      depth_ft: { type: "quantity", value: Math.round(pad.depthM * FEET * 10) / 10, unit: "ft" },
+    },
   }));
   features.push(...pads);
 
@@ -116,7 +127,7 @@ export async function collectLidarEquipment(
     `${detection.poles.length} pole${detection.poles.length === 1 ? "" : "s"}`,
     `${detection.conductors.length} conductor span${detection.conductors.length === 1 ? "" : "s"}`,
     detection.drop ? "a likely service drop" : "no service drop",
-    `${detection.padMounts.length} possible pad-mount transformer${detection.padMounts.length === 1 ? "" : "s"}`,
+    `${detection.padMounts.length} equipment box${detection.padMounts.length === 1 ? "" : "es"}`,
   ];
   observations.push(
     observe(origin(retrievedAt), ctx, {
@@ -161,7 +172,11 @@ export async function collectLidarEquipment(
         field: "grid_service_path",
         geometry: { type: "Point", coordinates: lonLat(drop.wall) },
         label: "(E) SERVICE ENTRANCE",
-        attributes: shared("service_entrance", `${why} The main switchgear is usually just inside where the service enters.`),
+        attributes: {
+          ...shared("service_entrance", `${why} The main switchgear is usually just inside where the service enters.`),
+          ...(drop.roofM !== null ? { roof_height_ft: { type: "quantity" as const, value: Math.round(drop.roofM * FEET), unit: "ft" } } : {}),
+          attachment_height_ft: { type: "quantity" as const, value: Math.round(drop.heightM * FEET), unit: "ft" },
+        },
       },
     );
     observations.push(
