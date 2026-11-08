@@ -1,6 +1,6 @@
 import type { BaseMap, MapFeature, Site, Value } from "@eqore/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { googleEarthUrl, streetViewUrl } from "../app/siteLinks";
+import { googleEarthUrl, streetViewToward, streetViewUrl } from "../app/siteLinks";
 import {
   BASE_LAYER,
   BASE_SOURCE,
@@ -75,6 +75,18 @@ export function SiteMap(props: SiteMapProps) {
     featureLabels,
   } = props;
   const container = useRef<HTMLDivElement>(null);
+  // Look from the street at where the building is likely fed, or at the concept pad when nothing is inferred.
+  const serviceLook = useMemo(() => {
+    const kind = (f: MapFeature) => (f.attributes?.["equipment_type"] as { value?: string } | undefined)?.value;
+    const target =
+      features.find((f) => kind(f) === "service_tap") ?? features.find((f) => kind(f) === "service_entrance") ?? features.find((f) => kind(f) === "bess_pad");
+    if (!target || target.geometry.type !== "Point") return null;
+    const roads = features
+      .filter((f) => f.kind === "road")
+      .flatMap((f) => (f.geometry.type === "LineString" ? f.geometry.coordinates : f.geometry.type === "MultiLineString" ? f.geometry.coordinates.flat() : [])) as [number, number][];
+    const words = kind(target) === "bess_pad" ? "concept pad" : "likely service";
+    return { url: streetViewToward(target.geometry.coordinates as [number, number], roads), words, title: target.label ?? words };
+  }, [features]);
   const map = useRef<MapLibre | null>(null);
   const highlighted = useRef<string[]>([]);
   const fitted = useRef(false);
@@ -282,6 +294,11 @@ export function SiteMap(props: SiteMapProps) {
             <a href={streetViewUrl(site.location)} target="_blank" rel="noopener noreferrer">
               Street View
             </a>
+            {serviceLook ? (
+              <a href={serviceLook.url} target="_blank" rel="noopener noreferrer" title={serviceLook.title}>
+                Street View: {serviceLook.words}
+              </a>
+            ) : null}
           </>
         ) : null}
         <button type="button" aria-pressed={threeD} className={threeD ? "on" : ""} onClick={() => setThreeD((on) => !on)}>

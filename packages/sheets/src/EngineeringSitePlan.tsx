@@ -38,6 +38,7 @@ const FONT = 'Arial, Helvetica, sans-serif';
 const INK = '#111';
 const UTILITY = '#b5121b';
 const TRANSMISSION = '#6b0f1a';
+const NEW = '#0b5cad';
 const WATER = '#1f5f86';
 
 type Pt = { x: number; y: number };
@@ -119,8 +120,9 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   const segments = utilityLines.filter((f) => lineClassOf(f) === 'segment');
   const transmission = utilityLines.filter((f) => lineClassOf(f) === 'transmission');
   const servicePaths = utilityLines.filter((f) => lineClassOf(f) === 'service');
+  const trenches = utilityLines.filter((f) => attributeText(f, 'basis') === 'CONCEPT');
   const equipment = record.features
-    .filter((f) => f.kind === 'existing_equipment' && f.geometry.type === 'Point')
+    .filter((f) => f.kind === 'existing_equipment' && f.geometry.type === 'Point' && attributeText(f, 'basis') !== 'CONCEPT')
     .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
     .filter((e) => inside(e.at, view, 20));
   const wetlands = record.features.filter((f) => f.kind === 'constraint' && f.field === 'wetlands_nearby' && f.geometry.type !== 'Point');
@@ -184,6 +186,20 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
         : [`(E) SUBSTATION ${(s.f.label ?? '').toUpperCase()}`, `${type ? `${type}, ` : ''}UTILITY MAP, LOCATION APPROX.`],
       color: UTILITY,
     });
+  }
+
+  // The concept layout: new equipment at the nearest open ground, never a design.
+  const concept = record.features
+    .filter((f) => f.kind === 'existing_equipment' && f.geometry.type === 'Point' && attributeText(f, 'basis') === 'CONCEPT')
+    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
+    .filter((e) => inside(e.at, view, 20));
+  for (const c of concept) {
+    const words = (c.f.label ?? '').toUpperCase().replace(/, CONCEPT LOCATION, NOT A DESIGN$/, '');
+    callouts.push({ anchor: c.at, lines: [words, 'CONCEPT LOCATION, NOT A DESIGN'], color: NEW });
+  }
+  for (const t of trenches) {
+    const at = firstInside(linesOf(t).flatMap(sheetLine), view, 0.5);
+    if (at) callouts.push({ anchor: at, lines: [`(N) TRENCH ROUTE, ±${attributeText(t, 'distance_ft') ?? '?'} STRAIGHT LINE`, 'CONCEPT, REAL ROUTE IS LONGER'], color: NEW });
   }
 
   // How the building likely connects: inferred from the nearest mapped line, never field verified.
@@ -369,6 +385,22 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
                 </g>
               );
             }),
+          )}
+
+          {trenches.map((t, i) =>
+            linesOf(t).map((line, j) => (
+              <path key={`trench-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" />
+            )),
+          )}
+
+          {concept.map((c, i) =>
+            c.type === 'BESS_PAD' ? (
+              <PadSymbol key={`pad-${i}`} at={c.at} k={k} />
+            ) : c.type === 'AC_DISCONNECT' ? (
+              <rect key={`disc-${i}`} x={c.at.x + 18} y={c.at.y - 10} width={20} height={20} fill="#fff" stroke={NEW} strokeWidth={3} />
+            ) : (
+              <circle key={`brk-${i}`} cx={c.at.x} cy={c.at.y} r={11} fill="#fff" stroke={NEW} strokeWidth={3} />
+            ),
           )}
 
           {servicePaths.map((sp, i) =>
@@ -636,6 +668,19 @@ function FallArrow({ at, degrees, text }: { at: Pt; degrees: number; text: strin
   );
 }
 
+/** The concept BESS pad at true size: about 11.5 x 14 ft, the plan set's pad. */
+function PadSymbol({ at, k }: { at: Pt; k: number }) {
+  const w = Math.max(14 * k, 18);
+  const h = Math.max(11.5 * k, 15);
+  return (
+    <g>
+      <rect x={at.x - w / 2} y={at.y - h / 2} width={w} height={h} fill={NEW} fillOpacity={0.18} stroke={NEW} strokeWidth={3} strokeDasharray="10 6" />
+      <line x1={at.x - w / 2} y1={at.y - h / 2} x2={at.x + w / 2} y2={at.y + h / 2} stroke={NEW} strokeWidth={1.5} />
+      <line x1={at.x + w / 2} y1={at.y - h / 2} x2={at.x - w / 2} y2={at.y + h / 2} stroke={NEW} strokeWidth={1.5} />
+    </g>
+  );
+}
+
 function TransformerSymbol({ at, inferred = false }: { at: Pt; inferred?: boolean }) {
   // Pad-mounted transformer, as the samples' legend draws it: a box with a smaller box on top.
   return (
@@ -850,6 +895,8 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
     },
     { label: '(E) TRANSMISSION LINE, KV (HIFLD, C. 2015)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" /> },
     { label: '(E) LIKELY SERVICE PATH, INFERRED', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} strokeDasharray="14 10" /> },
+    { label: '(N) BESS PAD, CONCEPT LOCATION, NOT A DESIGN', symbol: (sx, sy) => <PadSymbol at={{ x: sx + 90, y: sy }} k={1.6} /> },
+    { label: '(N) TRENCH ROUTE, CONCEPT (STRAIGHT LINE)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" /> },
     { label: '(E) TRANSFORMER, DASHED WHERE INFERRED', symbol: (sx, sy) => <TransformerSymbol at={{ x: sx + 90, y: sy + 2 }} inferred /> },
     { label: '(E) SERVICE ENTRANCE / SWITCHGEAR, DASHED WHERE INFERRED', symbol: (sx, sy) => <SwitchgearSymbol at={{ x: sx + 90, y: sy }} inferred /> },
     {
