@@ -14,6 +14,23 @@ import { useMemo, type ReactNode } from 'react';
 import type { MapFeature, RecordVersion } from '@eqore/contract';
 import { frameFor, polygonAreaSqft, toLocal, toLocalPolygon, toLonLat, type LocalFrame, type LocalPolygon } from '@eqore/geom';
 import {
+  along,
+  CALLOUT_FONT,
+  CALLOUT_LINE_H,
+  CALLOUT_PAD_X,
+  Occupancy,
+  placeCallouts,
+  polylineLength,
+  quadOfRect,
+  textQuad,
+  textWidth,
+  upright,
+  wrapCallout,
+  type CalloutSpec,
+  type PlacedCallout,
+  type Quad,
+} from './sheet-layout.ts';
+import {
   chooseScale,
   dimensionText,
   fallDirection,
@@ -126,10 +143,15 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   const servicePaths = utilityLines.filter((f) => lineClassOf(f) === 'service');
   const detectedLines = utilityLines.filter((f) => lineClassOf(f) === 'detected');
   const trenches = utilityLines.filter((f) => attributeText(f, 'basis') === 'CONCEPT');
+  // Two sources often mark the same pole or manhole a few feet apart: the sheet draws one symbol for a kind of item
+  // that close to another (15 ft for utility poles, which stand far apart; 5 ft for anything else), the plan set's
+  // first. The record keeps both.
   const equipment = drawnEquipment(record.features)
     .filter((f) => f.kind === 'existing_equipment' && f.geometry.type === 'Point' && attributeText(f, 'basis') !== 'CONCEPT')
-    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
-    .filter((e) => inside(e.at, view, 20));
+    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: equipmentKind(attributeText(f, 'equipment_type')) }))
+    .filter((e) => inside(e.at, view, 20))
+    .sort((a, b) => Number(attributeText(b.f, 'basis') === 'PLAN SET') - Number(attributeText(a.f, 'basis') === 'PLAN SET'))
+    .filter((e, i, all) => !all.slice(0, i).some((o) => o.type === e.type && Math.hypot(o.at.x - e.at.x, o.at.y - e.at.y) < (e.type === 'UTILITY_POLE' ? 15 : 5) * k));
   const wetlands = record.features.filter((f) => f.kind === 'constraint' && f.field === 'wetlands_nearby' && f.geometry.type !== 'Point');
   const paved = record.features.filter((f) => f.kind === 'constraint' && f.field === 'paved_area_sqft' && f.geometry.type !== 'Point');
   const stallRows = record.features.filter((f) => f.field === 'parking_stalls' && f.geometry.type === 'Polygon');
@@ -147,64 +169,101 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   const dims = record.features.filter((f) => f.kind === 'dimension_line');
   const inMassachusetts = /massachusetts/i.test(record.site.region);
 
-  // Callouts: (E) existing, capitalized, on leaders.
-  const callouts: Callout[] = [];
-  callouts.push({
-    anchor: lotSheet[Math.floor(lotSheet.length / 3)]!,
-    lines: ['(E) PROPERTY LINE', `PARCEL ${printed(record, 'parcel_id') ?? ''}`.trim()],
-  });
-  const stories = printed(record, 'building_stories');
-  const height = printed(record, 'building_height_ft');
-  const built = printed(record, 'year_built');
-  buildings.slice(0, 6).forEach((b, i) => {
-    const sf = Number(b.area.toPrecision(b.area >= 1000 ? 3 : 2)).toLocaleString('en-US');
-    const lines = [`(E) BUILDING ${i + 1}, ≈${sf} SF MAPPED FOOTPRINT`];
-    if (i === 0) {
-      const facts = [stories, height ? `EST. ${height} HT.` : null, built ? `BUILT ${built}` : null].filter(Boolean);
-      if (facts.length) lines.push(`${facts.join(', ')} (ASSESSOR)`);
+  const pavedPaths = paved
+    .flatMap((p) => polygonsOfFeature(p, frame))
+    .map((p) => [p.outer, ...(p.holes ?? [])].map((ring) => path(ring.map(toSheet))).join(' '));
+
+  // Everything on the plan view registers here, so no text, box, or leader lands on another.
+  const occ = new Occupancy(view);
+  const substations = record.features
+    .filter((f) => f.kind === 'substation' && f.geometry.type === 'Point')
+    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), proposed: f.field === 'proposed_substations_nearby' }))
+    .filter((s) => inside(s.at, view, 40));
+  // The concept layout: new equipment at the nearest open ground, never a design.
+  const concept = record.features
+    .filter((f) => f.kind === 'existing_equipment' && f.geometry.type === 'Point' && attributeText(f, 'basis') === 'CONCEPT')
+    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
+    .filter((e) => inside(e.at, view, 20));
+  for (const e of equipment) occ.marks.push({ at: e.at, r: SYMBOL_REACH[e.type] ?? 28 });
+  for (const s of substations) occ.marks.push({ at: s.at, r: 26 });
+  for (const c of concept) {
+    if (c.type === 'BESS_PAD') occ.marks.push({ at: c.at, r: Math.max(14 * k, 18, 11.5 * k) / 2 + 4 });
+    else if (c.type === 'AC_DISCONNECT') occ.marks.push({ at: { x: c.at.x + 28, y: c.at.y }, r: 14 });
+    else occ.marks.push({ at: c.at, r: 13 });
+  }
+  for (const b of buildings) b.sheet.forEach((p, i) => occ.lines.push([p, b.sheet[(i + 1) % b.sheet.length]!]));
+  const segmentsOf = (pts: Pt[], close = false): [Pt, Pt][] => (close ? pts.map((p, i) => [p, pts[(i + 1) % pts.length]!] as [Pt, Pt]) : pts.slice(1).map((p, i) => [pts[i]!, p] as [Pt, Pt]));
+  occ.softLines.push(...segmentsOf(lotSheet, true));
+  for (const f of [...roads, ...utilityLines]) for (const line of linesOf(f)) occ.softLines.push(...segmentsOf(sheetLine(line)));
+  for (const z of feasible) for (const p of polygonsOfFeature(z, frame)) occ.keepClear.push(boundsQuad(p.outer.map(toSheet)));
+
+  // The fall arrow takes the first corner of the plan with nothing under it.
+  const fall = fallDirection(record);
+  const slope = printed(record, 'site_slope_pct');
+  const fallAt =
+    fall !== null && slope
+      ? occ.placeText(
+          [
+            { x: view.x + view.w - 190, y: view.y + 130 },
+            { x: view.x + 190, y: view.y + 130 },
+            { x: view.x + view.w - 190, y: view.y + view.h - 190 },
+            { x: view.x + 190, y: view.y + view.h - 190 },
+          ].map((at) => ({ at, quad: quadOfRect({ x: at.x - 140, y: at.y - 100, w: 280, h: 262 }) })),
+        )
+      : null;
+
+  // The main building's overall size, as dimension strings along its bottom and right sides on the sheet.
+  const mainSheet = buildings[0]?.sheet ?? [];
+  const dimensions: { a: Pt; b: Pt; text: string }[] = [];
+  if (mainSheet.length > 2) {
+    const xs = mainSheet.map((p) => p.x), ys = mainSheet.map((p) => p.y);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    dimensions.push({ a: { x: x0, y: y1 + 70 }, b: { x: x1, y: y1 + 70 }, text: `${Math.round((x1 - x0) / k)}'` });
+    dimensions.push({ a: { x: x1 + 70, y: y0 }, b: { x: x1 + 70, y: y1 }, text: `${Math.round((y1 - y0) / k)}'` });
+  }
+  for (const d of dims) {
+    const line = linesOf(d)[0];
+    if (!line || line.length < 2) continue;
+    dimensions.push({ a: toSheet(toLocal(frame, line[0]!)), b: toSheet(toLocal(frame, line.at(-1)!)), text: dimensionText(d.label ?? '') });
+  }
+  const placedDims = dimensions.map((d) => ({ ...d, label: dimensionLabel(d.a, d.b, d.text, occ) }));
+
+  // One name per street, along its centerline where the lettering has room.
+  const roadLabels: { at: Pt; angle: number; text: string }[] = [];
+  const byName = new Map<string, Pt[]>();
+  for (const r of roads) {
+    for (const line of linesOf(r)) {
+      const pts = sheetLine(line);
+      const name = roadName(r);
+      if (name && polylineLength(pts) > polylineLength(byName.get(name) ?? [])) byName.set(name, pts);
     }
-    callouts.push({ anchor: centroid(b.sheet), lines });
-  });
-  for (const f of feeders) {
-    const id = feederIdOf(f);
-    const s = feederSummary(record, id);
-    const at = firstInside(linesOf(f).flatMap(sheetLine), view);
-    if (!at) continue;
-    callouts.push({ anchor: at, lines: [`(E) ELECTRIC FEEDER ${s.line}`, ...(s.capacity ? [s.capacity] : [])], color: UTILITY });
   }
-  const frontage = roads.find((r) => (r.attributes?.fronting?.type === 'boolean' && r.attributes.fronting.value) || /street in the address/i.test(r.label ?? ''));
-  if (frontage) {
-    const at = firstInside(linesOf(frontage).flatMap(sheetLine), view, 0.5);
-    const side = printed(record, 'road_side');
-    if (at) callouts.push({ anchor: at, lines: [`(E) ${roadName(frontage)}`, ...(side ? [`FRONTAGE, ${side} SIDE`] : [])] });
+  for (const [name, pts] of byName) {
+    const total = polylineLength(pts);
+    const half = textWidth(name, ROAD_FONT) / 2;
+    if (total < half * 2.4) continue;
+    const ts = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.1, 0.9];
+    const hit = occ.placeText(
+      ts.flatMap((t) => {
+        const p = along(pts, t), p0 = along(pts, Math.max(0, t - half / total)), p1 = along(pts, Math.min(1, t + half / total));
+        if (!p || !p0 || !p1) return [];
+        const angle = upright((Math.atan2(p1.at.y - p0.at.y, p1.at.x - p0.at.x) * 180) / Math.PI);
+        return [{ at: p.at, angle, text: name, quad: textQuad(p.at, name, ROAD_FONT, angle, { dy: -10, halo: 5 }) }];
+      }),
+    );
+    if (hit) roadLabels.push(hit);
   }
-  for (const w of wetlands) {
-    const polys = polygonsOfFeature(w, frame);
-    const pts = polys.flatMap((p) => p.outer.map(toSheet));
-    const at = firstInside(pts, view);
-    if (!at) continue;
-    callouts.push({ anchor: at, lines: [`(E) WETLAND: ${(attributeText(w, 'wetland_type') ?? '').toUpperCase()}`.replace(/: $/, '')], color: WATER });
-  }
-  for (const p of paved) {
-    const pts = polygonsOfFeature(p, frame).flatMap((poly) => poly.outer.map(toSheet));
-    const at = firstInside(pts, view, 0.6);
-    if (at) callouts.push({ anchor: at, lines: ['(E) PAVED PARKING AND DRIVES'] });
-  }
-  // One callout for the striping, on the longest row, as a drawing marks a typical condition.
-  const longestRow = [...stallRows].sort((a, b) => Number((b.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0) - Number((a.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0))[0];
-  if (longestRow) {
-    const pts = polygonsOfFeature(longestRow, frame).flatMap((poly) => poly.outer.map(toSheet));
-    const at = pts.length ? centroid(pts) : null;
-    const total = stallRows.reduce((sum, f) => sum + Number((f.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0), 0);
-    if (at && inside(at, view, 20)) callouts.push({ anchor: at, lines: ['(E) STRIPED PARKING, TYP.', `${total} STALLS SEEN IN IMAGERY`] });
-  }
-  for (const o of open) {
-    const pts = polygonsOfFeature(o, frame).flatMap((p) => p.outer.map(toSheet));
-    if (pts.length) callouts.push({ anchor: centroid(pts), lines: ['OPEN GROUND'] });
-  }
+
+  // Callouts: (E) existing, capitalized, on leaders. Lower priority places first and is left off last.
+  const specs: CalloutSpec[] = [];
+  const callout = (anchors: (Pt | null | undefined)[], lines: string[], color: string, priority: number, extent?: { hw: number; hh: number }) => {
+    const shown = anchors.filter((a): a is Pt => !!a);
+    if (shown.length) specs.push({ anchors: shown, lines: lines.flatMap((l) => wrapCallout(l)), color, priority, extent });
+  };
+  const ringPoints = (pts: Pt[]) => pts.flatMap((p, i) => [p, mid(p, pts[(i + 1) % pts.length]!)]).filter((p) => inside(p, view, 50));
+
   for (const z of feasible) {
     const pts = polygonsOfFeature(z, frame).flatMap((p) => p.outer.map(toSheet));
-    const at = firstInside(pts, view, 0.2);
     const kind = zoneKind(z);
     const lines =
       kind === 'FEASIBLE_BESS_RECOMMENDED'
@@ -212,84 +271,107 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
         : kind === 'FEASIBLE_BESS_PREFERRED'
           ? ['(N) BESS ZONE', `WITHIN ${attributeText(z, 'preferred_run_ft') ?? "150'"} RUN OF THE SERVICE`]
           : ['(N) BESS ZONE', `WITHIN ${attributeText(z, 'max_run_ft') ?? "250'"} RUN OF THE SERVICE`];
-    if (at) callouts.push({ anchor: at, lines, color: NEW });
+    callout(pts.filter((p) => inside(p, view, 40)), lines, NEW, 0);
   }
-
-  const substations = record.features
-    .filter((f) => f.kind === 'substation' && f.geometry.type === 'Point')
-    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), proposed: f.field === 'proposed_substations_nearby' }))
-    .filter((s) => inside(s.at, view, 40));
-  for (const s of substations) {
-    const type = attributeText(s.f, 'substation_type');
-    callouts.push({
-      anchor: s.at,
-      lines: s.proposed
-        ? [`(F) ${(s.f.label ?? 'PROPOSED SUBSTATION').toUpperCase()}`]
-        : [`(E) SUBSTATION ${(s.f.label ?? '').toUpperCase()}`, ...(type ? [type] : [])],
-      color: UTILITY,
-    });
-  }
-
-  // The concept layout: new equipment at the nearest open ground, never a design.
-  const concept = record.features
-    .filter((f) => f.kind === 'existing_equipment' && f.geometry.type === 'Point' && attributeText(f, 'basis') === 'CONCEPT')
-    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
-    .filter((e) => inside(e.at, view, 20));
   for (const c of concept) {
-    callouts.push({ anchor: c.at, lines: [plainLabel(c.f.label).toUpperCase()], color: NEW });
+    const label = [plainLabel(c.f.label).toUpperCase()];
+    if (c.type === 'BESS_PAD') callout([c.at], label, NEW, 0, { hw: Math.max(14 * k, 18) / 2, hh: Math.max(11.5 * k, 15) / 2 });
+    else if (c.type === 'AC_DISCONNECT') callout([{ x: c.at.x + 28, y: c.at.y }], label, NEW, 0, { hw: 10, hh: 10 });
+    else callout([c.at], label, NEW, 0, { hw: 11, hh: 11 });
   }
-  // Where symbols are drawn, so dimension text stays off them.
-  const symbolPoints = [...equipment.map((e) => e.at), ...concept.map((c) => c.at), ...substations.map((s) => s.at)];
   for (const t of trenches) {
-    const at = firstInside(linesOf(t).flatMap(sheetLine), view, 0.5);
-    if (at) callouts.push({ anchor: at, lines: ['(N) TRENCH ROUTE'], color: NEW });
+    const pts = linesOf(t).flatMap(sheetLine);
+    callout([along(pts, 0.5)?.at, along(pts, 0.3)?.at, along(pts, 0.7)?.at], ['(N) TRENCH ROUTE'], NEW, 0);
   }
 
   // How the building likely connects: inferred from the nearest mapped line, never field verified.
+  const kinds = new Map<string, typeof equipment>();
   for (const e of equipment) {
-    if (e.type === 'UTILITY_POLE') continue;
-    callouts.push({ anchor: e.at, lines: [plainLabel(e.f.label).toUpperCase()], color: UTILITY });
+    if (e.type in TYPICAL) kinds.set(e.type, [...(kinds.get(e.type) ?? []), e]);
+    else callout([e.at], [plainLabel(e.f.label).toUpperCase()], UTILITY, 1, EXTENT[e.type] ?? EXTENT.SERVICE_ENTRANCE);
+  }
+  // One callout per kind of item, marked typical, as a drawing marks a repeated condition.
+  for (const [type, items] of kinds) {
+    const t = TYPICAL[type]!;
+    callout(
+      items.map((e) => e.at),
+      [items.length > 1 ? `${t.label}, TYP. OF ${items.length}` : t.label],
+      t.electrical ? UTILITY : INK,
+      t.electrical ? 1 : 4,
+      EXTENT[type],
+    );
   }
   for (const s of servicePaths) {
-    const at = firstInside(linesOf(s).flatMap(sheetLine), view, 0.5);
+    const pts = linesOf(s).flatMap(sheetLine);
     const drop = attributeText(s, 'line_class') === 'DETECTED SERVICE DROP';
-    if (at)
-      callouts.push({
-        anchor: at,
-        lines: drop
-          ? ['(E) OVERHEAD SERVICE DROP']
-          : ['(E) ELECTRIC SERVICE'],
-        color: UTILITY,
-      });
+    callout([along(pts, 0.5)?.at, along(pts, 0.3)?.at, along(pts, 0.7)?.at], [drop ? '(E) OVERHEAD SERVICE DROP' : '(E) ELECTRIC SERVICE'], UTILITY, 1);
   }
-  const poles = equipment.filter((e) => e.type === 'UTILITY_POLE');
-  if (poles.length) {
-    const first = poles[0]!;
-    callouts.push({ anchor: first.at, lines: [poles.length > 1 ? `(E) UTILITY POLE, TYP. OF ${poles.length}` : '(E) UTILITY POLE'], color: UTILITY });
+  for (const f of feeders) {
+    const s = feederSummary(record, feederIdOf(f));
+    callout(linesOf(f).flatMap(sheetLine).filter((p) => inside(p, view, 40)).slice(0, 12), [`(E) ELECTRIC FEEDER ${s.line}`, ...(s.capacity ? [s.capacity] : [])], UTILITY, 1);
+  }
+  for (const s of substations) {
+    const type = attributeText(s.f, 'substation_type');
+    callout(
+      [s.at],
+      s.proposed ? [`(F) ${(s.f.label ?? 'PROPOSED SUBSTATION').toUpperCase()}`] : [`(E) SUBSTATION ${(s.f.label ?? '').toUpperCase()}`, ...(type ? [type] : [])],
+      UTILITY,
+      1,
+      { hw: 22, hh: 22 },
+    );
   }
   const shownTransmission = transmission
-    .map((t) => ({ t, at: firstInside(linesOf(t).flatMap(sheetLine), view) }))
-    .filter((x): x is { t: MapFeature; at: Pt } => x.at !== null);
-  for (const { t, at } of shownTransmission.slice(0, 2)) {
+    .map((t) => ({ t, pts: linesOf(t).flatMap(sheetLine).filter((p) => inside(p, view, 40)) }))
+    .filter((x) => x.pts.length > 0);
+  for (const { t, pts } of shownTransmission.slice(0, 2)) {
     const kv = attributeText(t, 'line_voltage');
-    callouts.push({ anchor: at, lines: [`(E) ${kv ? `${kv} ` : ''}TRANSMISSION LINE`, ...(attributeText(t, 'line_owner') ? [attributeText(t, 'line_owner')!] : [])], color: TRANSMISSION });
+    const owner = attributeText(t, 'line_owner');
+    callout(pts.slice(0, 12), [`(E) ${kv ? `${kv} ` : ''}TRANSMISSION LINE`, ...(owner ? [owner] : [])], UTILITY, 1);
   }
 
-  const placed = placeCallouts(callouts, view);
-  const boxes = placed.map((c) => c.box);
-  const clearOfBoxes = (p: Pt, pad = 30) => boxes.every((b) => p.x < b.x - pad || p.x > b.x + b.w + pad || p.y < b.y - pad || p.y > b.y + b.h + pad);
-
-  // The main building's overall size, as dimension strings along its bottom and right sides on the sheet.
-  const mainSheet = buildings[0]?.sheet ?? [];
-  const buildingDims: { a: Pt; b: Pt; text: string }[] = [];
-  if (mainSheet.length > 2) {
-    const xs = mainSheet.map((p) => p.x), ys = mainSheet.map((p) => p.y);
-    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-    buildingDims.push({ a: { x: x0, y: y1 + 70 }, b: { x: x1, y: y1 + 70 }, text: `${Math.round((x1 - x0) / k)}'` });
-    buildingDims.push({ a: { x: x1 + 70, y: y0 }, b: { x: x1 + 70, y: y1 }, text: `${Math.round((y1 - y0) / k)}'` });
+  const stories = printed(record, 'building_stories');
+  const height = printed(record, 'building_height_ft');
+  const built = printed(record, 'year_built');
+  buildings.slice(0, 6).forEach((b, i) => {
+    const sf = Number(b.area.toPrecision(b.area >= 1000 ? 3 : 2)).toLocaleString('en-US');
+    const lines = [`(E) BUILDING ${i + 1}, ≈${sf} SF`];
+    if (i === 0) {
+      const facts = [stories, height ? `EST. ${height} HT.` : null, built ? `BUILT ${built}` : null].filter(Boolean);
+      if (facts.length) lines.push(`${facts.join(', ')} (ASSESSOR)`);
+    }
+    // Anchored inside the outline, on a point set in from its walls.
+    const c = centroid(b.sheet);
+    callout([c, ...b.sheet.map((p) => ({ x: p.x + (c.x - p.x) * 0.15, y: p.y + (c.y - p.y) * 0.15 }))], lines, INK, 2);
+  });
+  callout(ringPoints(lotSheet), ['(E) PROPERTY LINE', `PARCEL ${printed(record, 'parcel_id') ?? ''}`.trim()], INK, 3);
+  const frontage = roads.find((r) => (r.attributes?.fronting?.type === 'boolean' && r.attributes.fronting.value) || /street in the address/i.test(r.label ?? ''));
+  if (frontage) {
+    const pts = linesOf(frontage).flatMap(sheetLine);
+    const side = printed(record, 'road_side');
+    callout([0.5, 0.4, 0.6, 0.3, 0.7].map((t) => along(pts, t)?.at), [`(E) ${roadName(frontage)}`, ...(side ? [`FRONTAGE, ${side} SIDE`] : [])], INK, 3);
+  }
+  // One callout for the striping, as a drawing marks a typical condition.
+  const stalls = stallRows.reduce((sum, f) => sum + Number((f.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0), 0);
+  const stripeLines = stripes.flatMap((f) => linesOf(f)).map(sheetLine);
+  if (stripeLines.length) {
+    callout(stripeLines.map((l) => l[0]!), ['(E) STRIPED PARKING, TYP.', ...(stalls ? [`${stalls} STALLS`] : [])], INK, 4);
+  }
+  for (const w of wetlands) {
+    callout(polygonsOfFeature(w, frame).flatMap((p) => p.outer.map(toSheet)).filter((p) => inside(p, view, 40)).slice(0, 12), [`(E) WETLAND: ${(attributeText(w, 'wetland_type') ?? '').toUpperCase()}`.replace(/: $/, '')], INK, 5);
+  }
+  if (paved.length) {
+    // One callout for every paved area: the largest is labelled.
+    const polys = paved.flatMap((p) => polygonsOfFeature(p, frame)).sort((a, b) => polygonAreaSqft(b) - polygonAreaSqft(a));
+    callout(polys.slice(0, 1).flatMap((p) => p.outer.map(toSheet)).filter((p) => inside(p, view, 40)).filter((_, i, all) => i % Math.max(1, Math.floor(all.length / 12)) === 0), ['(E) PAVED PARKING AND DRIVES'], INK, 5);
+  }
+  for (const o of open) {
+    const pts = polygonsOfFeature(o, frame).flatMap((p) => p.outer.map(toSheet));
+    if (pts.length) callout([centroid(pts)], ['OPEN GROUND'], INK, 5);
   }
 
-  // Each lot line's bearing and length, as a survey writes it, along the line outside the lot.
+  const placed = placeCallouts(specs, occ);
+
+  // Each lot line's bearing and length, as a survey writes it, along the line outside the lot, where it is clear.
   const lotRing = lotSheet;
   const lotLocal = lotRing.map((p) => drawing.toLocalPoint(p));
   const lotArea = lotRing.reduce((s, p, i) => s + p.x * lotRing[(i + 1) % lotRing.length]!.y - lotRing[(i + 1) % lotRing.length]!.x * p.y, 0);
@@ -299,15 +381,52 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     const la = lotLocal[i]!, lb = lotLocal[(i + 1) % lotLocal.length]!;
     const feet = Math.hypot(lb.x - la.x, lb.y - la.y);
     if (feet < 60) continue;
-    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    // Outward: to the right of the edge when the ring runs clockwise on the sheet.
     const len = Math.hypot(b.x - a.x, b.y - a.y);
+    // Outward: to the right of the edge when the ring runs clockwise on the sheet.
     const out = lotArea > 0 ? { x: (a.y - b.y) / len, y: (b.x - a.x) / len } : { x: (b.y - a.y) / len, y: (a.x - b.x) / len };
-    const at = { x: mid.x - out.x * 26, y: mid.y - out.y * 26 };
-    if (!inside(at, view, 60) || !clearOfBoxes(at, 120)) continue;
-    const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
-    bearings.push({ at, angle: deg > 90 || deg < -90 ? deg + 180 : deg, text: `${surveyBearing(la, lb)} ${feet.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}'` });
+    const angle = upright((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI);
+    const text = `${surveyBearing(la, lb)} ${feet.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}'`;
+    const hit = occ.placeText(
+      [0.5, 0.35, 0.65, 0.2, 0.8].map((t) => {
+        const at = { x: a.x + (b.x - a.x) * t - out.x * 26, y: a.y + (b.y - a.y) * t - out.y * 26 };
+        return { at, angle, text, quad: textQuad(at, text, BEARING_FONT, angle, { dy: 7 }) };
+      }),
+    );
+    if (hit) bearings.push(hit);
   }
+
+  // Tags beside each light pole, where there is room.
+  const poleTags = equipment
+    .filter((e) => e.type === 'LIGHT_POLE')
+    .flatMap((e) => {
+      const hit = occ.placeText(
+        [
+          { x: e.at.x + 24, y: e.at.y - 12, anchor: 'start' as const },
+          { x: e.at.x - 16, y: e.at.y - 14, anchor: 'end' as const },
+          { x: e.at.x + 16, y: e.at.y + 26, anchor: 'start' as const },
+          { x: e.at.x - 16, y: e.at.y + 26, anchor: 'end' as const },
+        ].map((p) => ({ ...p, quad: textQuad(p, 'LP', TAG_FONT, 0, { anchor: p.anchor, bold: true, halo: 3 }) })),
+        { owner: e.at },
+      );
+      return hit ? [hit] : [];
+    });
+
+  // The letters along electric lines, last, wherever they fall clear of everything else.
+  const lineMarks: { at: Pt; angle: number; text: string; size: number; color: string }[] = [];
+  const markLine = (pts: Pt[], text: string, size: number, spacing: number, color: string) => {
+    const total = polylineLength(pts);
+    for (let s = spacing / 2; s < total; s += spacing) {
+      const p = along(pts, s / total);
+      if (!p) continue;
+      const angle = upright(p.angleDeg);
+      const hit = occ.placeText([{ at: p.at, angle, text, size, color, quad: textQuad(p.at, text, size, angle, { dy: size * 0.35, bold: true, halo: 3 }) }], { avoidLines: false });
+      if (hit) lineMarks.push(hit);
+    }
+  };
+  for (const f of feeders) for (const line of linesOf(f)) markLine(sheetLine(line), 'E', 20, 200, UTILITY);
+  for (const t of transmission) for (const line of linesOf(t)) markLine(sheetLine(line), attributeText(t, 'line_voltage') ?? 'T', 19, 420, TRANSMISSION);
+  for (const sgm of segments) for (const line of linesOf(sgm)) markLine(sheetLine(line), /UNDERGROUND/.test(attributeText(sgm, 'construction') ?? '') ? 'UGE' : 'OHE', 15, 240, UTILITY);
+  for (const d of detectedLines) for (const line of linesOf(d)) markLine(sheetLine(line), 'OHE', 15, 300, UTILITY);
 
   // Off-sheet references: things the reviewer needs that fall outside the plan.
   const references: Reference[] = [];
@@ -336,13 +455,45 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   refFor(wetlandNear, `NEAREST MAPPED WETLAND, ${attributeText(wetlandNear, 'distance_ft') ?? '?'}`, WATER);
 
 
-  const fall = fallDirection(record);
-  const slope = printed(record, 'site_slope_pct');
   const rows = siteDataRows(record);
   const notes = sheetNotes(record);
   const tiles = aerial && record.baseMap ? aerialTiles(record, drawing) : [];
   const offY = 70 + dataTableHeight(rows, RIGHT.w) + 24;
   const legendY = offY + (references.length ? 44 + references.length * 40 + 24 : 0);
+  const shownTypes = new Set(equipment.map((e) => e.type));
+  const legendKeys = new Set<string>([
+    ...(roads.length ? ['road'] : []),
+    ...(feeders.length ? ['feeder'] : []),
+    ...(segments.some((s) => !/UNDERGROUND/.test(attributeText(s, 'construction') ?? '')) || detectedLines.length ? ['ohe'] : []),
+    ...(segments.some((s) => /UNDERGROUND/.test(attributeText(s, 'construction') ?? '')) ? ['uge'] : []),
+    ...(transmission.length ? ['transmission'] : []),
+    ...(servicePaths.length ? ['service'] : []),
+    ...(feasibleOuter.length ? ['zoneOuter'] : []),
+    ...(feasible.length ? ['zone'] : []),
+    ...(concept.some((c) => c.type === 'BESS_PAD') ? ['pad'] : []),
+    ...(concept.some((c) => c.type === 'AC_DISCONNECT') ? ['disconnect'] : []),
+    ...(concept.some((c) => c.type !== 'BESS_PAD' && c.type !== 'AC_DISCONNECT') ? ['breaker'] : []),
+    ...(trenches.length ? ['trench'] : []),
+    ...(shownTypes.has('UTILITY_POLE') ? ['pole'] : []),
+    ...(shownTypes.has('SERVICE_TAP') ? ['serviceTap'] : []),
+    ...(shownTypes.has('PAD_MOUNT_TRANSFORMER') ? ['transformer'] : []),
+    ...(shownTypes.has('PAD_MOUNT_TRANSFORMER_CANDIDATE') ? ['equipmentBox'] : []),
+    ...(shownTypes.has('METER') ? ['meter'] : []),
+    ...([...shownTypes].some((t) => !(t in SYMBOL_REACH)) || shownTypes.has('SERVICE_ENTRANCE') ? ['switchgear'] : []),
+    ...(shownTypes.has('LIGHT_POLE') ? ['lightPole'] : []),
+    ...(shownTypes.has('HYDRANT') ? ['hydrant'] : []),
+    ...(shownTypes.has('CATCH_BASIN') ? ['catchBasin'] : []),
+    ...(shownTypes.has('MANHOLE') ? ['manhole'] : []),
+    ...(shownTypes.has('SIGN') ? ['sign'] : []),
+    ...(substations.some((s) => s.proposed) ? ['proposedSubstation'] : []),
+    ...(substations.some((s) => !s.proposed) ? ['substation'] : []),
+    ...(wetlands.length ? ['wetland'] : []),
+    ...(wetlands.length && inMassachusetts ? ['buffer'] : []),
+    ...(paved.length ? ['paved'] : []),
+    ...(stripes.length ? ['striping'] : []),
+    ...(open.length ? ['open'] : []),
+    ...(references.length ? ['reference'] : []),
+  ]);
 
   return (
     <figure className="sheet sheet--engineering">
@@ -366,12 +517,6 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
           <pattern id="openGround" width="26" height="26" patternUnits="userSpaceOnUse">
             <circle cx="13" cy="13" r="2.2" fill="#2e6b3f" opacity="0.55" />
           </pattern>
-          <marker id="leaderDot" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="9" markerHeight="9">
-            <circle cx="5" cy="5" r="4" fill={INK} />
-          </marker>
-          <marker id="refArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="16" markerHeight="16" orient="auto">
-            <path d="M0 0 L10 5 L0 10 z" fill={INK} />
-          </marker>
         </defs>
 
         <rect width={W} height={H} fill="#fff" />
@@ -386,16 +531,23 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             ))}
           </g>
 
-          {paved.flatMap((p) => polygonsOfFeature(p, frame)).map((p, i) => (
-            <path key={`paved-${i}`} d={`${path(p.outer.map(toSheet))} ${(p.holes ?? []).map((h) => path(h.map(toSheet))).join(' ')}`} fillRule="evenodd" fill="#d9d9d6" stroke="#8c8c88" strokeWidth={1.5} opacity={0.85} />
-          ))}
-
-          {stripes.flatMap((f) => linesOf(f)).map((line, i) => (
-            <path key={`stripe-${i}`} d={path(sheetLine(line), false)} fill="none" stroke={INK} strokeWidth={1.4} />
-          ))}
-
           {open.flatMap((o) => polygonsOfFeature(o, frame)).map((p, i) => (
             <path key={`open-${i}`} d={path(p.outer.map(toSheet))} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" opacity={0.9} />
+          ))}
+
+          {/* Paving: every edge stroked, then every fill laid over it, so overlapping areas read as one surface with
+              one clean outer edge. */}
+          <g>
+            {pavedPaths.map((d, i) => (
+              <path key={`paved-edge-${i}`} d={d} fillRule="evenodd" fill="none" stroke={PAVING_EDGE} strokeWidth={4} strokeLinejoin="round" />
+            ))}
+            {pavedPaths.map((d, i) => (
+              <path key={`paved-${i}`} d={d} fillRule="evenodd" fill={PAVING} stroke="none" />
+            ))}
+          </g>
+
+          {stripeLines.map((line, i) => (
+            <path key={`stripe-${i}`} d={path(line, false)} fill="none" stroke={INK} strokeWidth={1.5} strokeLinecap="butt" />
           ))}
 
           {feasibleOuter.flatMap((z) => polygonsOfFeature(z, frame)).map((p, i) => (
@@ -428,77 +580,21 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
           })}
 
           {roads.map((r, i) =>
-            linesOf(r).map((line, j) => {
-              const pts = sheetLine(line);
-              const ordered = pts[0]!.x <= pts.at(-1)!.x ? pts : [...pts].reverse();
-              const id = `road-${i}-${j}`;
-              return (
-                <g key={id}>
-                  <path id={id} d={path(ordered, false)} fill="none" stroke={INK} strokeWidth={2.2} strokeDasharray="60 12 12 12" />
-                  {lengthOf(ordered) > 500 ? (
-                    <text fontSize={24} letterSpacing={3} fill={INK} stroke="#fff" strokeWidth={6} paintOrder="stroke" dy={-10}>
-                      <textPath href={`#${id}`} startOffset="50%" textAnchor="middle">
-                        {roadName(r)}
-                      </textPath>
-                    </text>
-                  ) : null}
-                </g>
-              );
-            }),
+            linesOf(r).map((line, j) => <path key={`road-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={INK} strokeWidth={2.2} strokeDasharray="60 12 12 12" />),
           )}
 
           {feeders.map((f, i) =>
-            linesOf(f).map((line, j) => {
-              const pts = sheetLine(line);
-              const ordered = pts[0]!.x <= pts.at(-1)!.x ? pts : [...pts].reverse();
-              const id = `feeder-${i}-${j}`;
-              const letters = Array.from({ length: Math.ceil(lengthOf(ordered) / 140) }, () => 'E').join(' '.repeat(8));
-              return (
-                <g key={id}>
-                  <path id={id} d={path(ordered, false)} fill="none" stroke={UTILITY} strokeWidth={2.6} />
-                  <text fontSize={20} fontWeight={700} fill={UTILITY} stroke="#fff" strokeWidth={7} paintOrder="stroke" dy={7}>
-                    <textPath href={`#${id}`}>{letters}</textPath>
-                  </text>
-                </g>
-              );
-            }),
+            linesOf(f).map((line, j) => <path key={`feeder-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={UTILITY} strokeWidth={2.6} />),
           )}
 
           {transmission.map((t, i) =>
-            linesOf(t).map((line, j) => {
-              const pts = sheetLine(line);
-              const ordered = pts[0]!.x <= pts.at(-1)!.x ? pts : [...pts].reverse();
-              const id = `tx-${i}-${j}`;
-              const kv = attributeText(t, 'line_voltage') ?? 'T';
-              const marks = Array.from({ length: Math.max(1, Math.ceil(lengthOf(ordered) / 420)) }, () => kv).join('\u2003'.repeat(12));
-              return (
-                <g key={id}>
-                  <path id={id} d={path(ordered, false)} fill="none" stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" />
-                  <text fontSize={19} fontWeight={700} fill={TRANSMISSION} stroke="#fff" strokeWidth={7} paintOrder="stroke" dy={-9}>
-                    <textPath href={`#${id}`}>{marks}</textPath>
-                  </text>
-                </g>
-              );
-            }),
+            linesOf(t).map((line, j) => <path key={`tx-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" />),
           )}
 
           {segments.map((sgm, i) =>
-            linesOf(sgm).map((line, j) => {
-              const pts = sheetLine(line);
-              const ordered = pts[0]!.x <= pts.at(-1)!.x ? pts : [...pts].reverse();
-              const id = `seg-${i}-${j}`;
-              const underground = /UNDERGROUND/.test(attributeText(sgm, 'construction') ?? '');
-              const token = underground ? 'UGE' : 'OHE';
-              const marks = Array.from({ length: Math.max(1, Math.ceil(lengthOf(ordered) / 220)) }, () => token).join('\u2003'.repeat(9));
-              return (
-                <g key={id}>
-                  <path id={id} d={path(ordered, false)} fill="none" stroke={UTILITY} strokeWidth={1.8} strokeDasharray={underground ? '30 10' : undefined} />
-                  <text fontSize={15} fontWeight={700} fill={UTILITY} stroke="#fff" strokeWidth={6} paintOrder="stroke" dy={5}>
-                    <textPath href={`#${id}`}>{marks}</textPath>
-                  </text>
-                </g>
-              );
-            }),
+            linesOf(sgm).map((line, j) => (
+              <path key={`seg-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={UTILITY} strokeWidth={1.8} strokeDasharray={/UNDERGROUND/.test(attributeText(sgm, 'construction') ?? '') ? '30 10' : undefined} />
+            )),
           )}
 
           {trenches.map((t, i) =>
@@ -507,30 +603,8 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             )),
           )}
 
-          {concept.map((c, i) =>
-            c.type === 'BESS_PAD' ? (
-              <PadSymbol key={`pad-${i}`} at={c.at} k={k} />
-            ) : c.type === 'AC_DISCONNECT' ? (
-              <rect key={`disc-${i}`} x={c.at.x + 18} y={c.at.y - 10} width={20} height={20} fill="#fff" stroke={NEW} strokeWidth={3} />
-            ) : (
-              <circle key={`brk-${i}`} cx={c.at.x} cy={c.at.y} r={11} fill="#fff" stroke={NEW} strokeWidth={3} />
-            ),
-          )}
-
           {detectedLines.map((d, i) =>
-            linesOf(d).map((line, j) => {
-              const pts = sheetLine(line);
-              const ordered = pts[0]!.x <= pts.at(-1)!.x ? pts : [...pts].reverse();
-              const id = `det-${i}-${j}`;
-              return (
-                <g key={id}>
-                  <path id={id} d={path(ordered, false)} fill="none" stroke={UTILITY} strokeWidth={1.8} />
-                  <text fontSize={15} fontWeight={700} fill={UTILITY} stroke="#fff" strokeWidth={6} paintOrder="stroke" dy={5}>
-                    <textPath href={`#${id}`} startOffset="40%">OHE</textPath>
-                  </text>
-                </g>
-              );
-            }),
+            linesOf(d).map((line, j) => <path key={`det-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={UTILITY} strokeWidth={1.8} />),
           )}
 
           {servicePaths.map((sp, i) =>
@@ -539,45 +613,47 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             )),
           )}
 
-          {substations.map((s, i) => (
-            <SubstationSymbol key={`sub-${i}`} at={s.at} proposed={s.proposed} />
-          ))}
-
-          {equipment.map((e, i) =>
-            e.type === 'UTILITY_POLE' ? (
-              <PoleSymbol key={`eq-${i}`} at={e.at} />
-            ) : e.type === 'SERVICE_TAP' ? (
-              <TransformerSymbol key={`eq-${i}`} at={e.at} />
-            ) : e.type === 'PAD_MOUNT_TRANSFORMER_CANDIDATE' ? (
-              <rect key={`eq-${i}`} x={e.at.x - 14} y={e.at.y - 12} width={28} height={24} fill="#fff" stroke={UTILITY} strokeWidth={2.5} />
-            ) : (
-              <SwitchgearSymbol key={`eq-${i}`} at={e.at} />
-            ),
-          )}
-
           {buildings.map((b, i) => (
             <path key={`bldg-${i}`} d={path(b.sheet)} fill="#fff" fillOpacity={0.35} stroke={INK} strokeWidth={3} />
           ))}
 
           <path d={path(lotSheet)} fill="none" stroke={INK} strokeWidth={5.5} strokeDasharray="80 14 14 14 14 14" />
 
-          {buildingDims.map((d, i) => <Dimension key={`bdim-${i}`} a={d.a} b={d.b} text={d.text} avoid={symbolPoints} />)}
-          {bearings.map((bg, i) => (
-            <text key={`brg-${i}`} x={bg.at.x} y={bg.at.y} fontSize={20} textAnchor="middle" fill={INK} stroke="#fff" strokeWidth={6} paintOrder="stroke" transform={`rotate(${bg.angle} ${bg.at.x} ${bg.at.y})`}>
-              {bg.text}
-            </text>
+          {substations.map((s, i) => (
+            <SubstationSymbol key={`sub-${i}`} at={s.at} proposed={s.proposed} />
           ))}
 
-          {dims.map((d, i) => {
-            const line = linesOf(d)[0];
-            if (!line || line.length < 2) return null;
-            const a = toSheet(toLocal(frame, line[0]!));
-            const b = toSheet(toLocal(frame, line.at(-1)!));
-            return <Dimension key={`dim-${i}`} a={a} b={b} text={dimensionText(d.label ?? '')} avoid={symbolPoints} />;
-          })}
+          {equipment.map((e, i) => (
+            <EquipmentSymbol key={`eq-${i}`} type={e.type} at={e.at} />
+          ))}
 
-          {fall !== null && slope ? <FallArrow at={{ x: view.x + view.w - 230, y: view.y + 150 }} degrees={fall + drawing.rotationDeg} text={`${slope} AVG. FALL`} /> : null}
+          {concept.map((c, i) =>
+            c.type === 'BESS_PAD' ? (
+              <PadSymbol key={`pad-${i}`} at={c.at} k={k} />
+            ) : c.type === 'AC_DISCONNECT' ? (
+              <DisconnectSymbol key={`disc-${i}`} at={{ x: c.at.x + 28, y: c.at.y }} />
+            ) : (
+              <BreakerSymbol key={`brk-${i}`} at={c.at} />
+            ),
+          )}
 
+          {placedDims.map((d, i) => (
+            <Dimension key={`dim-${i}`} a={d.a} b={d.b} text={d.text} label={d.label} />
+          ))}
+          {roadLabels.map((r, i) => (
+            <Label key={`road-name-${i}`} at={r.at} angle={r.angle} dy={-10} size={ROAD_FONT} text={r.text} />
+          ))}
+          {bearings.map((bg, i) => (
+            <Label key={`brg-${i}`} at={bg.at} angle={bg.angle} dy={7} size={BEARING_FONT} text={bg.text} />
+          ))}
+          {lineMarks.map((m, i) => (
+            <Label key={`mark-${i}`} at={m.at} angle={m.angle} dy={m.size * 0.35} size={m.size} text={m.text} color={m.color} bold halo={3} />
+          ))}
+          {poleTags.map((t, i) => (
+            <Label key={`lp-${i}`} at={t} size={TAG_FONT} text="LP" anchor={t.anchor} bold halo={3} />
+          ))}
+
+          {fallAt && fall !== null && slope ? <FallArrow at={fallAt.at} degrees={fall + drawing.rotationDeg} text={`${slope} AVG. FALL`} /> : null}
         </g>
 
         {placed.map((c, i) => (
@@ -593,7 +669,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
         {/* right column: data table and legend */}
         <DataTable x={RIGHT.x} y={70} w={RIGHT.w} rows={rows} />
-        <Legend x={RIGHT.x} y={legendY} w={RIGHT.w} inMassachusetts={inMassachusetts} />
+        <Legend x={RIGHT.x} y={legendY} w={RIGHT.w} bottom={H - 70} keys={legendKeys} inMassachusetts={inMassachusetts} />
 
         <TitleStrip record={record} />
       </svg>
@@ -724,84 +800,81 @@ function bufferPolygon(f: MapFeature, frame: LocalFrame): LocalPolygon[] {
 
 const inside = (p: Pt, v: typeof VIEW, pad = 0) => p.x >= v.x + pad && p.x <= v.x + v.w - pad && p.y >= v.y + pad && p.y <= v.y + v.h - pad;
 
-function firstInside(pts: Pt[], v: typeof VIEW, at = 0.35): Pt | null {
-  const shown = pts.filter((p) => inside(p, v, 40));
-  return shown.length ? shown[Math.floor(shown.length * at)]! : null;
+// ------------------------------------------------------------------ callouts and labels
+
+const ROAD_FONT = 24;
+const BEARING_FONT = 20;
+const TAG_FONT = 15;
+const DIM_FONT = 24;
+const LEADER_W = 2;
+const PAVING = '#d6d6d2';
+const PAVING_EDGE = '#55554f';
+
+/** How far each symbol reaches from its point, by equipment type; anything else draws as switchgear. */
+const SYMBOL_REACH: Record<string, number> = {
+  UTILITY_POLE: 15,
+  SERVICE_TAP: 28,
+  PAD_MOUNT_TRANSFORMER_CANDIDATE: 18,
+  SERVICE_ENTRANCE: 30,
+  LIGHT_POLE: 22,
+  HYDRANT: 14,
+  CATCH_BASIN: 12,
+  MANHOLE: 14,
+  PAD_MOUNT_TRANSFORMER: 19,
+  METER: 14,
+  SIGN: 12,
+};
+
+/** Half the width and height of each symbol, where a leader to it stops. */
+const EXTENT: Record<string, { hw: number; hh: number }> = {
+  UTILITY_POLE: { hw: 13, hh: 13 },
+  SERVICE_TAP: { hw: 20, hh: 20 },
+  PAD_MOUNT_TRANSFORMER_CANDIDATE: { hw: 14, hh: 12 },
+  SERVICE_ENTRANCE: { hw: 26, hh: 12 },
+  LIGHT_POLE: { hw: 7, hh: 7 },
+  HYDRANT: { hw: 8, hh: 8 },
+  CATCH_BASIN: { hw: 9, hh: 9 },
+  MANHOLE: { hw: 11, hh: 11 },
+  PAD_MOUNT_TRANSFORMER: { hw: 16, hh: 12 },
+  METER: { hw: 11, hh: 11 },
+  SIGN: { hw: 8, hh: 8 },
+};
+
+/** Items that repeat across a site, called out once per kind as typical. */
+const TYPICAL: Record<string, { label: string; electrical: boolean }> = {
+  UTILITY_POLE: { label: '(E) UTILITY POLE', electrical: true },
+  PAD_MOUNT_TRANSFORMER: { label: '(E) PAD-MOUNT TRANSFORMER', electrical: true },
+  METER: { label: '(E) ELECTRIC METER', electrical: true },
+  LIGHT_POLE: { label: '(E) LIGHT POLE', electrical: false },
+  HYDRANT: { label: '(E) FIRE HYDRANT', electrical: false },
+  CATCH_BASIN: { label: '(E) CATCH BASIN', electrical: false },
+  MANHOLE: { label: '(E) MANHOLE', electrical: false },
+  SIGN: { label: '(E) SIGN', electrical: false },
+};
+
+/** The symbol an equipment type draws as, with the plan set's names for the same things. */
+const equipmentKind = (type: string | null): string => {
+  const t = type ?? '';
+  return t === 'TRANSFORMER' ? 'PAD_MOUNT_TRANSFORMER' : t === 'MAIN_SWITCHBOARD' ? 'SERVICE_ENTRANCE' : t;
+};
+
+const mid = (a: Pt, b: Pt): Pt => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+function boundsQuad(pts: Pt[]): Quad {
+  const b = bounds(pts);
+  return quadOfRect({ x: b.minX, y: b.minY, w: b.maxX - b.minX, h: b.maxY - b.minY });
 }
 
-const lengthOf = (pts: Pt[]) => pts.slice(1).reduce((s, p, i) => s + Math.hypot(p.x - pts[i]!.x, p.y - pts[i]!.y), 0);
-
-// ------------------------------------------------------------------ callouts
-
-interface Callout {
-  anchor: Pt;
-  lines: string[];
-  color?: string;
-}
-
-interface PlacedCallout extends Callout {
-  box: { x: number; y: number; w: number; h: number };
-  side: 'left' | 'right';
-  gutter: number;
-}
-
-const CALLOUT_FONT = 22;
-const LINE_H = 27;
-const textWidth = (s: string, size = CALLOUT_FONT) => s.length * size * 0.64;
-
-/**
- * Stack callouts in two columns at the plan's edges, each on a leader to its feature. Boxes never overlap: each
- * column stacks down from its anchors, then pushes up from the bottom, and when a column can't hold every box the
- * last-added ones, which matter least, are left off. Features off the plan get no callout.
- */
-function placeCallouts(callouts: Callout[], v: typeof VIEW): PlacedCallout[] {
-  const GAP = 14;
-  const mid = v.x + v.w / 2;
-  const top = v.y + 24, bottom = v.y + v.h - 20;
-  const shown = callouts.map((c, order) => ({ ...c, order })).filter((c) => inside(c.anchor, v, -4));
-  const placed: PlacedCallout[] = [];
-  for (const side of ['left', 'right'] as const) {
-    let column = shown.filter((c) => (side === 'left' ? c.anchor.x < mid : c.anchor.x >= mid));
-    const size = (c: Callout) => ({ w: Math.max(...c.lines.map((l) => textWidth(l))) + 24, h: c.lines.length * LINE_H + 14 });
-    while (column.length && column.reduce((sum, c) => sum + size(c).h + GAP, 0) > bottom - top) {
-      column = column.filter((c) => c.order !== Math.max(...column.map((d) => d.order)));
-    }
-    column.sort((a, b) => a.anchor.y - b.anchor.y);
-    const ys: number[] = [];
-    column.forEach((c, i) => {
-      const h = size(c).h;
-      ys[i] = Math.max(c.anchor.y - h / 2, i === 0 ? top : ys[i - 1]! + size(column[i - 1]!).h + GAP);
-    });
-    for (let i = column.length - 1; i >= 0; i--) {
-      const limit = i === column.length - 1 ? bottom : ys[i + 1]! - GAP;
-      ys[i] = Math.min(ys[i]!, limit - size(column[i]!).h);
-    }
-    const boxes = column.map((c, i) => {
-      const { w, h } = size(c);
-      return { c, box: { x: side === 'left' ? v.x + 24 : v.x + v.w - 24 - w, y: ys[i]!, w, h } };
-    });
-    const gutter = side === 'left' ? Math.max(...boxes.map((b) => b.box.x + b.box.w)) + 26 : Math.min(...boxes.map((b) => b.box.x)) - 26;
-    for (const { c, box } of boxes) placed.push({ anchor: c.anchor, lines: c.lines, color: c.color, box, side, gutter });
-  }
-  return placed;
-}
-
+/** One callout style for every class: a white box, a thin rule in the class colour, left-set text, a leader with a dot. */
 function CalloutBox({ callout }: { callout: PlacedCallout }) {
-  const { box, side, anchor, lines, color = INK } = callout;
-  const from = { x: side === 'left' ? box.x + box.w : box.x, y: box.y + box.h / 2 };
-  // Out to the column's gutter first, clear of every box in the column, then to the feature.
+  const { box, anchor, elbow, attach, lines, color } = callout;
   return (
-    <g>
-      <polyline
-        points={`${from.x},${from.y} ${callout.gutter},${from.y} ${anchor.x},${anchor.y}`}
-        fill="none"
-        stroke={color}
-        strokeWidth={2}
-        markerEnd="url(#leaderDot)"
-      />
-      <rect x={box.x} y={box.y} width={box.w} height={box.h} fill="#fff" stroke={color} strokeWidth={1.4} />
+    <g data-callout={`${box.x.toFixed(1)},${box.y.toFixed(1)},${box.w.toFixed(1)},${box.h.toFixed(1)}`} data-anchor={`${anchor.x.toFixed(1)},${anchor.y.toFixed(1)}`} data-leader={`${anchor.x.toFixed(1)},${anchor.y.toFixed(1)},${elbow.x.toFixed(1)},${elbow.y.toFixed(1)},${attach.x.toFixed(1)},${attach.y.toFixed(1)}`}>
+      <polyline points={`${anchor.x},${anchor.y} ${elbow.x},${elbow.y} ${attach.x},${attach.y}`} fill="none" stroke={color} strokeWidth={LEADER_W} strokeLinejoin="round" />
+      <circle cx={anchor.x} cy={anchor.y} r={5.5} fill={color} stroke="#fff" strokeWidth={1.5} />
+      <rect x={box.x} y={box.y} width={box.w} height={box.h} fill="#fff" stroke={color} strokeWidth={1.6} />
       {lines.map((line, i) => (
-        <text key={i} x={side === 'left' ? box.x + box.w - 12 : box.x + 12} y={box.y + 30 + i * LINE_H} fontSize={CALLOUT_FONT} fill={color} textAnchor={side === 'left' ? 'end' : 'start'}>
+        <text key={i} x={box.x + CALLOUT_PAD_X} y={box.y + 30 + i * CALLOUT_LINE_H} fontSize={CALLOUT_FONT} fill={color}>
           {line}
         </text>
       ))}
@@ -809,10 +882,47 @@ function CalloutBox({ callout }: { callout: PlacedCallout }) {
   );
 }
 
+/** A label on the plan, with a white halo, at the spot the layout found clear for it. */
+function Label({ at, angle = 0, dy = 0, size, text, color = INK, bold = false, halo = 6, anchor = 'middle' }: { at: Pt; angle?: number; dy?: number; size: number; text: string; color?: string; bold?: boolean; halo?: number; anchor?: 'start' | 'middle' | 'end' }) {
+  const q = textQuad(at, text, size, angle, { anchor, dy, halo: halo / 2 + 1, bold });
+  return (
+    <text
+      data-label={q.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+      x={at.x}
+      y={at.y}
+      dy={dy}
+      fontSize={size}
+      fontWeight={bold ? 700 : undefined}
+      textAnchor={anchor}
+      fill={color}
+      stroke="#fff"
+      strokeWidth={halo}
+      paintOrder="stroke"
+      transform={angle ? `rotate(${angle.toFixed(2)} ${at.x.toFixed(1)} ${at.y.toFixed(1)})` : undefined}
+    >
+      {text}
+    </text>
+  );
+}
+
 interface Reference {
   target: Pt;
   text: string;
   color: string;
+}
+
+/** An arrow drawn as one line and a sized head, so its size doesn't follow the stroke width. */
+function Arrow({ from, to, color = INK, width = 2.5, head = 14 }: { from: Pt; to: Pt; color?: string; width?: number; head?: number }) {
+  const ang = Math.atan2(to.y - from.y, to.x - from.x);
+  const back = { x: to.x - Math.cos(ang) * head, y: to.y - Math.sin(ang) * head };
+  const side = (s: number) => ({ x: back.x + Math.cos(ang + Math.PI / 2) * head * 0.45 * s, y: back.y + Math.sin(ang + Math.PI / 2) * head * 0.45 * s });
+  const [l, r] = [side(1), side(-1)];
+  return (
+    <g>
+      <line x1={from.x} y1={from.y} x2={back.x} y2={back.y} stroke={color} strokeWidth={width} />
+      <path d={`M${to.x} ${to.y} L${l.x} ${l.y} L${r.x} ${r.y} Z`} fill={color} />
+    </g>
+  );
 }
 
 /** Features outside the plan, each with an arrow toward it and its distance. */
@@ -828,14 +938,13 @@ function OffSheetTable({ x, y, w, view, references }: { x: number; y: number; w:
       </text>
       {references.map((r, i) => {
         const top = y + 44 + i * rowH;
-        const deg = (Math.atan2(r.target.y - c.y, r.target.x - c.x) * 180) / Math.PI;
+        const ang = Math.atan2(r.target.y - c.y, r.target.x - c.x);
+        const o = { x: x + 38, y: top + rowH / 2 };
         const lines = wrap(r.text, w - 90, 17);
         return (
           <g key={i}>
             <line x1={x} y1={top} x2={x + w} y2={top} stroke={INK} strokeWidth={1} />
-            <g transform={`translate(${x + 38} ${top + rowH / 2}) rotate(${deg})`}>
-              <line x1={-22} y1={0} x2={18} y2={0} stroke={r.color} strokeWidth={2.5} markerEnd="url(#refArrow)" />
-            </g>
+            <Arrow from={{ x: o.x - Math.cos(ang) * 15, y: o.y - Math.sin(ang) * 15 }} to={{ x: o.x + Math.cos(ang) * 15, y: o.y + Math.sin(ang) * 15 }} color={r.color} width={2.5} head={11} />
             {lines.slice(0, 2).map((l, j) => (
               <text key={j} x={x + 76} y={top + (lines.length > 1 ? 17 : 26) + j * 18} fontSize={17} fill={r.color}>
                 {l}
@@ -850,44 +959,54 @@ function OffSheetTable({ x, y, w, view, references }: { x: number; y: number; w:
 
 // ------------------------------------------------------------------ drafting parts
 
-// The label sits at the middle of the line, or slides along it to clear the drawn equipment; with no clear spot,
-// the line is drawn without its text rather than over a symbol.
-function Dimension({ a, b, text, avoid = [] }: { a: Pt; b: Pt; text: string; avoid?: Pt[] }) {
+interface DimensionLabel {
+  at: Pt;
+  angle: number;
+  dy: number;
+  quad: Quad;
+}
+
+/**
+ * Where a dimension's text goes: the middle of the line, else further along it or on its other side, wherever it
+ * covers nothing. With no clear spot the line is drawn without its text rather than over something.
+ */
+function dimensionLabel(a: Pt, b: Pt, text: string, occ: Occupancy): DimensionLabel | null {
+  const angle = upright((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI);
+  const candidates: DimensionLabel[] = [];
+  for (const t of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]) {
+    for (const dy of [-10, 32]) {
+      const at = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      candidates.push({ at, angle, dy, quad: textQuad(at, text, DIM_FONT, angle, { dy, bold: true, halo: 5 }) });
+    }
+  }
+  return occ.placeText(candidates);
+}
+
+function Dimension({ a, b, text, label }: { a: Pt; b: Pt; text: string; label: DimensionLabel | null }) {
   const ang = Math.atan2(b.y - a.y, b.x - a.x);
-  const deg = (ang * 180) / Math.PI;
-  const upright = deg > 90 || deg < -90 ? deg + 180 : deg;
   const tick = (p: Pt) => {
     const t = ang + Math.PI / 4;
     return <line x1={p.x - Math.cos(t) * 16} y1={p.y - Math.sin(t) * 16} x2={p.x + Math.cos(t) * 16} y2={p.y + Math.sin(t) * 16} stroke={INK} strokeWidth={3} />;
   };
-  const half = (text.length * 24 * 0.62) / 2 + 30;
-  const clear = (p: Pt) => avoid.every((q) => Math.hypot(q.x - p.x, q.y - p.y) > half);
-  const m = [0.5, 0.35, 0.65, 0.2, 0.8].map((t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })).find(clear);
   return (
     <g>
       <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={INK} strokeWidth={1.6} />
       {tick(a)}
       {tick(b)}
-      {m ? <text x={m.x} y={m.y} dy={-10} fontSize={24} fontWeight={700} textAnchor="middle" fill={INK} stroke="#fff" strokeWidth={7} paintOrder="stroke" transform={`rotate(${upright} ${m.x} ${m.y})`}>
-        {text}
-      </text> : null}
+      {label ? <Label at={label.at} angle={label.angle} dy={label.dy} size={DIM_FONT} text={text} bold halo={7} /> : null}
     </g>
   );
 }
 
 function FallArrow({ at, degrees, text }: { at: Pt; degrees: number; text: string }) {
   const r = (degrees * Math.PI) / 180;
-  const dx = Math.sin(r) * 80;
-  const dy = -Math.cos(r) * 80;
+  const dx = Math.sin(r) * 70;
+  const dy = -Math.cos(r) * 70;
   return (
     <g>
-      <line x1={at.x - dx} y1={at.y - dy} x2={at.x + dx} y2={at.y + dy} stroke={INK} strokeWidth={4} markerEnd="url(#refArrow)" />
-      <text x={at.x} y={at.y + 120} fontSize={21} fontWeight={700} textAnchor="middle" fill={INK} stroke="#fff" strokeWidth={7} paintOrder="stroke">
-        {text}
-      </text>
-      <text x={at.x} y={at.y + 146} fontSize={18} textAnchor="middle" fill={INK} stroke="#fff" strokeWidth={6} paintOrder="stroke">
-        AVERAGE ACROSS PARCEL
-      </text>
+      <Arrow from={{ x: at.x - dx, y: at.y - dy }} to={{ x: at.x + dx, y: at.y + dy }} width={4} head={26} />
+      <Label at={{ x: at.x, y: at.y + 112 }} size={21} bold text={text} halo={7} />
+      <Label at={{ x: at.x, y: at.y + 138 }} size={18} text="AVERAGE ACROSS PARCEL" />
     </g>
   );
 }
@@ -900,6 +1019,88 @@ function PoleSymbol({ at }: { at: Pt }) {
       <circle cx={at.x} cy={at.y} r={5} fill={UTILITY} />
     </g>
   );
+}
+
+/** Light pole: a small circle with a short arm and its fixture. */
+function LightPoleSymbol({ at }: { at: Pt }) {
+  return (
+    <g stroke={INK} strokeWidth={2.2}>
+      <circle cx={at.x} cy={at.y} r={7} fill="#fff" />
+      <line x1={at.x + 7} y1={at.y} x2={at.x + 19} y2={at.y} />
+      <line x1={at.x + 19} y1={at.y - 6} x2={at.x + 19} y2={at.y + 6} strokeWidth={3} />
+    </g>
+  );
+}
+
+/** Fire hydrant: a filled barrel with its two hose nozzles and the pumper outlet. */
+function HydrantSymbol({ at }: { at: Pt }) {
+  return (
+    <g stroke={INK} strokeWidth={3}>
+      <line x1={at.x - 13} y1={at.y} x2={at.x + 13} y2={at.y} />
+      <line x1={at.x} y1={at.y} x2={at.x} y2={at.y + 13} />
+      <circle cx={at.x} cy={at.y} r={7.5} fill={INK} strokeWidth={1} />
+    </g>
+  );
+}
+
+/** Sign: a post with its panel. */
+function SignSymbol({ at }: { at: Pt }) {
+  return (
+    <g stroke={INK}>
+      <line x1={at.x} y1={at.y - 2} x2={at.x} y2={at.y + 8} strokeWidth={2.4} />
+      <rect x={at.x - 8} y={at.y - 8} width={16} height={6} fill={INK} strokeWidth={1} />
+    </g>
+  );
+}
+
+/** Catch basin: a small square grate. */
+function CatchBasinSymbol({ at }: { at: Pt }) {
+  return (
+    <g stroke={INK}>
+      <rect x={at.x - 9} y={at.y - 9} width={18} height={18} fill="#fff" strokeWidth={2.4} />
+      <line x1={at.x - 9} y1={at.y - 3} x2={at.x + 9} y2={at.y - 3} strokeWidth={1.2} />
+      <line x1={at.x - 9} y1={at.y + 3} x2={at.x + 9} y2={at.y + 3} strokeWidth={1.2} />
+    </g>
+  );
+}
+
+/** A circle or box with a letter in it: M for manhole or meter, T for transformer. */
+function LetteredSymbol({ at, letter, color, box = false }: { at: Pt; letter: string; color: string; box?: boolean }) {
+  return (
+    <g>
+      {box ? <rect x={at.x - 16} y={at.y - 12} width={32} height={24} fill="#fff" stroke={color} strokeWidth={2.5} /> : <circle cx={at.x} cy={at.y} r={11} fill="#fff" stroke={color} strokeWidth={2.4} />}
+      <text x={at.x} y={at.y + 5.5} fontSize={15} fontWeight={700} textAnchor="middle" fill={color}>
+        {letter}
+      </text>
+    </g>
+  );
+}
+
+function EquipmentSymbol({ type, at }: { type: string; at: Pt }) {
+  switch (type) {
+    case 'UTILITY_POLE':
+      return <PoleSymbol at={at} />;
+    case 'SERVICE_TAP':
+      return <TransformerSymbol at={at} />;
+    case 'PAD_MOUNT_TRANSFORMER_CANDIDATE':
+      return <rect x={at.x - 14} y={at.y - 12} width={28} height={24} fill="#fff" stroke={UTILITY} strokeWidth={2.5} />;
+    case 'LIGHT_POLE':
+      return <LightPoleSymbol at={at} />;
+    case 'HYDRANT':
+      return <HydrantSymbol at={at} />;
+    case 'CATCH_BASIN':
+      return <CatchBasinSymbol at={at} />;
+    case 'MANHOLE':
+      return <LetteredSymbol at={at} letter="M" color={INK} />;
+    case 'PAD_MOUNT_TRANSFORMER':
+      return <LetteredSymbol at={at} letter="T" color={UTILITY} box />;
+    case 'METER':
+      return <LetteredSymbol at={at} letter="M" color={UTILITY} />;
+    case 'SIGN':
+      return <SignSymbol at={at} />;
+    default:
+      return <SwitchgearSymbol at={at} />;
+  }
 }
 
 /** The concept BESS pad at true size: about 11.5 x 14 ft, the plan set's pad. */
@@ -915,8 +1116,16 @@ function PadSymbol({ at, k }: { at: Pt; k: number }) {
   );
 }
 
+function DisconnectSymbol({ at }: { at: Pt }) {
+  return <rect x={at.x - 10} y={at.y - 10} width={20} height={20} fill="#fff" stroke={NEW} strokeWidth={3} />;
+}
+
+function BreakerSymbol({ at }: { at: Pt }) {
+  return <circle cx={at.x} cy={at.y} r={11} fill="#fff" stroke={NEW} strokeWidth={3} />;
+}
+
 function TransformerSymbol({ at, inferred = false }: { at: Pt; inferred?: boolean }) {
-  // Pad-mounted transformer, as the samples' legend draws it: a box with a smaller box on top.
+  // Pole-top service transformer: a box with a smaller box on top.
   return (
     <g strokeDasharray={inferred ? '7 5' : undefined}>
       <rect x={at.x - 20} y={at.y - 14} width={40} height={32} fill="#fff" stroke={UTILITY} strokeWidth={3} />
@@ -1091,25 +1300,31 @@ function DataTable({ x, y, w, rows }: { x: number; y: number; w: number; rows: R
   );
 }
 
-function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number; inMassachusetts: boolean }) {
-  const rowH = 33;
+/** The legend lists what this sheet draws, and nothing it doesn't. */
+function Legend({ x, y, w, bottom, keys, inMassachusetts }: { x: number; y: number; w: number; bottom: number; keys: Set<string>; inMassachusetts: boolean }) {
   const symW = 220;
-  const items: { label: string; symbol: (sx: number, sy: number) => ReactNode }[] = [
-    { label: 'PROPERTY LINE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={INK} strokeWidth={5} strokeDasharray="60 10 10 10 10 10" /> },
-    { label: '(E) BUILDING (MAPPED ROOFPRINT)', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 12} width={100} height={24} fill="#fff" stroke={INK} strokeWidth={3} /> },
-    { label: 'ROAD CENTERLINE (MAPPED)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={INK} strokeWidth={2.2} strokeDasharray="40 10 10 10" /> },
+  // A symbol drawn at its plan size, shrunk to sit inside its row.
+  const fit = (s: number, node: (cx: number, cy: number) => ReactNode) => (sx: number, sy: number) => (
+    <g transform={`translate(${sx + 90} ${sy}) scale(${s})`}>{node(0, 0)}</g>
+  );
+  const all: { key: string; label: string; symbol: (sx: number, sy: number) => ReactNode }[] = [
+    { key: 'property', label: 'PROPERTY LINE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={INK} strokeWidth={5} strokeDasharray="60 10 10 10 10 10" /> },
+    { key: 'building', label: '(E) BUILDING (MAPPED ROOFPRINT)', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 11} width={100} height={22} fill="#fff" stroke={INK} strokeWidth={3} /> },
+    { key: 'road', label: 'ROAD CENTERLINE (MAPPED)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={INK} strokeWidth={2.2} strokeDasharray="40 10 10 10" /> },
     {
+      key: 'feeder',
       label: '(E) ELECTRIC FEEDER',
       symbol: (sx, sy) => (
         <g>
           <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={2.6} />
-          <text x={sx + 90} y={sy + 7} fontSize={20} fontWeight={700} textAnchor="middle" fill={UTILITY} stroke="#fff" strokeWidth={8} paintOrder="stroke">
+          <text x={sx + 90} y={sy + 7} fontSize={20} fontWeight={700} textAnchor="middle" fill={UTILITY} stroke="#fff" strokeWidth={6} paintOrder="stroke">
             E
           </text>
         </g>
       ),
     },
     {
+      key: 'ohe',
       label: '(E) OVERHEAD ELECTRIC LINE (OHE), AS MAPPED',
       symbol: (sx, sy) => (
         <g>
@@ -1119,6 +1334,7 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
       ),
     },
     {
+      key: 'uge',
       label: '(E) UNDERGROUND ELECTRIC LINE (UGE), AS MAPPED',
       symbol: (sx, sy) => (
         <g>
@@ -1127,43 +1343,49 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
         </g>
       ),
     },
-    { label: '(E) TRANSMISSION LINE, KV', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" /> },
-    { label: '(E) ELECTRIC SERVICE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} /> },
-    { label: '(N) BESS ZONE, UP TO 150 FT RUN', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="none" stroke={NEW} strokeWidth={1.5} strokeDasharray="14 8" /> },
-    { label: '(N) BESS ZONE', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#feasibleHatch)" stroke={NEW} strokeWidth={3} /> },
-    { label: '(N) BESS PAD', symbol: (sx, sy) => <PadSymbol at={{ x: sx + 90, y: sy }} k={1.6} /> },
-    { label: '(N) TRENCH ROUTE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" /> },
-    { label: '(E) UTILITY POLE', symbol: (sx, sy) => <PoleSymbol at={{ x: sx + 90, y: sy }} /> },
-    { label: '(E) PAD-MOUNT TRANSFORMER', symbol: (sx, sy) => <TransformerSymbol at={{ x: sx + 90, y: sy + 2 }} /> },
-    { label: '(E) SERVICE ENTRANCE / SWITCHGEAR', symbol: (sx, sy) => <SwitchgearSymbol at={{ x: sx + 90, y: sy }} /> },
+    { key: 'transmission', label: '(E) TRANSMISSION LINE, KV', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" /> },
+    { key: 'service', label: '(E) ELECTRIC SERVICE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} /> },
+    { key: 'pole', label: '(E) UTILITY POLE', symbol: fit(0.85, (cx, cy) => <PoleSymbol at={{ x: cx, y: cy }} />) },
+    { key: 'serviceTap', label: '(E) SERVICE TRANSFORMER', symbol: fit(0.6, (cx, cy) => <TransformerSymbol at={{ x: cx, y: cy + 4 }} />) },
+    { key: 'transformer', label: '(E) PAD-MOUNT TRANSFORMER', symbol: fit(0.9, (cx, cy) => <LetteredSymbol at={{ x: cx, y: cy }} letter="T" color={UTILITY} box />) },
+    { key: 'equipmentBox', label: '(E) EQUIPMENT BOX', symbol: (sx, sy) => <rect x={sx + 76} y={sy - 10} width={28} height={20} fill="#fff" stroke={UTILITY} strokeWidth={2.5} /> },
+    { key: 'meter', label: '(E) ELECTRIC METER', symbol: fit(0.9, (cx, cy) => <LetteredSymbol at={{ x: cx, y: cy }} letter="M" color={UTILITY} />) },
+    { key: 'switchgear', label: '(E) SERVICE ENTRANCE / SWITCHGEAR', symbol: fit(0.85, (cx, cy) => <SwitchgearSymbol at={{ x: cx, y: cy }} />) },
+    { key: 'proposedSubstation', label: '(F) PROPOSED SUBSTATION', symbol: fit(0.55, (cx, cy) => <SubstationSymbol at={{ x: cx, y: cy }} proposed />) },
+    { key: 'substation', label: '(E) SUBSTATION', symbol: fit(0.55, (cx, cy) => <SubstationSymbol at={{ x: cx, y: cy }} />) },
+    { key: 'lightPole', label: '(E) LIGHT POLE (LP)', symbol: fit(0.9, (cx, cy) => <LightPoleSymbol at={{ x: cx - 6, y: cy }} />) },
+    { key: 'hydrant', label: '(E) FIRE HYDRANT', symbol: fit(0.9, (cx, cy) => <HydrantSymbol at={{ x: cx, y: cy - 3 }} />) },
+    { key: 'catchBasin', label: '(E) CATCH BASIN', symbol: fit(0.9, (cx, cy) => <CatchBasinSymbol at={{ x: cx, y: cy }} />) },
+    { key: 'manhole', label: '(E) MANHOLE', symbol: fit(0.9, (cx, cy) => <LetteredSymbol at={{ x: cx, y: cy }} letter="M" color={INK} />) },
+    { key: 'sign', label: '(E) SIGN', symbol: fit(1, (cx, cy) => <SignSymbol at={{ x: cx, y: cy }} />) },
+    { key: 'zoneOuter', label: '(N) BESS ZONE, UP TO 150 FT RUN', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 11} width={100} height={22} fill="none" stroke={NEW} strokeWidth={1.5} strokeDasharray="14 8" /> },
+    { key: 'zone', label: '(N) BESS ZONE', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 11} width={100} height={22} fill="url(#feasibleHatch)" stroke={NEW} strokeWidth={3} /> },
+    { key: 'pad', label: '(N) BESS PAD', symbol: (sx, sy) => <PadSymbol at={{ x: sx + 90, y: sy }} k={1.6} /> },
+    { key: 'disconnect', label: '(N) AC DISCONNECT', symbol: (sx, sy) => <DisconnectSymbol at={{ x: sx + 90, y: sy }} /> },
+    { key: 'breaker', label: '(N) NEW BREAKER', symbol: (sx, sy) => <BreakerSymbol at={{ x: sx + 90, y: sy }} /> },
+    { key: 'trench', label: '(N) TRENCH ROUTE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" /> },
+    { key: 'wetland', label: 'WETLAND', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 12} width={100} height={24} fill="url(#marsh)" stroke={WATER} strokeWidth={2.5} /> },
+    ...(inMassachusetts
+      ? [{ key: 'buffer', label: "100' WETLAND BUFFER ZONE (310 CMR 10.02)", symbol: (sx: number, sy: number) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={WATER} strokeWidth={2.5} strokeDasharray="28 14" /> }]
+      : []),
     {
-      label: '(F) PROPOSED SUBSTATION',
-      symbol: (sx, sy) => <SubstationSymbol at={{ x: sx + 90, y: sy }} proposed />,
+      key: 'paved',
+      label: '(E) PAVED PARKING AND DRIVES',
+      symbol: (sx, sy) => <rect x={sx + 40} y={sy - 11} width={100} height={22} fill={PAVING} stroke={PAVING_EDGE} strokeWidth={2} />,
     },
     {
-      label: '(E) SUBSTATION',
+      key: 'striping',
+      label: '(E) PARKING STRIPING',
       symbol: (sx, sy) => (
         <g>
-          <rect x={sx + 72} y={sy - 15} width={30} height={30} fill="#fff" stroke={UTILITY} strokeWidth={3} />
-          <rect x={sx + 79} y={sy - 8} width={16} height={16} fill="none" stroke={UTILITY} strokeWidth={2.5} />
+          <rect x={sx + 40} y={sy - 11} width={100} height={22} fill={PAVING} stroke={PAVING_EDGE} strokeWidth={2} />
+          {[0, 1, 2, 3].map((k) => <line key={k} x1={sx + 60 + k * 20} y1={sy - 11} x2={sx + 60 + k * 20} y2={sy + 11} stroke={INK} strokeWidth={1.5} />)}
         </g>
       ),
     },
-    { label: 'WETLAND', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 16} width={100} height={32} fill="url(#marsh)" stroke={WATER} strokeWidth={2.5} /> },
-    ...(inMassachusetts
-      ? [{ label: "100' WETLAND BUFFER ZONE (310 CMR 10.02)", symbol: (sx: number, sy: number) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={WATER} strokeWidth={2.5} strokeDasharray="28 14" /> }]
-      : []),
-    { label: '(E) PAVED PARKING AND DRIVES (MAPPED)', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="#d9d9d6" stroke="#8c8c88" strokeWidth={1.5} /> },
+    { key: 'open', label: 'OPEN GROUND', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 11} width={100} height={22} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" /> },
     {
-      label: '(E) PARKING STRIPING (FROM IMAGERY)',
-      symbol: (sx, sy) => (
-        <g stroke={INK} strokeWidth={1.4}>
-          {[0, 1, 2, 3, 4].map((k) => <line key={k} x1={sx + 50 + k * 20} y1={sy - 14} x2={sx + 50 + k * 20} y2={sy + 14} />)}
-        </g>
-      ),
-    },
-    { label: 'OPEN GROUND', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" /> },
-    {
+      key: 'dimension',
       label: 'DIMENSION',
       symbol: (sx, sy) => (
         <g stroke={INK} strokeWidth={3}>
@@ -1173,8 +1395,22 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
         </g>
       ),
     },
-    { label: 'REFERENCE TO FEATURE OFF THIS SHEET', symbol: (sx, sy) => <line x1={sx + 20} y1={sy} x2={sx + 160} y2={sy} stroke={INK} strokeWidth={4} markerEnd="url(#refArrow)" /> },
+    {
+      key: 'leader',
+      label: 'CALLOUT: (E) EXISTING, (N) NEW',
+      symbol: (sx, sy) => (
+        <g>
+          <circle cx={sx + 30} cy={sy} r={5.5} fill={INK} />
+          <line x1={sx + 30} y1={sy} x2={sx + 100} y2={sy} stroke={INK} strokeWidth={LEADER_W} />
+          <rect x={sx + 100} y={sy - 11} width={70} height={22} fill="#fff" stroke={INK} strokeWidth={1.6} />
+        </g>
+      ),
+    },
+    { key: 'reference', label: 'REFERENCE TO FEATURE OFF THIS SHEET', symbol: (sx, sy) => <Arrow from={{ x: sx + 40, y: sy }} to={{ x: sx + 140, y: sy }} width={3} head={16} /> },
   ];
+  const always = new Set(['property', 'building', 'dimension', 'leader']);
+  const items = all.filter((item) => always.has(item.key) || keys.has(item.key));
+  const rowH = Math.min(33, Math.floor((bottom - y - 44) / items.length));
   return (
     <g>
       <rect x={x} y={y} width={w} height={44 + items.length * rowH} fill="#fff" stroke={INK} strokeWidth={2} />
@@ -1185,10 +1421,10 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
       {items.map((item, i) => {
         const top = y + 44 + i * rowH;
         return (
-          <g key={item.label}>
+          <g key={item.key}>
             <line x1={x} y1={top} x2={x + w} y2={top} stroke={INK} strokeWidth={1} />
             {item.symbol(x + 20, top + rowH / 2)}
-            <text x={x + symW + 12} y={top + 22} fontSize={15} fill={INK}>
+            <text x={x + symW + 12} y={top + rowH / 2 + 6} fontSize={15} fill={INK}>
               {item.label}
             </text>
           </g>
