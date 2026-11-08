@@ -196,6 +196,12 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
   const parsed = parseAddress(address);
   if (!parsed) return { status: "needs_choice", candidates: [] };
 
+  // Fast path. The statewide parcel layer answers a search by location in well under a second but
+  // takes about a minute to search by address, so the parcels around the geocoded point are read
+  // first and one whose assessor address matches is taken. Only otherwise does the address search run.
+  const near = await parcelNearGeocode(address, parsed, region, lookup, ctx);
+  if (near) return near;
+
   const where = `${lookup.addressAttribute}=${quoted(parsed.street)} AND ${lookup.cityAttribute}=${quoted(parsed.city)}`;
   const result = await queryArcgis(lookup.entry, { kind: "attribute", where }, ctx);
 
@@ -207,6 +213,19 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
   if (parcels.length === 1 && !hasPolygon(parcels[0]!)) return resolveFromGeocoder(address, ctx, undefined, withoutUsableParcel(result));
   if (parcels.length === 1) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: result } };
   return { status: "needs_choice", candidates: parcels.map((parcel) => parcelCandidate(parcel, lookup)) };
+}
+
+async function parcelNearGeocode(address: string, parsed: ParsedAddress, region: RegionConfig, lookup: ParcelLookup, ctx: CollectContext): Promise<ResolveResult | null> {
+  const geocode = await geocodeAddress(address, ctx);
+  if (geocode.failure || geocode.matches.length !== 1) return null;
+  const match = geocode.matches[0]!;
+  const nearby = await queryArcgis(lookup.entry, { kind: "point", longitude: match.longitude, latitude: match.latitude, bufferMeters: lookup.nearbyMeters ?? NEARBY_METERS }, ctx);
+  if (nearby.failure) return null;
+  const town = (region.villages?.[parsed.city] ?? parsed.city).toUpperCase();
+  const matching = distinctParcels(nearby.features, lookup).filter(
+    (parcel) => hasPolygon(parcel) && streetOf(parcel.attributes[lookup.addressAttribute]) === parsed.street && String(parcel.attributes[lookup.cityAttribute] ?? "").toUpperCase() === town,
+  );
+  return matching.length === 1 ? { status: "resolved", anchor: { kind: "parcel", parcel: matching[0]!, lookup: nearby } } : null;
 }
 
 // When the address isn't written the way the assessor wrote it: the town for a village, the street
