@@ -1,6 +1,10 @@
 import type { BaseMap, MapFeature, Site, Value } from "@eqore/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { googleEarthUrl, streetViewToward, streetViewUrl } from "../app/siteLinks";
+import { plainLabel, workArea } from "@eqore/sheets";
+import { equipmentSolids, equipmentTag, polePoints, solidsCollection } from "./equipment3d";
+import { Google3DView } from "./Google3DView";
+import { declutter, priorityOf, type PlacedLabel } from "./declutter";
+import { symbolSvg } from "./symbols";
 import {
   BASE_LAYER,
   BASE_SOURCE,
@@ -75,18 +79,6 @@ export function SiteMap(props: SiteMapProps) {
     featureLabels,
   } = props;
   const container = useRef<HTMLDivElement>(null);
-  // Look from the street at where the building is likely fed, or at the concept pad when nothing is inferred.
-  const serviceLook = useMemo(() => {
-    const kind = (f: MapFeature) => (f.attributes?.["equipment_type"] as { value?: string } | undefined)?.value;
-    const target =
-      features.find((f) => kind(f) === "service_tap") ?? features.find((f) => kind(f) === "service_entrance") ?? features.find((f) => kind(f) === "bess_pad");
-    if (!target || target.geometry.type !== "Point") return null;
-    const roads = features
-      .filter((f) => f.kind === "road")
-      .flatMap((f) => (f.geometry.type === "LineString" ? f.geometry.coordinates : f.geometry.type === "MultiLineString" ? f.geometry.coordinates.flat() : [])) as [number, number][];
-    const words = kind(target) === "bess_pad" ? "concept pad" : "likely service";
-    return { url: streetViewToward(target.geometry.coordinates as [number, number], roads), words, title: target.label ?? words };
-  }, [features]);
   const map = useRef<MapLibre | null>(null);
   const highlighted = useRef<string[]>([]);
   const fitted = useRef(false);
@@ -96,8 +88,11 @@ export function SiteMap(props: SiteMapProps) {
   placeRef.current = { placingField, onPlace };
   const [loaded, setLoaded] = useState(false);
   const [aerialFailed, setAerialFailed] = useState(false);
-  const [hidden, setHidden] = useState<Set<LayerKey>>(new Set());
+  // The view is the electrical work: environmental layers start off and stay one click away.
+  const [hidden, setHidden] = useState<Set<LayerKey>>(() => new Set<LayerKey>(["wetlands", "fire_stations", "constraints", "zone_unknown"]));
   const [threeD, setThreeD] = useState(false);
+  // Google's 3D city when it loads; our own 3D models on the aerial when it doesn't.
+  const [googleFailed, setGoogleFailed] = useState(false);
   // On a phone the legend would cover most of the map, so it starts closed there.
   const [legendOpen, setLegendOpen] = useState(() => window.innerWidth > 760);
 
@@ -117,15 +112,37 @@ export function SiteMap(props: SiteMapProps) {
       },
       center: baseMap?.center ?? site.location ?? [-71.8, 42.3],
       zoom: baseMap?.zoom ?? 17,
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
-      maxPitch: 0,
+      pitch: 45,
+      maxPitch: 70,
     });
     instance.addControl(new ScaleControl({ unit: "imperial" }), "bottom-right");
     instance.on("load", () => {
       instance.addSource(FEATURE_SOURCE, { type: "geojson", data: toFeatureCollection([]), promoteId: "id" });
       for (const layer of FEATURE_LAYERS) instance.addLayer(layer);
+      instance.addSource("equipment3d", { type: "geojson", data: solidsCollection([]) });
+      instance.addLayer({
+        id: "equipment-3d",
+        type: "fill-extrusion",
+        source: "equipment3d",
+        paint: {
+          "fill-extrusion-color": ["get", "color"],
+          "fill-extrusion-base": ["get", "base"],
+          "fill-extrusion-height": ["get", "top"],
+          "fill-extrusion-opacity": 0.95,
+        },
+      });
+      instance.addSource("poles", { type: "geojson", data: polePoints([]) });
+      instance.addLayer({
+        id: "poles",
+        type: "circle",
+        source: "poles",
+        paint: {
+          "circle-color": "#7a5a3a",
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 15, 2.5, 19, 5, 21, 8],
+          "circle-stroke-color": "#1c2326",
+          "circle-stroke-width": 1.5,
+        },
+      });
       setLoaded(true);
     });
     instance.on("error", (event: unknown) => {
@@ -138,7 +155,7 @@ export function SiteMap(props: SiteMapProps) {
         return;
       }
       const { x, y } = event.point;
-      for (const layer of HIT_LAYERS) {
+      for (const layer of ["poles", "equipment-3d", ...HIT_LAYERS]) {
         const [hit] = instance.queryRenderedFeatures(
           [
             [x - HIT_RADIUS, y - HIT_RADIUS],
@@ -148,7 +165,7 @@ export function SiteMap(props: SiteMapProps) {
         );
         const field = hit?.properties?.field as string | undefined;
         if (field) {
-          onSelectRef.current(field, hit?.properties?.id as string | undefined);
+          onSelectRef.current(field, (hit?.properties?.featureId ?? hit?.properties?.id) as string | undefined);
           return;
         }
       }
@@ -189,13 +206,26 @@ export function SiteMap(props: SiteMapProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, heights, selectedFields, selectedFeatureId, loaded]);
 
+  useEffect(() => {
+    const source = map.current?.getSource("equipment3d") as { setData?: (data: unknown) => void } | undefined;
+    source?.setData?.(solidsCollection(equipmentSolids(visible)));
+    const poles = map.current?.getSource("poles") as { setData?: (data: unknown) => void } | undefined;
+    poles?.setData?.(polePoints(visible));
+  }, [visible, loaded]);
+
   const parcel = features.find((feature) => feature.kind === "property_line");
   useEffect(() => {
     if (!loaded || !parcel || fitted.current) return;
-    const bounds = boundsOf([parcel]);
+    // Frame the building, its electrical service, and the battery area, not the whole parcel.
+    const area = workArea(features);
+    const bounds = area ? ([[area[0], area[1]], [area[2], area[3]]] as [[number, number], [number, number]]) : boundsOf([parcel]);
     if (!bounds) return;
     fitted.current = true;
-    map.current?.fitBounds(bounds, { padding: 48, duration: 0, maxZoom: 19 });
+    map.current?.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 20 });
+    // The tilted view shows more ground than the box it was fitted to, so step in to match.
+    const zoom = map.current?.getZoom?.();
+    if (area && zoom !== undefined) map.current?.setZoom?.(Math.min(zoom + 0.5, 20.5));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parcel, loaded]);
 
   // HTML labels are never dropped by label collision and need no glyph files offline.
@@ -213,32 +243,67 @@ export function SiteMap(props: SiteMapProps) {
       });
       return new Marker({ element, anchor: "bottom-left" }).setLngLat(position).addTo(instance);
     };
+    const symbol = (feature: MapFeature, tag: string, name: string) => {
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = `equipment-symbol${isSelected(feature) ? " is-selected" : ""}`;
+      element.title = name;
+      element.setAttribute("aria-label", name);
+      const isNew = /^\(N\)/.test(feature.label ?? "") || (feature.attributes?.["basis"] as { value?: string } | undefined)?.value === "concept";
+      element.innerHTML = `${symbolSvg(tag, isNew)}<span class="equipment-tag">${tag}</span>`;
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onSelectRef.current(feature.field, feature.id);
+      });
+      return new Marker({ element, anchor: "center" }).setLngLat(feature.geometry.coordinates as [number, number]).addTo(instance);
+    };
     const markers = [
-      ...pointFeatures(visible).map((feature) =>
-        mark(feature, pointLabel(feature), `callout callout-${feature.kind} callout-${layerOf(feature)}`, feature.geometry.coordinates as [number, number]),
-      ),
+      ...pointFeatures(visible)
+        .filter((feature) => !equipmentTag(feature))
+        .map((feature) => mark(feature, plainLabel(pointLabel(feature)), `callout callout-${feature.kind} callout-${layerOf(feature)}`, feature.geometry.coordinates as [number, number])),
       ...visible
         .filter((feature) => feature.kind === "dimension_line" && feature.label)
-        .map((feature) => mark(feature, feature.label!, "callout callout-dimension", centerOf(feature))),
+        .map((feature) => mark(feature, feature.label!.replace(/\s*\(fitted\)/i, ""), "callout callout-dimension", centerOf(feature))),
       ...visible
-        .filter((feature) => !isPoint(feature) && featureLabels?.[feature.id])
+        .filter((feature) => !isPoint(feature) && feature.kind !== "utility_line" && featureLabels?.[feature.id])
+        // One label per road name, however many segments the road has.
+        .filter((feature, i, all) => feature.kind !== "road" || all.findIndex((other) => other.kind === "road" && featureLabels![other.id] === featureLabels![feature.id]) === i)
         .map((feature) => mark(feature, featureLabels![feature.id]!, `callout callout-drafting callout-${layerOf(feature)}`, centerOf(feature))),
     ];
+    // No two labels overlap: the less important one hides until there's room again.
+    const labels: PlacedLabel[] = markers.map((marker) => {
+      const element = marker.getElement();
+      return { element, priority: priorityOf(element.className) };
+    });
+    let pending = 0;
+    const run = () => {
+      if (pending) return;
+      pending = requestAnimationFrame(() => {
+        pending = 0;
+        const frame = container.current?.getBoundingClientRect();
+        const panels = [...(container.current?.parentElement?.querySelectorAll(".map-legend, .map-tools") ?? [])].map((panel) => panel.getBoundingClientRect());
+        declutter(
+          labels,
+          frame && frame.width > 0 ? { left: frame.left, top: frame.top, right: frame.right, bottom: frame.bottom } : undefined,
+          panels.filter((r) => r.width > 0).map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })),
+        );
+      });
+    };
+    run();
+    instance.on("render", run);
     return () => {
+      instance.off("render", run);
+      if (pending) cancelAnimationFrame(pending);
       for (const marker of markers) marker.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, selectedFields, selectedFeatureId, loaded, featureLabels]);
 
-  const toggled3D = useRef(false);
   useEffect(() => {
     const instance = map.current;
-    if (!instance || !loaded || (!threeD && !toggled3D.current)) return;
-    toggled3D.current = true;
-    instance.setLayoutProperty("building-3d", "visibility", threeD ? "visible" : "none");
-    instance.setMaxPitch(threeD ? 60 : 0);
-    instance.easeTo({ pitch: threeD ? 55 : 0, duration: 400 });
-  }, [threeD, loaded]);
+    if (!instance || !loaded) return;
+    instance.setLayoutProperty("building-3d", "visibility", "visible");
+  }, [loaded]);
 
   useEffect(() => {
     const beside = dockOpen && window.innerWidth > 760;
@@ -286,25 +351,26 @@ export function SiteMap(props: SiteMapProps) {
         </div>
       ) : null}
       <div className="map-tools">
-        {site.location ? (
-          <>
-            <a href={googleEarthUrl(site.location)} target="_blank" rel="noopener noreferrer">
-              Open in Google Earth
-            </a>
-            <a href={streetViewUrl(site.location)} target="_blank" rel="noopener noreferrer">
-              Street View
-            </a>
-            {serviceLook ? (
-              <a href={serviceLook.url} target="_blank" rel="noopener noreferrer" title={serviceLook.title}>
-                Street View: {serviceLook.words}
-              </a>
-            ) : null}
-          </>
-        ) : null}
-        <button type="button" aria-pressed={threeD} className={threeD ? "on" : ""} onClick={() => setThreeD((on) => !on)}>
-          3D buildings
+        <button type="button" aria-pressed={threeD} className={threeD ? "on" : ""} onClick={() => setThreeD((on) => !on)} disabled={googleFailed} title={googleFailed ? "Google's 3D map isn't enabled for this key" : undefined}>
+          3D view
         </button>
       </div>
+      {threeD && !googleFailed && site.location ? (
+        <div className="google-3d-frame">
+          <Google3DView
+            features={visible}
+            center={site.location}
+            onSelect={(field, id) => onSelectRef.current(field, id)}
+            onFail={() => {
+              setGoogleFailed(true);
+              setThreeD(false);
+            }}
+          />
+          <button type="button" className="google-3d-exit" onClick={() => setThreeD(false)}>
+            Exit 3D
+          </button>
+        </div>
+      ) : null}
       <div className="map-legend">
         <button type="button" className="legend-toggle" aria-expanded={legendOpen} onClick={() => setLegendOpen((open) => !open)}>
           Layers
@@ -321,13 +387,6 @@ export function SiteMap(props: SiteMapProps) {
           ))}
         </ul>
         {!loading && absent.length > 0 ? <p className="note">Not collected for this site: {absent.join(", ")}.</p> : null}
-        {threeD ? (
-          <p className="note">
-            {raised.length > 0
-              ? `Heights are estimates on record, not measured.${flat > 0 ? ` ${flat} ${flat === 1 ? "building has" : "buildings have"} no height on record and ${flat === 1 ? "stays" : "stay"} flat.` : ""}`
-              : "No building height on record, so buildings stay flat."}
-          </p>
-        ) : null}
         {!loading && (!baseMap || aerialFailed) ? <p className="map-warning">Aerial unavailable</p> : null}
       </div>
     </div>

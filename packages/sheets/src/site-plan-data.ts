@@ -321,3 +321,61 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
   }
   return labels;
 }
+
+const equipmentTypeOf = (f: MapFeature) => String((f.attributes?.['equipment_type'] as { value?: unknown } | undefined)?.value ?? '');
+
+/**
+ * The equipment both the map and the site plan draw, so they always show the same items.
+ * Lidar finds many boxes beside a building, most of them HVAC units, so only the one nearest
+ * the service entrance is kept, named for what can be said of it: an equipment box.
+ */
+export function drawnEquipment(features: MapFeature[]): MapFeature[] {
+  const entrance = features.find((f) => equipmentTypeOf(f) === 'service_entrance' && f.geometry.type === 'Point');
+  const boxes = features.filter((f) => equipmentTypeOf(f) === 'pad_mount_transformer_candidate' && f.geometry.type === 'Point');
+  let keep: MapFeature | null = null;
+  if (entrance && boxes.length) {
+    const [ex, ey] = entrance.geometry.coordinates as [number, number];
+    const dist = (f: MapFeature) => {
+      const [x, y] = f.geometry.coordinates as [number, number];
+      return Math.hypot((x - ex) * 82_000, (y - ey) * 111_320);
+    };
+    const best = [...boxes].sort((a, b) => dist(a) - dist(b))[0]!;
+    if (dist(best) <= 40) keep = best;
+  }
+  return features.filter((f) => equipmentTypeOf(f) !== 'pad_mount_transformer_candidate' || f === keep);
+}
+
+/**
+ * The part of the site the electrical work happens in: the main building, the equipment and
+ * service near it, the concept battery layout, and the feasible deployment zone when there is
+ * one. Both the map and the site plan frame this rather than the whole parcel.
+ * Returns [west, south, east, north] in lon/lat, padded, or null without a building.
+ */
+export function workArea(features: MapFeature[], padM = 25): [number, number, number, number] | null {
+  const ringArea = (ring: number[][]) => Math.abs(ring.reduce((s, p, i) => s + p[0]! * ring[(i + 1) % ring.length]![1]! - ring[(i + 1) % ring.length]![0]! * p[1]!, 0)) / 2;
+  const outer = (f: MapFeature): number[][] => (f.geometry.type === 'Polygon' ? f.geometry.coordinates[0]! : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates[0]![0]! : []) as number[][];
+  const main = features.filter((f) => f.kind === 'building_outline').sort((a, b) => ringArea(outer(b)) - ringArea(outer(a)))[0];
+  if (!main) return null;
+  const pts: number[][] = [...outer(main)];
+  const cx = pts.reduce((sum, p) => sum + p[0]! / pts.length, 0);
+  const cy = pts.reduce((sum, p) => sum + p[1]! / pts.length, 0);
+  const near = (p: number[]) => Math.hypot((p[0]! - cx) * 82_000, (p[1]! - cy) * 111_320) <= 160;
+  const coords = (f: MapFeature): number[][] =>
+    f.geometry.type === 'Point'
+      ? [f.geometry.coordinates as number[]]
+      : f.geometry.type === 'LineString'
+        ? (f.geometry.coordinates as number[][])
+        : f.geometry.type === 'MultiLineString'
+          ? (f.geometry.coordinates as number[][][]).flat()
+          : outer(f);
+  for (const f of drawnEquipment(features)) {
+    const electrical = f.kind === 'existing_equipment' || /service|drop|trench|conductor/i.test(String((f.attributes?.['line_class'] as { value?: unknown } | undefined)?.value ?? ''));
+    const zone = f.kind === 'candidate_area' && (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value === 'feasible_bess';
+    if (electrical || zone) pts.push(...coords(f).filter(near));
+  }
+  const xs = pts.map((p) => p[0]!);
+  const ys = pts.map((p) => p[1]!);
+  const dx = padM / (111_320 * Math.cos((cy * Math.PI) / 180));
+  const dy = padM / 111_320;
+  return [Math.min(...xs) - dx, Math.min(...ys) - dy, Math.max(...xs) + dx, Math.max(...ys) + dy];
+}

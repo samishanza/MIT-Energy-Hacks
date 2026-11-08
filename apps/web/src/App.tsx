@@ -401,7 +401,7 @@ export function App({ api }: { api: EngineerApi }) {
             {dockOpen && record ? (
               <EvidencePanel
                 api={api}
-                record={record}
+                record={drawn ?? record}
                 report={report}
                 fields={selected.fields}
                 featureId={selected.featureId}

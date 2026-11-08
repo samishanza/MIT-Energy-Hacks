@@ -1,0 +1,57 @@
+/* The electrical sheets tab: a slim toolbar, the sheet at full width, details to the side. */
+.esheets { display: flex; flex-direction: column; height: 100%; min-height: 0; background: #f3eee8; }
+
+.esheets-bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 10px; background: var(--white); border-bottom: 1px solid var(--rule); font-size: 13px; }
+.esheets-bar button { padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; background: var(--white); color: var(--ink); font: inherit; cursor: pointer; }
+.esheets-bar button:hover { border-color: var(--ink-soft); }
+.esheets-bar button.on, .esheets-bar button.on:hover, .esheets-bar button[aria-expanded="true"], .esheets-bar button[aria-expanded="true"]:hover { background: var(--ink); border-color: var(--ink); color: var(--white); }
+.esheets-group { display: inline-flex; gap: 0; }
+.esheets-group button { border-radius: 0; margin-left: -1px; }
+.esheets-group button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+.esheets-group button:last-child { border-radius: 0 4px 4px 0; }
+.esheets-config { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); }
+.esheets-config select { padding: 3px 6px; font: inherit; max-width: 260px; }
+.esheets-spacer { flex: 1; }
+
+/* The existing specs form sits in the toolbar as a button; its form drops down as a panel. */
+.esheets-bar .specs { margin: 0; padding: 0; border: 0; background: transparent; }
+.esheets-bar .specs-head { gap: 6px; }
+.esheets-bar .specs-head .note { display: none; }
+.esheets-bar .specs-head .primary, .esheets-bar .specs-head .primary:hover { background: var(--ink); color: var(--white); border-color: var(--ink); }
+.esheets-bar .specs-form { position: absolute; z-index: 5; top: 100%; left: 0; right: 0; margin: 0; padding: 12px 14px; background: var(--white); border-bottom: 1px solid var(--rule); box-shadow: 0 6px 14px rgba(29, 42, 53, 0.14); }
+
+.esheets-panel { margin: 0; padding: 10px 14px; background: var(--white); border-bottom: 1px solid var(--rule); }
+.esheets-panel .preapp-text { max-height: 240px; }
+.esheets-panel .note { margin: 0 0 6px; font-size: 12px; color: var(--ink-soft); }
+
+.esheets-body { flex: 1; display: flex; gap: 10px; min-height: 0; padding: 10px; }
+.esheets-sheet { flex: 1; min-width: 0; margin: 0; display: flex; flex-direction: column; }
+.esheets-scroll { flex: 1; min-height: 0; overflow: auto; }
+.esheets-scroll svg { display: block; width: calc(100% * var(--zoom, 1)); height: auto; background: #fff; box-shadow: 0 1px 4px rgba(29, 42, 53, 0.18); }
+/* Fit shows the whole sheet in the space there is. */
+.esheets-scroll.is-fit svg { width: 100%; height: 100%; background: transparent; box-shadow: none; }
+.esheets-scroll.is-fit svg > rect:first-child { filter: drop-shadow(0 1px 3px rgba(29, 42, 53, 0.2)); }
+.esheets-scroll svg [role="button"]:focus { outline: none; }
+.esheets-scroll svg [role="button"]:hover > rect:first-child { fill: #fdeee4; fill-opacity: 0.55; }
+.esheets-sheet figcaption { padding: 6px 2px 0; font-size: 12px; color: var(--ink-soft); }
+
+.esheets-details { flex: 0 0 320px; align-self: flex-start; max-height: 100%; overflow: auto; padding: 10px 12px; background: var(--white); border: 1px solid var(--rule); border-top: 3px solid var(--select); font-size: 13px; }
+.esheets-details header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.esheets-details h2 { margin: 0 0 8px; font-size: 15px; }
+.esheets-details header button { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--ink-soft); }
+.esheets-details dl { margin: 0; }
+.esheets-row { padding: 6px 0; border-top: 1px solid var(--rule); }
+.esheets-row dt { font-weight: 600; }
+.esheets-row dd { margin: 2px 0 0; display: grid; gap: 2px; }
+.esheets-row small { color: var(--ink-soft); }
+.esheets-value { font-family: var(--mono); font-size: 12.5px; }
+.esheets-state { justify-self: start; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #eef0f1; }
+.state-verified .esheets-state { background: #ddefe4; color: var(--verified); }
+.state-inferred .esheets-state, .state-estimate .esheets-state { background: #e3ecf7; color: var(--inferred); }
+.state-missing .esheets-state { background: #f6e1dc; color: var(--conflicting); }
+.esheets-notes { margin: 8px 0 0; padding-left: 18px; color: var(--ink-soft); font-size: 12px; }
+
+@media (max-width: 900px) {
+  .esheets-body { flex-direction: column; }
+  .esheets-details { flex: none; width: 100%; }
+}

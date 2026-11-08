@@ -1,3 +1,4 @@
+import { appendEquipmentLabel } from "./equipment-labels.ts";
 import { mapsKey, streetView, streetViewImage } from "./street-view.ts";
 import { Hono, type MiddlewareHandler } from "hono";
 import { ENGINEER_PORT, WEB_PORT, routes } from "@eqore/contract";
@@ -74,6 +75,10 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
     const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
     return download(toDxf(record, deps.now()), "application/dxf", `${record.site.id}-v${record.version}.dxf`);
   });
+  // The browser's Google 3D view needs the key. This API only answers the local app.
+  app.get("/api/maps-config", (c) => c.json({ key: mapsKey() }));
+  // True and false labels on detected equipment, collected for training and measuring the detector.
+  app.post("/api/equipment-labels", async (c) => c.json(appendEquipmentLabel(await c.req.json(), deps.now())));
   app.get(routes.readStreetView.path, async (c) => {
     const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
     return c.json(await streetView(record, deps.fetch, mapsKey()));
