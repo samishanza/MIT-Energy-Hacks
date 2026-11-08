@@ -131,7 +131,11 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     .filter((e) => inside(e.at, view, 20));
   const wetlands = record.features.filter((f) => f.kind === 'constraint' && f.field === 'wetlands_nearby' && f.geometry.type !== 'Point');
   const isFeasible = (f: MapFeature) => (attributeText(f, 'zone_kind') ?? '').startsWith('FEASIBLE_BESS');
-  const feasible = record.features.filter((f) => f.kind === 'candidate_area' && isFeasible(f));
+  const zoneKind = (f: MapFeature) => attributeText(f, 'zone_kind') ?? '';
+  // The preferred zone is hatched; the wider feasible area, with longer runs, is a dashed outline.
+  const hasPreferred = record.features.some((f) => zoneKind(f) === 'FEASIBLE_BESS_PREFERRED');
+  const feasible = record.features.filter((f) => f.kind === 'candidate_area' && (zoneKind(f) === 'FEASIBLE_BESS_PREFERRED' || (!hasPreferred && zoneKind(f) === 'FEASIBLE_BESS')));
+  const feasibleOuter = hasPreferred ? record.features.filter((f) => f.kind === 'candidate_area' && zoneKind(f) === 'FEASIBLE_BESS') : [];
   const open = record.features.filter((f) => f.kind === 'candidate_area' && !isFeasible(f));
   const dims = record.features.filter((f) => f.kind === 'dimension_line');
   const inMassachusetts = /massachusetts/i.test(record.site.region);
@@ -181,8 +185,8 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   for (const z of feasible) {
     const pts = polygonsOfFeature(z, frame).flatMap((p) => p.outer.map(toSheet));
     const at = firstInside(pts, view, 0.2);
-    const remote = attributeText(z, 'zone_kind') === 'FEASIBLE_BESS_REMOTE';
-    if (at) callouts.push({ anchor: at, lines: remote ? ["(N) BESS ZONE, OVER 100' FROM EXPOSURES"] : ['(N) FEASIBLE BESS ZONE', `WITHIN ${attributeText(z, 'max_run_ft') ?? "250'"} OF THE SERVICE`], color: NEW });
+    const preferred = zoneKind(z) === 'FEASIBLE_BESS_PREFERRED';
+    if (at) callouts.push({ anchor: at, lines: preferred ? ['(N) BESS ZONE', `WITHIN ${attributeText(z, 'preferred_run_ft') ?? "150'"} RUN OF THE SERVICE`] : ['(N) BESS ZONE', `WITHIN ${attributeText(z, 'max_run_ft') ?? "250'"} RUN OF THE SERVICE`], color: NEW });
   }
 
   const substations = record.features
@@ -326,6 +330,9 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             <path key={`open-${i}`} d={path(p.outer.map(toSheet))} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" opacity={0.9} />
           ))}
 
+          {feasibleOuter.flatMap((z) => polygonsOfFeature(z, frame)).map((p, i) => (
+            <path key={`feasible-outer-${i}`} d={[p.outer, ...(p.holes ?? [])].map((ring) => path(ring.map(toSheet))).join(' ')} fill="none" stroke={NEW} strokeWidth={1.5} strokeDasharray="14 8" opacity={0.7} />
+          ))}
           {feasible.flatMap((z) => polygonsOfFeature(z, frame)).map((p, i) => (
             <path
               key={`feasible-${i}`}
@@ -974,7 +981,8 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
     },
     { label: '(E) TRANSMISSION LINE, KV', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" /> },
     { label: '(E) ELECTRIC SERVICE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} /> },
-    { label: '(N) FEASIBLE BESS ZONE', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#feasibleHatch)" stroke={NEW} strokeWidth={3} /> },
+    { label: '(N) BESS ZONE, LONGER RUN', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="none" stroke={NEW} strokeWidth={1.5} strokeDasharray="14 8" /> },
+    { label: '(N) BESS ZONE', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#feasibleHatch)" stroke={NEW} strokeWidth={3} /> },
     { label: '(N) BESS PAD', symbol: (sx, sy) => <PadSymbol at={{ x: sx + 90, y: sy }} k={1.6} /> },
     { label: '(N) TRENCH ROUTE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" /> },
     { label: '(E) UTILITY POLE', symbol: (sx, sy) => <PoleSymbol at={{ x: sx + 90, y: sy }} /> },
