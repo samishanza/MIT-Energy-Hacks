@@ -4,6 +4,7 @@ import { queryTerritories, servingUtility } from "./checks/energy.ts";
 import { area } from "@turf/turf";
 import { collectGrid } from "./checks/grid.ts";
 import { collectLidarEquipment } from "./checks/lidar-collect.ts";
+import { collectParkingStalls } from "./checks/parking.ts";
 import { collectPavedSurfaces } from "./checks/paved.ts";
 import { inferServicePath } from "./checks/service-path.ts";
 import { padCandidates, type CandidateResult } from "./checks/candidates.ts";
@@ -170,6 +171,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   if (region.territories) pending(region.territories.entry.id, region.territories.entry.name);
   if (region.lidarPoints && ctx.readLidar && region.buildings && physical.parcelGeometry) pending(region.lidarPoints.source.id, region.lidarPoints.source.name);
   if (region.pavedSurfaces && physical.parcelGeometry) pending(region.pavedSurfaces.entry.id, region.pavedSurfaces.entry.name);
+  if (region.pavedSurfaces && region.imagery && ctx.decodeImage && physical.parcelGeometry) pending(`${region.imagery.id}-stalls`, `${region.imagery.name}, stall stripes`);
   if (region.earthEngine) {
     const { landCover, terrain, imagery } = region.earthEngine;
     for (const [wanted, entry] of [[landCover, LAND_COVER_SOURCE], [terrain, TERRAIN_SOURCE], [imagery, IMAGERY_SOURCE]] as const) if (wanted) pending(entry.id, entry.name);
@@ -222,7 +224,17 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       : null,
   );
 
-  const [outlines, grid, roads, layers, json, slope, territories, earth, lidar, paved] = await Promise.all([
+  // Stall stripes, read from the imagery inside the paved areas once those land.
+  const stallSource = region.imagery
+    ? { id: `${region.imagery.id}-stalls`, name: `${region.imagery.name}, stall stripes`, kind: "arcgis_rest" as const, dataOrigin: "real" as const, url: region.imagery.serviceUrl, licenseNote: region.imagery.licenseNote }
+    : null;
+  const stallsRead = pavedRead.then((part) =>
+    stallSource && region.imagery && ctx.decodeImage && part?.features.length
+      ? collectParkingStalls({ tileUrlTemplate: region.imagery.tileUrlTemplate, zoom: Math.min(20, region.imagery.maxZoom), source: stallSource, sourceDate: region.imagery.sourceDate }, part.features, ctx.decodeImage, ctx).then((stalls) => (stalls ? landed(stalls) : null))
+      : null,
+  );
+
+  const [outlines, grid, roads, layers, json, slope, territories, earth, lidar, paved, stalls] = await Promise.all([
     outlinesRead,
     collectGrid(region, physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] }, ctx).then(landed),
     roadsRead,
@@ -238,6 +250,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
     collectRaster(region, physical.parcelGeometry ?? squareAround(physical.location, 50), ctx).then((part) => (part ? landed(part) : null)),
     lidarRead,
     pavedRead,
+    stallsRead,
   ]);
 
   const collected = [...physical.observations, ...(outlines?.observations ?? []), ...grid.observations];
@@ -292,6 +305,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...(service?.observations ?? []),
       ...(lidar?.observations ?? []),
       ...(paved?.observations ?? []),
+      ...(stalls?.observations ?? []),
       ...candidates.observations,
       // A better local value, such as lidar slope or a 1 m point elevation, is read after Earth Engine's, so it stays current.
       ...(earth?.observations ?? []),
@@ -302,7 +316,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...unavailable,
       ...personRoutes,
     ],
-    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features), ...(service?.features ?? []), ...(lidar?.features ?? []), ...(paved?.features ?? [])],
+    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features), ...(service?.features ?? []), ...(lidar?.features ?? []), ...(paved?.features ?? []), ...(stalls?.features ?? [])],
     baseMap: physical.baseMap,
     // A source still pending at the end was never read, such as a feeder's detail layers when no feeder was found.
     // The value it would have filled says why, so the finished record lists only sources that ran.

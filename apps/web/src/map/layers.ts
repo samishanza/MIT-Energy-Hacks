@@ -96,7 +96,7 @@ export function layerOf(feature: MapFeature): LayerKey {
     case "constraint":
       if (/fire_station/.test(feature.field)) return "fire_stations";
       if (/wetland/.test(feature.field)) return "wetlands";
-      if (/paved/.test(feature.field)) return "paved";
+      if (/paved|parking/.test(feature.field)) return "paved";
       return "constraints";
   }
 }
@@ -253,8 +253,15 @@ export const FEATURE_LAYERS = [
     id: "paved-outline",
     type: "line",
     source: FEATURE_SOURCE,
-    filter: onLayer("paved"),
+    filter: ["all", onLayer("paved"), ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]]],
     paint: { "line-color": ["case", selected, SELECTION_COLOR, "#3d3d3d"], "line-width": 1.2 },
+  },
+  {
+    id: "parking-stripes",
+    type: "line",
+    source: FEATURE_SOURCE,
+    filter: ["all", onLayer("paved"), ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]]],
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#ffffff"], "line-width": 1.5 },
   },
   {
     id: "constraint-fill",

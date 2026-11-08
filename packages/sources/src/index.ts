@@ -7,6 +7,7 @@ export * from "./ept.ts";
 export * from "./checks/lidar-equipment.ts";
 export * from "./checks/lidar-collect.ts";
 export * from "./checks/paved.ts";
+export * from "./checks/parking.ts";
 export * from "./json-api.ts";
 export * from "./layers.ts";
 export * from "./arcgis.ts";

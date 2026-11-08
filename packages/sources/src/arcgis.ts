@@ -42,6 +42,8 @@ export type CollectContext = {
   earthEngine?: import("./earthengine.ts").EarthEngineRunner | { missing: string };
   // Reads public lidar around a point. The caller passes it, so recorded runs and tests make no point-cloud requests.
   readLidar?: import("./checks/lidar-collect.ts").ReadLidar;
+  // Decodes an imagery tile to RGBA pixels. The caller passes it, so tests and recorded runs read no imagery.
+  decodeImage?: import("./checks/parking.ts").ImageDecoder;
   runDeadlineMs?: number;
   // Lidar slope sampling lives in the agent layer, so the caller passes it in.
   measureSlope?: (box: { west: number; south: number; east: number; north: number }, fetchImpl: FetchLike) => Promise<{ slopePercent: number; sampleCount: number; demResolutionFt: number; aspectDegrees?: number } | null>;

@@ -29,6 +29,7 @@ import {
   plainLabel,
   drawnEquipment,
   workArea,
+  workPoints,
 } from './site-plan-data.ts';
 
 // Sheet units: 100 per inch on a 36 x 24 in sheet.
@@ -131,6 +132,8 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     .filter((e) => inside(e.at, view, 20));
   const wetlands = record.features.filter((f) => f.kind === 'constraint' && f.field === 'wetlands_nearby' && f.geometry.type !== 'Point');
   const paved = record.features.filter((f) => f.kind === 'constraint' && f.field === 'paved_area_sqft' && f.geometry.type !== 'Point');
+  const stallRows = record.features.filter((f) => f.field === 'parking_stalls' && f.geometry.type === 'Polygon');
+  const stripes = record.features.filter((f) => f.field === 'parking_stalls' && f.geometry.type === 'MultiLineString');
   const isFeasible = (f: MapFeature) => (attributeText(f, 'zone_kind') ?? '').startsWith('FEASIBLE_BESS');
   const zoneKind = (f: MapFeature) => attributeText(f, 'zone_kind') ?? '';
   // The preferred zone is hatched; the wider feasible area, with longer runs, is a dashed outline.
@@ -186,6 +189,14 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     const pts = polygonsOfFeature(p, frame).flatMap((poly) => poly.outer.map(toSheet));
     const at = firstInside(pts, view, 0.6);
     if (at) callouts.push({ anchor: at, lines: ['(E) PAVED PARKING AND DRIVES'] });
+  }
+  // One callout for the striping, on the longest row, as a drawing marks a typical condition.
+  const longestRow = [...stallRows].sort((a, b) => Number((b.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0) - Number((a.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0))[0];
+  if (longestRow) {
+    const pts = polygonsOfFeature(longestRow, frame).flatMap((poly) => poly.outer.map(toSheet));
+    const at = pts.length ? centroid(pts) : null;
+    const total = stallRows.reduce((sum, f) => sum + Number((f.attributes?.['stall_count'] as { value?: number } | undefined)?.value ?? 0), 0);
+    if (at && inside(at, view, 20)) callouts.push({ anchor: at, lines: ['(E) STRIPED PARKING, TYP.', `${total} STALLS SEEN IN IMAGERY`] });
   }
   for (const o of open) {
     const pts = polygonsOfFeature(o, frame).flatMap((p) => p.outer.map(toSheet));
@@ -265,6 +276,38 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   }
 
   const placed = placeCallouts(callouts, view);
+  const boxes = placed.map((c) => c.box);
+  const clearOfBoxes = (p: Pt, pad = 30) => boxes.every((b) => p.x < b.x - pad || p.x > b.x + b.w + pad || p.y < b.y - pad || p.y > b.y + b.h + pad);
+
+  // The main building's overall size, as dimension strings along its bottom and right sides on the sheet.
+  const mainSheet = buildings[0]?.sheet ?? [];
+  const buildingDims: { a: Pt; b: Pt; text: string }[] = [];
+  if (mainSheet.length > 2) {
+    const xs = mainSheet.map((p) => p.x), ys = mainSheet.map((p) => p.y);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    buildingDims.push({ a: { x: x0, y: y1 + 70 }, b: { x: x1, y: y1 + 70 }, text: `${Math.round((x1 - x0) / k)}'` });
+    buildingDims.push({ a: { x: x1 + 70, y: y0 }, b: { x: x1 + 70, y: y1 }, text: `${Math.round((y1 - y0) / k)}'` });
+  }
+
+  // Each lot line's bearing and length, as a survey writes it, along the line outside the lot.
+  const lotRing = lotSheet;
+  const lotLocal = lotRing.map((p) => drawing.toLocalPoint(p));
+  const lotArea = lotRing.reduce((s, p, i) => s + p.x * lotRing[(i + 1) % lotRing.length]!.y - lotRing[(i + 1) % lotRing.length]!.x * p.y, 0);
+  const bearings: { at: Pt; angle: number; text: string }[] = [];
+  for (let i = 0; i < lotRing.length; i++) {
+    const a = lotRing[i]!, b = lotRing[(i + 1) % lotRing.length]!;
+    const la = lotLocal[i]!, lb = lotLocal[(i + 1) % lotLocal.length]!;
+    const feet = Math.hypot(lb.x - la.x, lb.y - la.y);
+    if (feet < 60) continue;
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    // Outward: to the right of the edge when the ring runs clockwise on the sheet.
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const out = lotArea > 0 ? { x: (a.y - b.y) / len, y: (b.x - a.x) / len } : { x: (b.y - a.y) / len, y: (a.x - b.x) / len };
+    const at = { x: mid.x - out.x * 26, y: mid.y - out.y * 26 };
+    if (!inside(at, view, 60) || !clearOfBoxes(at, 120)) continue;
+    const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+    bearings.push({ at, angle: deg > 90 || deg < -90 ? deg + 180 : deg, text: `${surveyBearing(la, lb)} ${feet.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}'` });
+  }
 
   // Off-sheet references: things the reviewer needs that fall outside the plan.
   const references: Reference[] = [];
@@ -337,7 +380,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
         {/* plan view */}
         <g clipPath="url(#planView)">
           <rect x={view.x} y={view.y} width={view.w} height={view.h} fill="#f4f4f1" />
-          <g opacity={0.5}>
+          <g opacity={0.5} transform={`rotate(${drawing.rotationDeg} ${view.x + view.w / 2} ${view.y + view.h / 2})`}>
             {tiles.map((t) => (
               <image key={t.key} href={t.href} x={t.x} y={t.y} width={t.w} height={t.h} preserveAspectRatio="none" />
             ))}
@@ -345,6 +388,10 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
           {paved.flatMap((p) => polygonsOfFeature(p, frame)).map((p, i) => (
             <path key={`paved-${i}`} d={`${path(p.outer.map(toSheet))} ${(p.holes ?? []).map((h) => path(h.map(toSheet))).join(' ')}`} fillRule="evenodd" fill="#d9d9d6" stroke="#8c8c88" strokeWidth={1.5} opacity={0.85} />
+          ))}
+
+          {stripes.flatMap((f) => linesOf(f)).map((line, i) => (
+            <path key={`stripe-${i}`} d={path(sheetLine(line), false)} fill="none" stroke={INK} strokeWidth={1.4} />
           ))}
 
           {open.flatMap((o) => polygonsOfFeature(o, frame)).map((p, i) => (
@@ -514,6 +561,13 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
           <path d={path(lotSheet)} fill="none" stroke={INK} strokeWidth={5.5} strokeDasharray="80 14 14 14 14 14" />
 
+          {buildingDims.map((d, i) => <Dimension key={`bdim-${i}`} a={d.a} b={d.b} text={d.text} avoid={symbolPoints} />)}
+          {bearings.map((bg, i) => (
+            <text key={`brg-${i}`} x={bg.at.x} y={bg.at.y} fontSize={20} textAnchor="middle" fill={INK} stroke="#fff" strokeWidth={6} paintOrder="stroke" transform={`rotate(${bg.angle} ${bg.at.x} ${bg.at.y})`}>
+              {bg.text}
+            </text>
+          ))}
+
           {dims.map((d, i) => {
             const line = linesOf(d)[0];
             if (!line || line.length < 2) return null;
@@ -522,7 +576,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             return <Dimension key={`dim-${i}`} a={a} b={b} text={dimensionText(d.label ?? '')} avoid={symbolPoints} />;
           })}
 
-          {fall !== null && slope ? <FallArrow at={{ x: view.x + view.w - 230, y: view.y + 150 }} degrees={fall} text={`${slope} AVG. FALL`} /> : null}
+          {fall !== null && slope ? <FallArrow at={{ x: view.x + view.w - 230, y: view.y + 150 }} degrees={fall + drawing.rotationDeg} text={`${slope} AVG. FALL`} /> : null}
 
         </g>
 
@@ -534,7 +588,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
         {/* below the plan: notes, north arrow, drawing title and scale */}
         <SheetNotes x={view.x} y={2040} w={1180} notes={notes} />
-        <NorthArrow x={1420} y={2160} />
+        <NorthArrow x={1420} y={2160} rotation={drawing.rotationDeg} />
         <DrawingTitle x={1520} y={2160} scale={scale} k={k} />
 
         {/* right column: data table and legend */}
@@ -556,6 +610,10 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 interface Drawing {
   frame: LocalFrame;
   toSheet: (p: Pt) => Pt;
+  /** Sheet placement before the drawing's turn, for content drawn inside a rotated group. */
+  toSheetFlat: (p: Pt) => Pt;
+  /** The drawing's turn, clockwise on the sheet. */
+  rotationDeg: number;
   toLocalPoint: (p: Pt) => Pt;
   scale: number;
   /** Sheet units per foot. */
@@ -570,27 +628,72 @@ function layout(record: RecordVersion): Drawing | null {
   const polygons = polygonsOfFeature(lot.feature, lot.frame);
   const outer = polygons.sort((a, b) => polygonAreaSqft(b) - polygonAreaSqft(a))[0];
   if (!outer) return null;
+  // Turn the drawing so the main building sits square to the sheet, as a plan set draws it, choosing the quarter
+  // turn that keeps north within 45 degrees of up. The north arrow turns with it.
+  const work = workPoints(record.features);
+  const buildingLocal = work ? work.building.map((p) => toLocal(lot.frame, p as Pos)) : [];
+  const rotation = buildingLocal.length > 2 ? squareTurn(buildingLocal) : 0;
+  const cos = Math.cos(rotation), sin = Math.sin(rotation);
+  const turn = (p: Pt): Pt => ({ x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos });
+  const unturn = (p: Pt): Pt => ({ x: p.x * cos + p.y * sin, y: -p.x * sin + p.y * cos });
   // Frame the electrical work area when there is one, so the sheet isn't mostly open land.
-  const area = workArea(record.features);
-  const b = area
-    ? bounds([toLocal(lot.frame, [area[0], area[3]]), toLocal(lot.frame, [area[2], area[1]])])
-    : bounds(outer.outer);
-  const margin = area ? 1.05 : 1.3;
+  const padFt = 12 * 3.280839895;
+  const framed = work ? work.pts.map((p) => turn(toLocal(lot.frame, p as Pos))) : outer.outer.map(turn);
+  const raw = bounds(framed);
+  const b = work ? { minX: raw.minX - padFt, maxX: raw.maxX + padFt, minY: raw.minY - padFt, maxY: raw.maxY + padFt } : raw;
+  const margin = work ? 1.05 : 1.3;
   const scale = chooseScale((b.maxX - b.minX) * margin, (b.maxY - b.minY) * margin, VIEW.w / 100, VIEW.h / 100);
   const k = 100 / scale;
   const cx = (b.minX + b.maxX) / 2;
   const cy = (b.minY + b.maxY) / 2;
   const vx = VIEW.x + VIEW.w / 2;
   const vy = VIEW.y + VIEW.h / 2;
-  const toSheet = (p: Pt): Pt => ({ x: vx + (p.x - cx) * k, y: vy + (p.y - cy) * k });
-  const toLocalPoint = (p: Pt): Pt => ({ x: cx + (p.x - vx) / k, y: cy + (p.y - vy) / k });
-  return { frame: lot.frame, toSheet, toLocalPoint, scale, k, lotSheet: outer.outer.map(toSheet), view: VIEW };
+  const toSheet = (p: Pt): Pt => { const q = turn(p); return { x: vx + (q.x - cx) * k, y: vy + (q.y - cy) * k }; };
+  const toLocalPoint = (p: Pt): Pt => unturn({ x: cx + (p.x - vx) / k, y: cy + (p.y - vy) / k });
+  // The same placement without the turn, for the aerial tiles, which a rotated group then turns.
+  const centre = unturn({ x: cx, y: cy });
+  const toSheetFlat = (p: Pt): Pt => ({ x: vx + (p.x - centre.x) * k, y: vy + (p.y - centre.y) * k });
+  return { frame: lot.frame, toSheet, toSheetFlat, toLocalPoint, scale, k, rotationDeg: (rotation * 180) / Math.PI, lotSheet: outer.outer.map(toSheet), view: VIEW };
+}
+
+// A lot line's bearing as a survey writes it, from local feet with y south: N 71°59'08" E.
+function surveyBearing(a: Pt, b: Pt): string {
+  const east = b.x - a.x, north = a.y - b.y;
+  const azimuth = ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
+  const [ns, ew, angle] = azimuth <= 90 ? ['N', 'E', azimuth] : azimuth <= 180 ? ['S', 'E', 180 - azimuth] : azimuth <= 270 ? ['S', 'W', azimuth - 180] : ['N', 'W', 360 - azimuth];
+  const d = Math.floor(angle), m = Math.floor((angle - d) * 60), s = Math.round(((angle - d) * 60 - m) * 60);
+  const [mm, ss] = s === 60 ? [m + 1, 0] : [m, s];
+  return `${ns} ${d}°${String(mm).padStart(2, '0')}'${String(ss).padStart(2, '0')}" ${ew}`;
+}
+
+// The turn that brings the building's long axis square to the sheet: its minimum-area rectangle's angle, taken
+// to the nearest quarter turn so north stays within 45 degrees of up.
+function squareTurn(ring: Pt[]): number {
+  let best = { area: Infinity, angle: 0 };
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+    const angle = Math.atan2(b.y - a.y, b.x - a.x);
+    const c = Math.cos(-angle), s = Math.sin(-angle);
+    const us = ring.map((p) => p.x * c - p.y * s), vs = ring.map((p) => p.x * s + p.y * c);
+    const area = (Math.max(...us) - Math.min(...us)) * (Math.max(...vs) - Math.min(...vs));
+    if (area < best.area) best = { area, angle };
+  }
+  let turn = -best.angle;
+  while (turn > Math.PI / 4) turn -= Math.PI / 2;
+  while (turn <= -Math.PI / 4) turn += Math.PI / 2;
+  return turn;
 }
 
 function aerialTiles(record: RecordVersion, d: Drawing) {
   const base = record.baseMap!;
-  const nw = toLonLat(d.frame, d.toLocalPoint({ x: VIEW.x, y: VIEW.y }));
-  const se = toLonLat(d.frame, d.toLocalPoint({ x: VIEW.x + VIEW.w, y: VIEW.y + VIEW.h }));
+  const corners = [
+    { x: VIEW.x, y: VIEW.y },
+    { x: VIEW.x + VIEW.w, y: VIEW.y },
+    { x: VIEW.x, y: VIEW.y + VIEW.h },
+    { x: VIEW.x + VIEW.w, y: VIEW.y + VIEW.h },
+  ].map((p) => toLonLat(d.frame, d.toLocalPoint(p)));
+  const nw = [Math.min(...corners.map((c) => c[0]!)), Math.max(...corners.map((c) => c[1]!))];
+  const se = [Math.max(...corners.map((c) => c[0]!)), Math.min(...corners.map((c) => c[1]!))];
   const lat = (nw[1]! + se[1]!) / 2;
   const widthM = ((VIEW.w / 100) * d.scale) * 0.3048;
   let z = Math.min(base.maxZoom ?? 19, 19);
@@ -601,8 +704,8 @@ function aerialTiles(record: RecordVersion, d: Drawing) {
   const tiles: { key: string; href: string; x: number; y: number; w: number; h: number }[] = [];
   for (let tx = Math.floor(a.x); tx <= Math.floor(b.x); tx++) {
     for (let ty = Math.floor(a.y); ty <= Math.floor(b.y); ty++) {
-      const p0 = d.toSheet(toLocal(d.frame, tileCorner(tx, ty, z)));
-      const p1 = d.toSheet(toLocal(d.frame, tileCorner(tx + 1, ty + 1, z)));
+      const p0 = d.toSheetFlat(toLocal(d.frame, tileCorner(tx, ty, z)));
+      const p1 = d.toSheetFlat(toLocal(d.frame, tileCorner(tx + 1, ty + 1, z)));
       const href = (base.tileUrlTemplate ?? '').replace('{z}', String(z)).replace('{x}', String(tx)).replace('{y}', String(ty));
       tiles.push({ key: `${z}/${tx}/${ty}`, href, x: p0.x, y: p0.y, w: p1.x - p0.x + 0.6, h: p1.y - p0.y + 0.6 });
     }
@@ -841,9 +944,9 @@ function SubstationSymbol({ at, proposed = false }: { at: Pt; proposed?: boolean
   );
 }
 
-function NorthArrow({ x, y }: { x: number; y: number }) {
+function NorthArrow({ x, y, rotation = 0 }: { x: number; y: number; rotation?: number }) {
   return (
-    <g transform={`translate(${x} ${y})`}>
+    <g transform={`translate(${x} ${y}) rotate(${rotation})`}>
       <circle r={62} fill="#fff" stroke={INK} strokeWidth={5} />
       <path d="M0 -58 A58 58 0 0 1 0 58 Z" fill={INK} />
       <path d="M0 -78 L26 -18 L0 -30 L-26 -18 Z" fill={INK} />
@@ -1051,6 +1154,14 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
       ? [{ label: "100' WETLAND BUFFER ZONE (310 CMR 10.02)", symbol: (sx: number, sy: number) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={WATER} strokeWidth={2.5} strokeDasharray="28 14" /> }]
       : []),
     { label: '(E) PAVED PARKING AND DRIVES (MAPPED)', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="#d9d9d6" stroke="#8c8c88" strokeWidth={1.5} /> },
+    {
+      label: '(E) PARKING STRIPING (FROM IMAGERY)',
+      symbol: (sx, sy) => (
+        <g stroke={INK} strokeWidth={1.4}>
+          {[0, 1, 2, 3, 4].map((k) => <line key={k} x1={sx + 50 + k * 20} y1={sy - 14} x2={sx + 50 + k * 20} y2={sy + 14} />)}
+        </g>
+      ),
+    },
     { label: 'OPEN GROUND', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" /> },
     {
       label: 'DIMENSION',

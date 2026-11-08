@@ -66,6 +66,7 @@ export const FIELDS: FieldDefinition[] = [
     ["detected_grid_equipment", "Grid equipment detected in lidar"],
     ["electrical_permit_history", "Electrical permits on file"],
     ["paved_area_sqft", "Paved parking and drives on the lot"],
+    ["parking_stall_count", "Striped parking stalls seen in imagery"],
     ["service_size_a", "Service size on a permit"],
     ["service_construction", "Overhead or underground service, on a permit"],
     ["service_phase", "Service phases, on a permit"],
