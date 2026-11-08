@@ -28,15 +28,17 @@ function text(x: number, y: number, content: string, size = 14, weight: "normal"
   return `<text x="${x}" y="${y}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}">${escape(content)}</text>`;
 }
 
-const BOX = { x: 70, width: 500, height: 78, gap: 30 };
+const BOX = { x: 70, width: 500, gap: 22 };
+// Tall enough for the title and every line under it.
+const heightOf = (item: LineItem) => 36 + item.lines.length * 15 + 8;
 const ORDER = ["utility", "service-transformer", "meter", "main-switchgear", "breaker", "disconnect", "isolation-transformer", "inverters", "bess"];
 
 function itemBox(item: LineItem, y: number): string {
   const dashed = !item.known || item.inferred;
   const stroke = item.status === "E" ? UTILITY : INK;
-  const parts = [`<rect x="${BOX.x}" y="${y}" width="${BOX.width}" height="${BOX.height}" fill="#fff" stroke="${stroke}" stroke-width="2.5"${dashed ? ' stroke-dasharray="10 6"' : ""}/>`];
+  const parts = [`<rect x="${BOX.x}" y="${y}" width="${BOX.width}" height="${heightOf(item)}" fill="#fff" stroke="${stroke}" stroke-width="2.5"${dashed ? ' stroke-dasharray="10 6"' : ""}/>`];
   parts.push(text(BOX.x + 14, y + 24, `(${item.status}) ${item.title}`, 15, "bold", stroke));
-  item.lines.slice(0, 3).forEach((line, index) => parts.push(text(BOX.x + 14, y + 44 + index * 16, line, 12.5, "normal", item.known ? INK : MUTED)));
+  item.lines.forEach((line, index) => parts.push(text(BOX.x + 14, y + 42 + index * 15, line, 12.5, "normal", item.known ? INK : MUTED)));
   return parts.join("");
 }
 
@@ -46,28 +48,31 @@ const TAG_BELOW: Record<string, number> = { breaker: 4, disconnect: 3, "isolatio
 function chain(design: ServiceDesign, top: number): string {
   const items = ORDER.map((id) => design.items.find((item) => item.id === id)!).filter(Boolean);
   const parts: string[] = [];
+  let y = top;
   items.forEach((item, index) => {
-    const y = top + index * (BOX.height + BOX.gap);
+    const height = heightOf(item);
     parts.push(itemBox(item, y));
     if (index < items.length - 1) {
       const x = BOX.x + BOX.width / 2;
       const utilitySide = item.status === "E" && items[index + 1]!.status === "E";
-      parts.push(`<line x1="${x}" y1="${y + BOX.height}" x2="${x}" y2="${y + BOX.height + BOX.gap}" stroke="${utilitySide ? UTILITY : INK}" stroke-width="3"${utilitySide ? ' stroke-dasharray="8 6"' : ""}/>`);
+      parts.push(`<line x1="${x}" y1="${y + height}" x2="${x}" y2="${y + height + BOX.gap}" stroke="${utilitySide ? UTILITY : INK}" stroke-width="3"${utilitySide ? ' stroke-dasharray="8 6"' : ""}/>`);
       const tag = TAG_BELOW[item.id];
       if (tag) {
-        const cy = y + BOX.height + BOX.gap / 2;
-        parts.push(`<circle cx="${x + 34}" cy="${cy}" r="11" fill="#fff" stroke="${INK}" stroke-width="1.5"/>`, text(x + 34, cy + 5, String(tag), 12, "bold", INK, "middle"));
+        const cy = y + height + BOX.gap / 2;
+        parts.push(`<circle cx="${x + 34}" cy="${cy}" r="10" fill="#fff" stroke="${INK}" stroke-width="1.5"/>`, text(x + 34, cy + 4, String(tag), 11, "bold", INK, "middle"));
       }
+      y += height + BOX.gap;
     }
   });
   // The auxiliary disconnect feeds the battery's own systems, beside the main path.
   const aux = design.items.find((item) => item.id === "aux");
-  const bessY = top + (items.length - 1) * (BOX.height + BOX.gap);
+  const bess = items.at(-1)!;
   if (aux) {
-    parts.push(`<rect x="${BOX.x + BOX.width + 30}" y="${bessY}" width="300" height="${BOX.height}" fill="#fff" stroke="${INK}" stroke-width="2"/>`);
-    wrap(`(N) ${aux.title}`, 38).slice(0, 2).forEach((line, index) => parts.push(text(BOX.x + BOX.width + 42, bessY + 22 + index * 15, line, 11.5, "bold")));
-    parts.push(text(BOX.x + BOX.width + 42, bessY + 62, aux.lines[0] ?? "", 11.5));
-    parts.push(`<line x1="${BOX.x + BOX.width}" y1="${bessY + BOX.height / 2}" x2="${BOX.x + BOX.width + 30}" y2="${bessY + BOX.height / 2}" stroke="${INK}" stroke-width="2"/>`);
+    const auxHeight = heightOf(bess);
+    parts.push(`<rect x="${BOX.x + BOX.width + 30}" y="${y}" width="300" height="${auxHeight}" fill="#fff" stroke="${INK}" stroke-width="2"/>`);
+    wrap(`(N) ${aux.title}`, 38).slice(0, 2).forEach((line, index) => parts.push(text(BOX.x + BOX.width + 42, y + 20 + index * 15, line, 11.5, "bold")));
+    parts.push(text(BOX.x + BOX.width + 42, y + auxHeight - 10, aux.lines[0] ?? "", 11.5));
+    parts.push(`<line x1="${BOX.x + BOX.width}" y1="${y + auxHeight / 2}" x2="${BOX.x + BOX.width + 30}" y2="${y + auxHeight / 2}" stroke="${INK}" stroke-width="2"/>`);
   }
   return parts.join("");
 }
@@ -98,8 +103,8 @@ function schedule(design: ServiceDesign, x: number, y: number): { svg: string; h
   return { svg: parts.join(""), height: row - y };
 }
 
-const STATUS_WORDS = { passes: "PASSES (CONCEPT)", fails: "DOES NOT PASS", needs_input: "NEEDS INPUT" };
-const STATUS_COLOR = { passes: "#1d6b2c", fails: UTILITY, needs_input: "#9a6700" };
+const STATUS_WORDS = { passes: "PASSES (CONCEPT)", fails: "DOES NOT PASS", needs_input: "NEEDS INPUT", over_recommendation: "OVER 3% RECOMMENDATION" };
+const STATUS_COLOR = { passes: "#1d6b2c", fails: UTILITY, needs_input: "#9a6700", over_recommendation: "#9a6700" };
 
 function calculations(design: ServiceDesign, x: number, y: number, bottom: number): string {
   const parts = [text(x, y, "CONCEPT CALCULATIONS", 16, "bold")];
