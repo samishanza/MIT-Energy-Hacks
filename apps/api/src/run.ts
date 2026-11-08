@@ -36,6 +36,7 @@ export type ApiDeps = {
   retryDelayMs?: number;
   availableKeys?: string[];
   earthEngine?: CollectContext["earthEngine"];
+  readLidar?: CollectContext["readLidar"];
   runDeadlineMs?: number;
   resolveDeadlineMs?: number;
   progress?: Map<string, RunProgress>;
@@ -131,7 +132,7 @@ export async function runSite(deps: ApiDeps, body: unknown) {
   if (!region) throw new ApiFailure("not_found", 404, "No region is configured for this address. Write it as street, city, state.");
 
   const siteId = siteIdFor(address);
-  const ctx: CollectContext = { siteId, fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs, availableKeys: deps.availableKeys, earthEngine: deps.earthEngine, runDeadlineMs: deps.runDeadlineMs, measureSlope };
+  const ctx: CollectContext = { siteId, fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs, availableKeys: deps.availableKeys, earthEngine: deps.earthEngine, readLidar: deps.readLidar, runDeadlineMs: deps.runDeadlineMs, measureSlope };
   setProgress(deps, progressKey, { status: "running", sourceRuns: [], features: [] });
   try {
     return await collectAndRecord(deps, { address, region, siteId, ctx, choice, progressKey, findFetch });

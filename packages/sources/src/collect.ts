@@ -3,6 +3,7 @@ import { observe, queryArcgis, type CollectContext, type FetchLike, type Polygon
 import { queryTerritories, servingUtility } from "./checks/energy.ts";
 import { area } from "@turf/turf";
 import { collectGrid } from "./checks/grid.ts";
+import { collectLidarEquipment } from "./checks/lidar-collect.ts";
 import { inferServicePath } from "./checks/service-path.ts";
 import { padCandidates, type CandidateResult } from "./checks/candidates.ts";
 import { measureSite, type Measurements } from "./checks/measure.ts";
@@ -165,6 +166,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   for (const layer of region.layers ?? []) pending(layer.entry.id, layer.entry.name);
   for (const json of region.jsonSources ?? []) pending(json.id, json.name);
   if (region.territories) pending(region.territories.entry.id, region.territories.entry.name);
+  if (region.lidarPoints && ctx.readLidar && region.buildings && physical.parcelGeometry) pending(region.lidarPoints.source.id, region.lidarPoints.source.name);
   if (region.earthEngine) {
     const { landCover, terrain, imagery } = region.earthEngine;
     for (const [wanted, entry] of [[landCover, LAND_COVER_SOURCE], [terrain, TERRAIN_SOURCE], [imagery, IMAGERY_SOURCE]] as const) if (wanted) pending(entry.id, entry.name);
@@ -184,15 +186,25 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   const layerAnchor = { parcel: physical.parcelGeometry, location: physical.location };
   const request = { location: physical.location, address };
 
-  const [outlines, grid, roads, layers, json, slope, territories, earth] = await Promise.all([
-    region.buildings && physical.parcelGeometry ? collectOutlines(region.buildings, physical.parcelGeometry, parcel?.yearBuilt ?? null, ctx).then(landed) : null,
-    collectGrid(region, physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] }, ctx).then(landed),
+  const outlinesRead = region.buildings && physical.parcelGeometry ? collectOutlines(region.buildings, physical.parcelGeometry, parcel?.yearBuilt ?? null, ctx).then(landed) : Promise.resolve(null);
+  const roadsRead =
     region.roads && parcel
       ? queryArcgis(region.roads.entry, { kind: "polygon", geometry: parcel.parcel.geometry, bufferMeters: region.roads.entry.searchRadiusMeters }, ctx).then((result) => {
           landed({ run: result.run });
           return result;
         })
+      : Promise.resolve(null);
+  // Lidar needs the buildings and roads first, then runs alongside the rest.
+  const lidarRead = Promise.all([outlinesRead, roadsRead]).then(([found, roadResult]) =>
+    region.lidarPoints && ctx.readLidar && found && region.roads
+      ? collectLidarEquipment(region.lidarPoints, ctx.readLidar, found.measurable.features.map((feature) => feature.geometry), roadResult?.features ?? [], region.roads.nameAttribute, address, ctx).then((part) => (part ? landed(part) : null))
       : null,
+  );
+
+  const [outlines, grid, roads, layers, json, slope, territories, earth, lidar] = await Promise.all([
+    outlinesRead,
+    collectGrid(region, physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] }, ctx).then(landed),
+    roadsRead,
     Promise.all((region.layers ?? []).map((layer) => collectLayer(layer, layerAnchor, address, ctx).then(landed))),
     Promise.all((region.jsonSources ?? []).map((source) => collectJson(source, request, ctx).then(landed))),
     collectSlope(region, physical.parcelGeometry, ctx).then((part) => (part ? landed(part) : null)),
@@ -203,11 +215,13 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
         })
       : null,
     collectRaster(region, physical.parcelGeometry ?? squareAround(physical.location, 50), ctx).then((part) => (part ? landed(part) : null)),
+    lidarRead,
   ]);
 
   const collected = [...physical.observations, ...(outlines?.observations ?? []), ...grid.observations];
   const mainBuilding = [...(outlines?.measurable.features ?? [])].sort((a, b) => area(b.geometry) - area(a.geometry))[0];
-  const service = region.grid.some((source) => source.segments) ? inferServicePath(mainBuilding?.geometry ?? null, grid.segments, grid.lines[0]?.result ?? null, ctx) : null;
+  // A service drop seen in the lidar is direct evidence, so it replaces the guess from the nearest mapped line.
+  const service = region.grid.some((source) => source.segments) && !lidar?.servicePathDetected ? inferServicePath(mainBuilding?.geometry ?? null, grid.segments, grid.lines[0]?.result ?? null, ctx) : null;
   let measurements: Measurements = { observations: [], features: [] };
   if (parcel) {
     const assessorArea = collected.find((observation) => observation.field === "building_area_sqft" && observation.value?.type === "quantity")?.value;
@@ -254,6 +268,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...collected,
       ...measurements.observations,
       ...(service?.observations ?? []),
+      ...(lidar?.observations ?? []),
       ...candidates.observations,
       // A better local value, such as lidar slope or a 1 m point elevation, is read after Earth Engine's, so it stays current.
       ...(earth?.observations ?? []),
@@ -264,7 +279,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...unavailable,
       ...personRoutes,
     ],
-    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features), ...(service?.features ?? [])],
+    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features), ...(service?.features ?? []), ...(lidar?.features ?? [])],
     baseMap: physical.baseMap,
     // A source still pending at the end was never read, such as a feeder's detail layers when no feeder was found.
     // The value it would have filled says why, so the finished record lists only sources that ran.

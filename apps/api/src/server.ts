@@ -8,7 +8,7 @@ import { createCaptureApp } from "./capture-server.ts";
 import { createClaudeExtractor } from "./extract.ts";
 import { createEngineerApp } from "./routes.ts";
 import { Store } from "./store.ts";
-import { liveEarthEngine } from "@eqore/sources";
+import { liveEarthEngine, readLidarAround } from "@eqore/sources";
 
 try {
   process.loadEnvFile();
@@ -30,6 +30,7 @@ const deps: CaptureDeps = {
   extractor: createClaudeExtractor(),
   progress: new Map(),
   earthEngine: await liveEarthEngine(),
+  readLidar: readLidarAround,
   evidenceManifest: loadEvidenceManifest(inRepo("fixtures/evidence/manifest.json")),
 };
 

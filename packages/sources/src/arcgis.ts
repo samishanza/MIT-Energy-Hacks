@@ -40,6 +40,8 @@ export type CollectContext = {
   availableKeys?: string[];
   // The Earth Engine runner the caller signed in, or why there isn't one.
   earthEngine?: import("./earthengine.ts").EarthEngineRunner | { missing: string };
+  // Reads public lidar around a point. The caller passes it, so recorded runs and tests make no point-cloud requests.
+  readLidar?: import("./checks/lidar-collect.ts").ReadLidar;
   runDeadlineMs?: number;
   // Lidar slope sampling lives in the agent layer, so the caller passes it in.
   measureSlope?: (box: { west: number; south: number; east: number; north: number }, fetchImpl: FetchLike) => Promise<{ slopePercent: number; sampleCount: number; demResolutionFt: number; aspectDegrees?: number } | null>;

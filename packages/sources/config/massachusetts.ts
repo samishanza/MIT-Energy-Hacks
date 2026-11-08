@@ -380,6 +380,19 @@ export const massachusetts: RegionConfig = {
     description: "MassGIS 2025 aerial imagery, 15 cm, flown March to April 2025",
   },
   // Imagery stays MassGIS where it's configured, and lidar slope stays the current slope.
+  // USGS 3DEP lidar, 2021 collections covering central and eastern Massachusetts, read for poles and wires.
+  lidarPoints: {
+    bases: ["MA_CentralEastern_1_2021", "MA_CentralEastern_2_2021"].map((name) => `https://usgs-lidar-public.s3.amazonaws.com/${name}`),
+    sourceDate: "2021",
+    source: {
+      id: "usgs-3dep-lidar",
+      name: "USGS 3DEP lidar point cloud",
+      kind: "json_api",
+      dataOrigin: "real",
+      url: "https://registry.opendata.aws/usgs-lidar/",
+      licenseNote: "USGS 3DEP, public domain, read as Entwine Point Tiles from the public AWS bucket, which has no robots.txt. Cite as USGS 3DEP LiDAR Point Clouds, accessed from registry.opendata.aws/usgs-lidar.",
+    },
+  },
   earthEngine: { landCover: true, terrain: true, imagery: false },
   unavailable: [],
   personRoutes: [
