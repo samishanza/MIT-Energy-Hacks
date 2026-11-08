@@ -1,5 +1,6 @@
 import type { Observation, Source, SourceRun } from "@eqore/contract";
 import { RECORDED_AT_HEADER, observe, type CollectContext, type FetchLike } from "./arcgis.ts";
+import { parseAddress } from "./resolve-site.ts";
 
 export type JsonReading = Pick<Parameters<typeof observe>[2], "field" | "value" | "attribute" | "grade" | "sourceDate" | "reason">;
 
@@ -17,7 +18,15 @@ export type JsonSource = {
   read: (body: unknown) => JsonReading[];
   // A named reason for an answer that holds no usable value.
   emptyReason: string;
+  // Only addresses in these cities, for a city's own records.
+  cities?: string[];
 };
+
+export function appliesTo(source: JsonSource, address: string): boolean {
+  if (!source.cities) return true;
+  const city = parseAddress(address)?.city;
+  return Boolean(city && source.cities.includes(city));
+}
 
 export type JsonCollection = { observations: Observation[]; run: SourceRun };
 

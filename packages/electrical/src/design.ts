@@ -80,6 +80,19 @@ function ampsInput(value: Value | undefined, label: string, missing: string): Si
   return { label, value: null, state: "missing", source: value?.label ?? label, reason: value?.reason ?? missing };
 }
 
+// The main breaker from its nameplate, or else the service size on a city permit, which usually matches it.
+function mainBreaker(nameplate: Value | undefined, permit: Value | undefined): SiteInput<number> {
+  const read = ampsInput(nameplate, "Main breaker rating", "From the main distribution panel's nameplate.");
+  if (read.value !== null || permit?.current?.type !== "quantity" || permit.current.unit !== "A") return read;
+  return {
+    label: "Main breaker rating",
+    value: permit.current.value,
+    state: stateOf(permit),
+    source: `${permit.label}, not the nameplate`,
+    reason: "Taken from the service size on a city permit. The main breaker usually matches the service, but the nameplate confirms it.",
+  };
+}
+
 // A printed service voltage as line-to-line volts: 480Y/277 V is 480 and 120/208 V is 208.
 function serviceVolts(value: Value | undefined): SiteInput<number> {
   const label = "Service voltage";
@@ -305,7 +318,7 @@ export function designFromRecord(record: RecordVersion, config: Configuration = 
     feeder: textInput(values.get("feeder"), "Feeder", "The utility confirms the feeder."),
     servicePath: textInput(values.get("grid_service_path"), "How the building is fed", "No service path traced from public data."),
     serviceVoltage: serviceVolts(values.get("service_voltage")),
-    mainBreakerA: ampsInput(values.get("main_device_rating"), "Main breaker rating", "From the main distribution panel's nameplate."),
+    mainBreakerA: mainBreaker(values.get("main_device_rating"), values.get("service_size_a")),
     busRatingA: ampsInput(values.get("bus_rating"), "Busbar rating", "From the main distribution panel's nameplate, read by a qualified person."),
     faultCurrentA: ampsInput(values.get("available_fault_current_a"), "Available fault current", "The utility states it on request."),
     meterNumber: textInput(values.get("meter_number"), "Meter number", "The utility bill shows it."),
