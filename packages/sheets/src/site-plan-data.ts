@@ -364,6 +364,19 @@ export function drawnEquipment(features: MapFeature[]): MapFeature[] {
  * Returns [west, south, east, north] in lon/lat, padded, or null without a building.
  */
 export function workArea(features: MapFeature[], padM = 12): [number, number, number, number] | null {
+  const work = workPoints(features);
+  if (!work) return null;
+  const { pts } = work;
+  const cy = pts.reduce((sum, p) => sum + p[1]! / pts.length, 0);
+  const xs = pts.map((p) => p[0]!);
+  const ys = pts.map((p) => p[1]!);
+  const dx = padM / (111_320 * Math.cos((cy * Math.PI) / 180));
+  const dy = padM / 111_320;
+  return [Math.min(...xs) - dx, Math.min(...ys) - dy, Math.max(...xs) + dx, Math.max(...ys) + dy];
+}
+
+/** The lon/lat points the work area covers, and the main building's outline, for a frame turned to the building. */
+export function workPoints(features: MapFeature[]): { pts: number[][]; building: number[][] } | null {
   const ringArea = (ring: number[][]) => Math.abs(ring.reduce((s, p, i) => s + p[0]! * ring[(i + 1) % ring.length]![1]! - ring[(i + 1) % ring.length]![0]! * p[1]!, 0)) / 2;
   const outer = (f: MapFeature): number[][] => (f.geometry.type === 'Polygon' ? f.geometry.coordinates[0]! : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates[0]![0]! : []) as number[][];
   const main = features.filter((f) => f.kind === 'building_outline').sort((a, b) => ringArea(outer(b)) - ringArea(outer(a)))[0];
@@ -395,9 +408,5 @@ export function workArea(features: MapFeature[], padM = 12): [number, number, nu
     const electrical = f.kind === 'existing_equipment' || /service|drop|trench|conductor/i.test(String((f.attributes?.['line_class'] as { value?: unknown } | undefined)?.value ?? ''));
     if (electrical) pts.push(...coords(f).filter((p) => p[0]! >= x0 && p[0]! <= x1 && p[1]! >= y0 && p[1]! <= y1));
   }
-  const xs = pts.map((p) => p[0]!);
-  const ys = pts.map((p) => p[1]!);
-  const dx = padM / (111_320 * Math.cos((cy * Math.PI) / 180));
-  const dy = padM / 111_320;
-  return [Math.min(...xs) - dx, Math.min(...ys) - dy, Math.max(...xs) + dx, Math.max(...ys) + dy];
+  return { pts, building: outer(main) };
 }
