@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { RecordVersionSchema, type RecordVersion } from '@eqore/contract';
 import sample from '../../contract/samples/record.sample.json' with { type: 'json' };
 import { EngineeringSitePlan } from './EngineeringSitePlan.tsx';
-import { chooseScale, dimensionText, featureLabels, formatQuantity, printed, sheetNotes, siteDataRows } from './site-plan-data.ts';
+import { chooseScale, dimensionText, featureLabels, formatQuantity, plainLabel, printed, sheetNotes, siteDataRows } from './site-plan-data.ts';
 
 const record = (): RecordVersion => RecordVersionSchema.parse(structuredClone(sample));
 
@@ -16,8 +16,15 @@ describe('site plan data', () => {
     expect(formatQuantity(13.8, 'kV')).toBe('13.8 KV');
   });
 
-  it('writes a fitted dimension as approximate', () => {
-    expect(dimensionText('1,571 ft (fitted)')).toBe("1,571' ±");
+  it('writes a dimension the way a drawing does', () => {
+    expect(dimensionText('1,571 ft (fitted)')).toBe("1,571'");
+  });
+
+  it('names a feature by what it is, leaving how it was found to the record', () => {
+    expect(plainLabel('(E) LIKELY SERVICE TAP ON 05_01_27W3, INFERRED, NOT FIELD VERIFIED')).toBe('(E) SERVICE TAP ON 05_01_27W3');
+    expect(plainLabel('(E) UTILITY POLE, DETECTED IN LIDAR, NOT FIELD VERIFIED')).toBe('(E) UTILITY POLE');
+    expect(plainLabel('(N) BESS PAD, CONCEPT LOCATION, NOT A DESIGN')).toBe('(N) BESS PAD');
+    expect(plainLabel('Research Dr, the street in the address (mapped centerline, not surveyed)')).toBe('Research Dr, the street in the address');
   });
 
   it('picks the smallest standard engineering scale that fits', () => {
@@ -37,7 +44,7 @@ describe('site plan data', () => {
     expect(printed(r, 'lot_size_acres')).toBe('29.92 AC / 30.93 AC (SOURCES DIFFER)');
     const rows = siteDataRows(r);
     expect(rows.find((row) => row.label === 'ZONING DISTRICT')?.value).toBe('NOT FOUND IN PUBLIC RECORDS');
-    expect(rows.find((row) => row.label === 'BESS CONFIGURATION')?.value).toMatch(/NOT PROPOSED/);
+    expect(rows.find((row) => row.label === 'BESS CONFIGURATION')?.value).toBe('BY ENGINEER');
   });
 
   it('carries the not-surveyed note and the record id', () => {
@@ -49,7 +56,8 @@ describe('site plan data', () => {
   it('labels the lot for the map as the sheet does', () => {
     const r = record();
     const lot = r.features.find((f) => f.kind === 'property_line')!;
-    expect(featureLabels(r)[lot.id]).toMatch(/^\(E\) PROPERTY LINE.*NOT SURVEYED$/);
+    expect(featureLabels(r)[lot.id]).toMatch(/^\(E\) PROPERTY LINE/);
+    expect(featureLabels(r)[lot.id]).not.toMatch(/SURVEYED|INFERRED|APPROX/);
   });
 });
 
