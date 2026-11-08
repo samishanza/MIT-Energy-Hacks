@@ -92,12 +92,17 @@ describe("needs your attention", () => {
 });
 
 describe("status strip", () => {
-  it("keeps to one line: the data labels, with no banner", () => {
-    render(<StatusStrip record={worcesterRecord()} progress={null} running={false} />);
+  it("says nothing for real public data, and names a snapshot", () => {
+    const record = worcesterRecord();
+    record.synthetic = false;
+    record.snapshot = false;
+    const { container } = render(<StatusStrip record={record} progress={null} running={false} />);
+    expect(container.textContent).toBe("");
+    cleanup();
+    record.snapshot = true;
+    render(<StatusStrip record={record} progress={null} running={false} />);
     const text = screen.getByRole("region", { name: "Site status" }).textContent ?? "";
-    expect(text).toMatch(/^Real public data/);
-    expect(text).not.toMatch(/Concept-grade/);
-    expect(text).not.toMatch(/Unverified|public facts found|Grid connection request/);
+    expect(text).toBe("Recorded snapshot");
   });
 
   it("moves the counts, unverified signal, and grid line to the record summary, in that order", () => {
@@ -112,12 +117,12 @@ describe("status strip", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
-  it("shows real and synthetic labels together when a record has both", () => {
+  it("always labels a synthetic record", () => {
     const record = worcesterRecord();
     record.synthetic = true;
     render(<StatusStrip record={record} progress={null} running={false} />);
-    expect(screen.getByText("Real public data")).toBeTruthy();
     expect(screen.getByText("Synthetic")).toBeTruthy();
+    expect(screen.queryByText("Real public data")).toBeNull();
   });
 
   it("counts sources answered during a run", () => {

@@ -260,3 +260,52 @@ describe("resolving a value", () => {
     expect(screen.getByRole("complementary").textContent).toMatch(/engineer decision/i);
   });
 });
+
+describe("the dock itself", () => {
+  const base = () => ({
+    api: { evidenceUrl: (id: string) => `/files/${id}` } as EngineerApi,
+    report: sampleReport(),
+    actorName: "",
+    onActorName: vi.fn(),
+    onRecord: vi.fn(),
+  });
+
+  it("names the pick in its header, and folds and closes from there", () => {
+    const onClose = vi.fn();
+    const onCollapse = vi.fn();
+    render(<EvidencePanel {...base()} record={sampleRecord()} fields={["parcel_id"]} onClose={onClose} onCollapse={onCollapse} />);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(sampleRecord().values.find((v) => v.field === "parcel_id")!.label);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse details" }));
+    expect(onCollapse).toHaveBeenCalledOnce();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("shows only a rail when folded, which opens it again", () => {
+    const onExpand = vi.fn();
+    render(<EvidencePanel {...base()} record={sampleRecord()} fields={["parcel_id"]} onClose={vi.fn()} collapsed onExpand={onExpand} />);
+    expect(screen.queryByRole("list", { name: "History" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Show details/ }));
+    expect(onExpand).toHaveBeenCalledOnce();
+  });
+
+  it("offers a reading repeated across runs as one piece of evidence to cite", () => {
+    const record = sampleRecord();
+    const first = record.observations.find((o) => o.field === "parcel_id")!;
+    record.observations.push({ ...first, id: `${first.id}-again` });
+    render(<EvidencePanel {...base()} record={record} fields={["parcel_id"]} onClose={vi.fn()} />);
+    const boxes = screen.getAllByRole("checkbox", { name: /SAMPLE-0001/ });
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]!.closest("label")!.textContent).toMatch(/2 readings/);
+  });
+});
+
+describe("readable values", () => {
+  it("separates large numbers and spells out code words", async () => {
+    const { readable } = await import("./EvidencePanel");
+    expect(readable("1122433 sqft")).toBe("1,122,433 sqft");
+    expect(readable("880 ft")).toBe("880 ft");
+    expect(readable("feasible_bess_recommended")).toBe("feasible bess recommended");
+    expect(readable("05_01_10J323")).toBe("05_01_10J323");
+  });
+});

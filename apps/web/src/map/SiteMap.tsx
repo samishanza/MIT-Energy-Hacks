@@ -41,6 +41,8 @@ export interface SiteMapProps {
   onPlace?: (field: string, longitude: number, latitude: number) => void;
   onCancelPlace?: () => void;
   focusField?: string | null;
+  /** Called when the person pans, zooms, or turns the map, not when the app moves it. */
+  onUserMove?: () => void;
   /** Drafting-style callout per feature id, as the site plan writes them. */
   featureLabels?: Record<string, string>;
 }
@@ -110,6 +112,8 @@ export function SiteMap(props: SiteMapProps) {
   const fitted = useRef<string | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onUserMoveRef = useRef(props.onUserMove);
+  onUserMoveRef.current = props.onUserMove;
   const placeRef = useRef({ placingField, onPlace });
   placeRef.current = { placingField, onPlace };
   const [loaded, setLoaded] = useState(false);
@@ -165,6 +169,20 @@ export function SiteMap(props: SiteMapProps) {
     // Orbit like a model view: right-drag or Ctrl-drag turns and tilts, the compass returns to north.
     // Top left, clear of the 3D view button at top right and the legend at bottom left.
     instance.addControl(new NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), "top-left");
+    // Only a person's drag, wheel, or pinch carries an original event; the app's own easing doesn't.
+    // A click that ends a pan is the pan, not a pick.
+    let panned = false;
+    instance.on("mousedown", () => {
+      panned = false;
+    });
+    instance.on("touchstart", () => {
+      panned = false;
+    });
+    instance.on("movestart", (event: { originalEvent?: unknown }) => {
+      if (!event.originalEvent) return;
+      panned = true;
+      onUserMoveRef.current?.();
+    });
     instance.on("load", () => {
       instance.addSource(FEATURE_SOURCE, { type: "geojson", data: toFeatureCollection([]), promoteId: "id" });
       for (const layer of FEATURE_LAYERS) instance.addLayer(layer);
@@ -198,6 +216,10 @@ export function SiteMap(props: SiteMapProps) {
       if ((event as { sourceId?: string }).sourceId === BASE_SOURCE) setAerialFailed(true);
     });
     instance.on("click", (event) => {
+      if (panned) {
+        panned = false;
+        return;
+      }
       const placing = placeRef.current;
       if (placing.placingField) {
         placing.onPlace?.(placing.placingField, event.lngLat.lng, event.lngLat.lat);
