@@ -168,21 +168,35 @@ async function collectAndRecord(
 
   setProgress(deps, progressKey, { status: "done", site: collection.site, sourceRuns: collection.sourceRuns, features: collection.features });
   // Only what a person placed carries over. Equipment the collector inferred has a basis and is inferred again by this run.
-  const pins = (deps.store.readVersion(siteId, "latest")?.features ?? []).filter(
+  const previous = deps.store.readVersion(siteId, "latest")?.features ?? [];
+  const pins = previous.filter(
     (feature) => (feature.kind === "capture_pin" || feature.kind === "existing_equipment") && !feature.attributes?.["basis"],
   );
+  const kept = shapesOfFailedSources(previous, collection).filter((feature) => !pins.includes(feature));
   const sourceRuns = deps.snapshot
     ? collection.sourceRuns.map((run) => (run.status === "done" ? { ...run, status: "snapshot" as const } : run))
     : collection.sourceRuns;
 
   const record = createVersion(deps, {
     site: collection.site,
-    features: [...collection.features, ...pins],
+    features: [...collection.features, ...kept, ...pins],
     baseMap: collection.baseMap,
     sourceRuns,
     trigger: "run",
   });
   return { status: "ok" as const, record };
+}
+
+// A source that didn't answer this time keeps its shapes from the last run, as its values already carry
+// over: a timed-out land cover service shouldn't erase the paved areas the battery zone avoids.
+export function shapesOfFailedSources(
+  previous: MapFeature[],
+  collection: { sourceRuns: { sourceId: string; status: string }[]; observations: Observation[]; features: MapFeature[] },
+): MapFeature[] {
+  const failedSources = new Set(collection.sourceRuns.filter((run) => run.status !== "done").map((run) => run.sourceId));
+  const failedFields = new Set(collection.observations.filter((o) => failedSources.has(o.source.id) && o.kind === "no_value").map((o) => o.field));
+  const drawnNow = new Set(collection.features.map((feature) => feature.field));
+  return previous.filter((feature) => failedFields.has(feature.field) && !drawnNow.has(feature.field));
 }
 
 export function latestOrFail(deps: ApiDeps, siteId: string): RecordVersion {

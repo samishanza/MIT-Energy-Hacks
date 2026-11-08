@@ -163,7 +163,8 @@ export function SiteMap(props: SiteMapProps) {
     });
     instance.addControl(new ScaleControl({ unit: "imperial" }), "bottom-right");
     // Orbit like a model view: right-drag or Ctrl-drag turns and tilts, the compass returns to north.
-    instance.addControl(new NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), "top-right");
+    // Top left, clear of the 3D view button at top right and the legend at bottom left.
+    instance.addControl(new NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), "top-left");
     instance.on("load", () => {
       instance.addSource(FEATURE_SOURCE, { type: "geojson", data: toFeatureCollection([]), promoteId: "id" });
       for (const layer of FEATURE_LAYERS) instance.addLayer(layer);
