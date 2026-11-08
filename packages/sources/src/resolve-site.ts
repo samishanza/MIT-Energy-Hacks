@@ -19,9 +19,9 @@ export type SiteAnchor =
       parcelLookup?: ArcgisResult;
     };
 
-export type ResolveResult =
-  | { status: "resolved"; anchor: SiteAnchor }
-  | { status: "needs_choice"; candidates: { id: string; label: string; source: string }[] };
+export type ResolveCandidate = { id: string; label: string; source: string };
+
+export type ResolveResult = { status: "resolved"; anchor: SiteAnchor } | { status: "needs_choice"; candidates: ResolveCandidate[] };
 
 const STREET_WORDS: Record<string, string> = {
   STREET: "ST",
@@ -85,13 +85,26 @@ export function parseAddress(address: string): ParsedAddress | null {
   return { street: normalizeStreet(street), city: city.toUpperCase(), ...(state ? { state } : {}) };
 }
 
-// Any common spelling becomes one the rest of the pipeline reads. Null means a person has to help.
-export async function canonicalAddress(address: string, ctx: CollectContext): Promise<string | null> {
-  if (parseAddress(address)?.state) return address;
-  const { matches } = await geocodeAddress(address, ctx);
-  if (matches.length !== 1) return null;
-  const matched = matches[0]!.matchedAddress;
-  return parseAddress(matched)?.state ? matched : null;
+export type CanonicalAddress =
+  | { status: "ok"; address: string }
+  | { status: "failed"; reason: string }
+  | { status: "choose"; candidates: ResolveCandidate[] }
+  | { status: "unknown" };
+
+// A choice of spelling carries the address itself, so the next request can use it.
+export const ADDRESS_CANDIDATE = "address:";
+
+// Any common spelling becomes one the rest of the pipeline reads.
+export async function canonicalAddress(address: string, ctx: CollectContext): Promise<CanonicalAddress> {
+  if (parseAddress(address)?.state) return { status: "ok", address };
+  const { matches, failure } = await geocodeAddress(address, ctx);
+  if (failure) return { status: "failed", reason: failure };
+  const usable = matches.filter((match) => parseAddress(match.matchedAddress)?.state);
+  if (usable.length === 1) return { status: "ok", address: usable[0]!.matchedAddress };
+  if (usable.length > 1) {
+    return { status: "choose", candidates: usable.map((match) => ({ id: `${ADDRESS_CANDIDATE}${match.matchedAddress}`, label: match.matchedAddress, source: CENSUS_SOURCE.name })) };
+  }
+  return { status: "unknown" };
 }
 
 function quoted(text: string): string {
@@ -154,13 +167,11 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
 
   if (choice?.kind === "pin") {
     const pin = { longitude: choice.longitude, latitude: choice.latitude };
-    if (lookup) {
-      const atPin = await queryArcgis(lookup.entry, { kind: "point", ...pin }, ctx);
-      const parcels = distinctParcels(atPin.features, lookup);
-      if (parcels.length === 1 && hasPolygon(parcels[0]!)) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: atPin, pin } };
-      return { status: "resolved", anchor: { kind: "point", ...pin, method: "hand_placed", parcelLookup: atPin } };
-    }
-    return { status: "resolved", anchor: { kind: "point", ...pin, method: "hand_placed" } };
+    if (!lookup) return { status: "resolved", anchor: { kind: "point", ...pin, method: "hand_placed" } };
+    const atPin = await queryArcgis(lookup.entry, { kind: "point", ...pin }, ctx);
+    const parcels = distinctParcels(atPin.features, lookup);
+    if (parcels.length === 1 && hasPolygon(parcels[0]!)) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: atPin, pin } };
+    return { status: "resolved", anchor: { kind: "point", ...pin, method: "hand_placed", parcelLookup: atPin } };
   }
 
   if (!lookup) return resolveFromGeocoder(address, ctx, choice);
@@ -172,10 +183,24 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
     if (parcels.length === 1) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: byId } };
     return { status: "needs_choice", candidates: parcels.map((parcel) => parcelCandidate(parcel, lookup)) };
   }
-  if (choice?.kind === "candidate") return resolveFromGeocoder(address, ctx, choice);
+  if (choice?.kind === "candidate") {
+    const geocode = await geocodeAddress(address, ctx);
+    const match = geocode.matches.find((candidate) => `geocoder:${candidate.longitude},${candidate.latitude}` === choice.candidateId);
+    if (!match) return resolveFromGeocoder(address, ctx);
+    const atPoint = await queryArcgis(lookup.entry, { kind: "point", longitude: match.longitude, latitude: match.latitude }, ctx);
+    const parcels = distinctParcels(atPoint.features, lookup);
+    if (parcels.length === 1 && hasPolygon(parcels[0]!)) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: atPoint } };
+    return { status: "resolved", anchor: { kind: "point", longitude: match.longitude, latitude: match.latitude, method: "geocoded_interpolated", geocode, parcelLookup: atPoint } };
+  }
 
   const parsed = parseAddress(address);
   if (!parsed) return { status: "needs_choice", candidates: [] };
+
+  // Fast path. The statewide parcel layer answers a search by location in well under a second but
+  // takes about a minute to search by address, so the parcels around the geocoded point are read
+  // first and one whose assessor address matches is taken. Only otherwise does the address search run.
+  const near = await parcelNearGeocode(address, parsed, region, lookup, ctx);
+  if (near) return near;
 
   const where = `${lookup.addressAttribute}=${quoted(parsed.street)} AND ${lookup.cityAttribute}=${quoted(parsed.city)}`;
   const result = await queryArcgis(lookup.entry, { kind: "attribute", where }, ctx);
@@ -188,6 +213,19 @@ export async function resolveSite(address: string, region: RegionConfig, ctx: Co
   if (parcels.length === 1 && !hasPolygon(parcels[0]!)) return resolveFromGeocoder(address, ctx, undefined, withoutUsableParcel(result));
   if (parcels.length === 1) return { status: "resolved", anchor: { kind: "parcel", parcel: parcels[0]!, lookup: result } };
   return { status: "needs_choice", candidates: parcels.map((parcel) => parcelCandidate(parcel, lookup)) };
+}
+
+async function parcelNearGeocode(address: string, parsed: ParsedAddress, region: RegionConfig, lookup: ParcelLookup, ctx: CollectContext): Promise<ResolveResult | null> {
+  const geocode = await geocodeAddress(address, ctx);
+  if (geocode.failure || geocode.matches.length !== 1) return null;
+  const match = geocode.matches[0]!;
+  const nearby = await queryArcgis(lookup.entry, { kind: "point", longitude: match.longitude, latitude: match.latitude, bufferMeters: lookup.nearbyMeters ?? NEARBY_METERS }, ctx);
+  if (nearby.failure) return null;
+  const town = (region.villages?.[parsed.city] ?? parsed.city).toUpperCase();
+  const matching = distinctParcels(nearby.features, lookup).filter(
+    (parcel) => hasPolygon(parcel) && streetOf(parcel.attributes[lookup.addressAttribute]) === parsed.street && String(parcel.attributes[lookup.cityAttribute] ?? "").toUpperCase() === town,
+  );
+  return matching.length === 1 ? { status: "resolved", anchor: { kind: "parcel", parcel: matching[0]!, lookup: nearby } } : null;
 }
 
 // When the address isn't written the way the assessor wrote it: the town for a village, the street
@@ -214,11 +252,14 @@ async function resolveNearby(address: string, parsed: ParsedAddress, region: Reg
     const lookupResult = results.find((result) => result.features.some((feature) => feature.objectId === parcel.objectId))!;
     return { status: "resolved", anchor: { kind: "parcel", parcel, lookup: lookupResult } };
   }
+  // With the parcel service failing, the point carries the failure, so a parcel-anchored record is kept.
+  const failed = results.find((result) => result.failure);
+  if (failed && found.length === 0) return resolveFromGeocoder(address, ctx, undefined, failed);
   return {
     status: "needs_choice",
     candidates: [
       ...found.map((parcel) => parcelCandidate(parcel, lookup)),
-      ...geocode.matches.map((match) => ({ id: `geocoder:${match.longitude},${match.latitude}`, label: `${match.matchedAddress} (a point on the street, with no parcel)`, source: CENSUS_SOURCE.name })),
+      ...geocode.matches.map((match) => ({ id: `geocoder:${match.longitude},${match.latitude}`, label: `${match.matchedAddress} (a point on the street, where no parcel matched the address)`, source: CENSUS_SOURCE.name })),
     ],
   };
 }

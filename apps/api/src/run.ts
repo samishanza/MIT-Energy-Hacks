@@ -10,7 +10,7 @@ import {
   RunSiteRequestSchema,
 } from "@eqore/contract";
 import type { EvidenceRef, MapFeature, Observation, ObservedValue, RecordVersion, RunProgress, Value } from "@eqore/contract";
-import { REGIONS, canonicalAddress, catalogCoverage, collectSite, deriveValues, fieldDefinition, resolveSite, selectRegion, sha256, siteIdFor } from "@eqore/sources";
+import { ADDRESS_CANDIDATE, REGIONS, crossCheck, RESOLVE_DEADLINE_MS, withRunDeadline, canonicalAddress, catalogCoverage, collectSite, deriveValues, fieldDefinition, resolveSite, selectRegion, sha256, siteIdFor } from "@eqore/sources";
 import { measureSlope } from "@eqore/agents";
 import type { CollectContext, FetchLike, RegionConfig, SiteChoice } from "@eqore/sources";
 import { z } from "zod";
@@ -35,7 +35,10 @@ export type ApiDeps = {
   snapshot?: boolean;
   retryDelayMs?: number;
   availableKeys?: string[];
+  earthEngine?: CollectContext["earthEngine"];
+  readLidar?: CollectContext["readLidar"];
   runDeadlineMs?: number;
+  resolveDeadlineMs?: number;
   progress?: Map<string, RunProgress>;
 };
 
@@ -50,6 +53,8 @@ function equipmentLabel(value: Value): string {
 function labelVerifiedEquipment(features: MapFeature[], values: Value[]): MapFeature[] {
   return features.map((feature) => {
     if (feature.kind !== "capture_pin" && feature.kind !== "existing_equipment") return feature;
+    // Equipment the collector inferred from public maps keeps its own label, which says it isn't verified.
+    if (feature.attributes?.basis) return feature;
     const value = values.find((entry) => entry.field === feature.field);
     if (value?.state !== "verified") return { ...feature, kind: "capture_pin", label: value?.label ?? feature.label };
     return { ...feature, kind: "existing_equipment", label: equipmentLabel(value) };
@@ -59,7 +64,7 @@ function labelVerifiedEquipment(features: MapFeature[], values: Value[]): MapFea
 export function createVersion(deps: ApiDeps, parts: VersionParts): RecordVersion {
   const { store } = deps;
   const observations = store.observations(parts.site.id);
-  const values = deriveValues(observations);
+  const values = crossCheck({ address: parts.site.address, values: deriveValues(observations), observations, features: parts.features });
   const version = store.latestVersionNumber(parts.site.id) + 1;
   const record: RecordVersion = {
     id: `${parts.site.id}-v${version}`,
@@ -108,30 +113,42 @@ function setProgress(deps: ApiDeps, key: string, progress: RunProgress) {
 }
 
 export async function runSite(deps: ApiDeps, body: unknown) {
-  const { address: asTyped, choice } = parseRequest(RunSiteRequestSchema, body);
+  const request = parseRequest(RunSiteRequestSchema, body);
+  const asTyped = request.address;
   const progressKey = runProgressKey(asTyped);
+  // A chosen spelling replaces the typed one and isn't a site choice.
+  const spelled = request.choice?.kind === "candidate" && request.choice.candidateId.startsWith(ADDRESS_CANDIDATE) ? request.choice.candidateId.slice(ADDRESS_CANDIDATE.length) : null;
+  const choice = spelled ? undefined : request.choice;
+  // Only the parcel lookup is limited, so a late parcel service still leaves the geocoded point to fall back on.
+  const finding = withRunDeadline(deps.fetch, deps.resolveDeadlineMs ?? RESOLVE_DEADLINE_MS, "parcel lookup");
+  const findFetch: FetchLike = (url, init) => (new URL(url).hostname === "geocoding.geo.census.gov" ? deps.fetch(url, init) : finding.limited(url, init));
   const firstCtx: CollectContext = { siteId: "", fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs };
-  const address = await canonicalAddress(asTyped, firstCtx);
-  if (!address) return { status: "needs_choice" as const, candidates: [] };
+  const canonical = await canonicalAddress(spelled ?? asTyped, firstCtx);
+  if (canonical.status === "failed") throw new ApiFailure("source_failed", 502, `The address couldn't be checked. ${canonical.reason}`);
+  if (canonical.status === "choose") return { status: "needs_choice" as const, candidates: canonical.candidates };
+  if (canonical.status === "unknown") throw new ApiFailure("not_found", 404, "No match for this address. Write it as street, city, state.");
+  const address = canonical.address;
   const region = selectRegion(address, REGIONS);
   if (!region) throw new ApiFailure("not_found", 404, "No region is configured for this address. Write it as street, city, state.");
 
   const siteId = siteIdFor(address);
-  const ctx: CollectContext = { siteId, fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs, availableKeys: deps.availableKeys, runDeadlineMs: deps.runDeadlineMs, measureSlope };
+  const ctx: CollectContext = { siteId, fetch: deps.fetch, now: deps.now, retryDelayMs: deps.retryDelayMs, availableKeys: deps.availableKeys, earthEngine: deps.earthEngine, readLidar: deps.readLidar, runDeadlineMs: deps.runDeadlineMs, measureSlope };
   setProgress(deps, progressKey, { status: "running", sourceRuns: [], features: [] });
   try {
-    return await collectAndRecord(deps, { address, region, siteId, ctx, choice, progressKey });
+    return await collectAndRecord(deps, { address, region, siteId, ctx, choice, progressKey, findFetch });
   } catch (error) {
     setProgress(deps, progressKey, { status: "failed", sourceRuns: [], features: [], reason: (error as Error).message });
     throw error;
+  } finally {
+    finding.cancel();
   }
 }
 
 async function collectAndRecord(
   deps: ApiDeps,
-  { address, region, siteId, ctx, choice, progressKey }: { address: string; region: RegionConfig; siteId: string; ctx: CollectContext; choice?: SiteChoice; progressKey: string },
+  { address, region, siteId, ctx, choice, progressKey, findFetch }: { address: string; region: RegionConfig; siteId: string; ctx: CollectContext; choice?: SiteChoice; progressKey: string; findFetch: FetchLike },
 ) {
-  const resolved = await resolveSite(address, region, ctx, choice);
+  const resolved = await resolveSite(address, region, { ...ctx, fetch: findFetch }, choice);
   if (resolved.status === "needs_choice") {
     deps.progress?.delete(progressKey);
     return { status: "needs_choice" as const, candidates: resolved.candidates };
@@ -149,7 +166,10 @@ async function collectAndRecord(
   deps.store.appendObservations(collection.observations);
 
   setProgress(deps, progressKey, { status: "done", site: collection.site, sourceRuns: collection.sourceRuns, features: collection.features });
-  const pins = (deps.store.readVersion(siteId, "latest")?.features ?? []).filter((feature) => feature.kind === "capture_pin" || feature.kind === "existing_equipment");
+  // Only what a person placed carries over. Equipment the collector inferred has a basis and is inferred again by this run.
+  const pins = (deps.store.readVersion(siteId, "latest")?.features ?? []).filter(
+    (feature) => (feature.kind === "capture_pin" || feature.kind === "existing_equipment") && !feature.attributes?.["basis"],
+  );
   const sourceRuns = deps.snapshot
     ? collection.sourceRuns.map((run) => (run.status === "done" ? { ...run, status: "snapshot" as const } : run))
     : collection.sourceRuns;

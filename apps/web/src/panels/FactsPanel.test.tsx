@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { worcesterRecord, worcesterReport } from "../test/fixtures";
-import { StatusStrip } from "../ui/StatusStrip";
+import { RecordSummary, StatusStrip } from "../ui/StatusStrip";
 import { AttentionList } from "./AttentionList";
 import { FactsPanel } from "./FactsPanel";
 
@@ -92,15 +92,19 @@ describe("needs your attention", () => {
 });
 
 describe("status strip", () => {
-  it("keeps the note, labels, unverified signal, summary, and grid line in that order", () => {
-    render(<StatusStrip record={worcesterRecord()} report={worcesterReport()} progress={null} running={false} />);
-    const strip = screen.getByRole("region", { name: "Site status" });
-    const text = strip.textContent ?? "";
+  it("keeps to one line: the note and the data labels", () => {
+    render(<StatusStrip record={worcesterRecord()} progress={null} running={false} />);
+    const text = screen.getByRole("region", { name: "Site status" }).textContent ?? "";
+    expect(text).toMatch(/^Concept-grade\. Not surveyed\. Not a construction document\..*Real public data/);
+    expect(text).not.toMatch(/Unverified|public facts found|Grid connection request/);
+  });
+
+  it("moves the counts, unverified signal, and grid line to the record summary, in that order", () => {
+    const { container } = render(<RecordSummary record={worcesterRecord()} report={worcesterReport()} />);
+    const text = container.textContent ?? "";
     const order = [
-      "Concept-grade. Not surveyed. Not a construction document.",
-      "Real public data",
-      "Unverified: no person has checked these values.",
       "33 public facts found, 15 of 78 plan-set fields, 1 source conflict, 1 field with feeder candidates",
+      "Unverified: no person has checked these values.",
       "Grid connection request: 2 of 21 items",
     ].map((part) => text.indexOf(part));
     expect(order.every((at) => at >= 0)).toBe(true);
@@ -110,7 +114,7 @@ describe("status strip", () => {
   it("shows real and synthetic labels together when a record has both", () => {
     const record = worcesterRecord();
     record.synthetic = true;
-    render(<StatusStrip record={record} report={null} progress={null} running={false} />);
+    render(<StatusStrip record={record} progress={null} running={false} />);
     expect(screen.getByText("Real public data")).toBeTruthy();
     expect(screen.getByText("Synthetic")).toBeTruthy();
   });
@@ -123,7 +127,7 @@ describe("status strip", () => {
       features: [],
       sourceRuns: record.sourceRuns.map((run, i) => (i < 9 ? run : { ...run, status: "pending" as const })),
     };
-    render(<StatusStrip record={null} report={null} progress={progress} running />);
+    render(<StatusStrip record={null} progress={progress} running />);
     expect(screen.getByRole("status").textContent).toBe("Reading sources, 9 of 15 answered");
   });
 });

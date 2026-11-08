@@ -156,11 +156,12 @@ describe("site measurements", () => {
     expect(value("road_side").flags.join(" ")).toContain("Also near: Other St to the south");
   });
 
-  it("falls back to the closest road and says so when the address's street isn't mapped nearby", async () => {
+  it("leaves the road side missing, naming the closest road, when the address's street isn't mapped nearby", async () => {
     const closerOnSouth = road("Other St", [[[WEST, 42.25999], [EAST, 42.25999]]]);
     const { value } = await collect(ADDRESS, standIn({ roads: [closerOnSouth] }));
-    expect(value("road_side").current).toEqual({ type: "text", value: "south" });
-    expect(value("road_side").flags.join(" ")).toContain("It isn't the street in the address");
+    // A side measured from another road would be read downstream as the frontage.
+    expect(value("road_side").state).toBe("missing");
+    expect(value("road_side").reason).toBe("The street in the address isn't mapped near this parcel. The closest mapped road is Other St, to the south, and a person confirms which side the site fronts.");
   });
 
   it("leaves the road side missing with the reason when the road service fails, and measures the rest", async () => {

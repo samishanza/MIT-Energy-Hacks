@@ -27,6 +27,10 @@ const fake = vi.hoisted(() => {
       (this.handlers[event] ??= []).push(handler);
       return this;
     }
+    off(event: string, handler: (e: unknown) => void) {
+      this.handlers[event] = (this.handlers[event] ?? []).filter((h) => h !== handler);
+      return this;
+    }
     fire(event: string, payload: unknown = {}) {
       for (const handler of this.handlers[event] ?? []) handler(payload);
     }
@@ -77,6 +81,9 @@ const fake = vi.hoisted(() => {
     }
     setLngLat() {
       return this;
+    }
+    getElement() {
+      return this.el;
     }
     addTo() {
       document.body.append(this.el);
@@ -183,13 +190,13 @@ describe("site map", () => {
     expect(onSelect).toHaveBeenCalledWith("lot_width_ft", "d");
   });
 
-  it("fits the view to the parcel once, not again on each new version", () => {
+  it("fits the view to the building's work area, inside the parcel, once", () => {
     const record = worcesterRecord();
     const { rerender } = setup({ record });
     expect(lastMap().fitted).toHaveLength(1);
     const [[west, south], [east, north]] = lastMap().fitted[0] as [[number, number], [number, number]];
-    expect(west).toBeCloseTo(-71.77324, 4);
-    expect(east).toBeCloseTo(-71.76742, 4);
+    expect(west).toBeGreaterThan(-71.77324);
+    expect(east).toBeLessThan(-71.76742);
     expect(south).toBeLessThan(north);
     rerender({ record: { ...record, version: record.version + 1 } });
     expect(lastMap().fitted).toHaveLength(1);
@@ -198,12 +205,11 @@ describe("site map", () => {
   it("draws every collected kind on Worcester and lists each in the legend", () => {
     setup({ record: worcesterRecord() });
     const legend = within(screen.getByRole("list", { name: "Map layers" }));
-    for (const name of ["Dimension lines", "Buildings", "Lot, not surveyed", "Utility lines", "Fire stations", "Wetlands"]) {
+    for (const name of ["Dimension lines", "Buildings", "Lot", "Utility lines", "Fire stations", "Wetlands"]) {
       expect(legend.getByRole("checkbox", { name: new RegExp(name) })).toBeTruthy();
     }
-    expect(new Set(drawn().map((f) => f.properties.layer))).toEqual(new Set(["lot", "buildings", "utility", "dimensions", "wetlands"]));
-    expect(screen.getAllByRole("button", { name: /FIRE DEPARTMENT/ })).toHaveLength(3);
-    expect(screen.getByRole("button", { name: "1,571 ft (fitted)" })).toBeTruthy();
+    expect(new Set(drawn().map((f) => f.properties.layer))).toEqual(new Set(["lot", "buildings", "utility", "dimensions"]));
+    expect(screen.getByRole("button", { name: "1,571 ft" })).toBeTruthy();
   });
 
   it("says which kinds this run didn't collect", () => {
@@ -213,13 +219,15 @@ describe("site map", () => {
 
   it("toggles a layer off and back on from the legend", () => {
     setup({ record: worcesterRecord() });
+    // Environmental layers start off; the view is the electrical work.
     const wetlands = screen.getByRole("checkbox", { name: /Wetlands/ });
-    fireEvent.click(wetlands);
     expect(drawn().some((f) => f.properties.layer === "wetlands")).toBe(false);
-    fireEvent.click(screen.getByRole("checkbox", { name: /Fire stations/ }));
-    expect(screen.queryAllByRole("button", { name: /FIRE DEPARTMENT/ })).toHaveLength(0);
     fireEvent.click(wetlands);
     expect(drawn().some((f) => f.properties.layer === "wetlands")).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Fire stations/ }));
+    expect(screen.getAllByRole("button", { name: /FIRE DEPARTMENT/ })).toHaveLength(3);
+    fireEvent.click(wetlands);
+    expect(drawn().some((f) => f.properties.layer === "wetlands")).toBe(false);
   });
 
   it("draws eligibility zones by tier, with a legend entry for each tier present", () => {
@@ -248,22 +256,17 @@ describe("site map", () => {
     expect(drawn().map((f) => f.properties.id)).not.toContain("zone-remote");
   });
 
-  it("links to Google Earth and Street View at the site's coordinates", () => {
+  it("offers one 3D view control and no outbound links", () => {
     setup({ record: worcesterRecord() });
-    expect(screen.getByRole("link", { name: "Open in Google Earth" }).getAttribute("href")).toContain("@42.276141,-71.769444");
-    expect(screen.getByRole("link", { name: "Street View" }).getAttribute("href")).toContain("viewpoint=42.276141,-71.769444");
+    expect(screen.queryByRole("link", { name: /Google Earth|Street View/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "3D view" })).toBeTruthy();
   });
 
-  it("raises buildings in 3D on request, and says which stay flat", () => {
+  it("raises buildings and draws the equipment models on the aerial, and offers Google's 3D view", () => {
     setup({ record: worcesterRecord() });
-    expect(lastMap().layout["building-3d"]).toBeUndefined();
-    expect(lastMap().eased).toBe(0);
-    fireEvent.click(screen.getByRole("button", { name: "3D buildings" }));
     expect(lastMap().layout["building-3d"]).toBe("visible");
-    expect(lastMap().pitch).toBeGreaterThan(0);
-    expect(screen.getByText(/5 buildings have no height on record and stay flat/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "3D buildings" }));
-    expect(lastMap().pitch).toBe(0);
+    expect(lastMap().layout["equipment-3d"]).toBeUndefined();
+    expect(screen.getByRole("button", { name: "3D view" })).toBeTruthy();
   });
 
   it("offers a way out of placing", () => {

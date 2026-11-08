@@ -10,7 +10,9 @@
   "dependencies": {
     "@eqore/catalog": "^0.1.0",
     "@eqore/gatekeeper": "^0.1.0",
-    "@eqore/sources": "^0.1.0",
     "@eqore/contract": "^0.1.0"
+  },
+  "devDependencies": {
+    "@eqore/sources": "^0.1.0"
   }
 }

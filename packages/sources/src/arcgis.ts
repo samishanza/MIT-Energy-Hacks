@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { applyTransform } from "./transforms.ts";
 import { booleanClockwise, distance, nearestPointOnLine } from "@turf/turf";
 import type { Geometry, Observation, ObservedValue, Source, SourceRun } from "@eqore/contract";
 import { ObservationSchema } from "@eqore/contract";
@@ -37,9 +38,13 @@ export type CollectContext = {
   retryDelayMs?: number;
   // Names of the API keys the live fetch can supply. The keys themselves never come through here.
   availableKeys?: string[];
+  // The Earth Engine runner the caller signed in, or why there isn't one.
+  earthEngine?: import("./earthengine.ts").EarthEngineRunner | { missing: string };
+  // Reads public lidar around a point. The caller passes it, so recorded runs and tests make no point-cloud requests.
+  readLidar?: import("./checks/lidar-collect.ts").ReadLidar;
   runDeadlineMs?: number;
   // Lidar slope sampling lives in the agent layer, so the caller passes it in.
-  measureSlope?: (box: { west: number; south: number; east: number; north: number }, fetchImpl: FetchLike) => Promise<{ slopePercent: number; sampleCount: number; demResolutionFt: number } | null>;
+  measureSlope?: (box: { west: number; south: number; east: number; north: number }, fetchImpl: FetchLike) => Promise<{ slopePercent: number; sampleCount: number; demResolutionFt: number; aspectDegrees?: number } | null>;
 };
 
 // Replayed responses carry the time they were really retrieved.
@@ -297,6 +302,7 @@ export function observe(origin: ArcgisResult | ObservationOrigin, ctx: CollectCo
 
 export function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { value: ObservedValue } | { reason: string } {
   if (mapping.constant) return { value: mapping.constant };
+  if (mapping.transform) return applyTransform(mapping.transform, mapping.attribute, feature.attributes, mapping.sentinels);
   const attribute = mapping.attribute!;
   const raw = feature.attributes[attribute];
   if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
@@ -305,6 +311,7 @@ export function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { va
   if (mapping.type === "quantity") {
     const number = typeof raw === "number" ? raw : Number(raw);
     if (!Number.isFinite(number)) return { reason: `${attribute} isn't a number: ${String(raw)}` };
+    if (mapping.sentinels?.includes(number)) return { reason: `${attribute} is ${number}, which the source uses to mean no value` };
     if (number === 0 && mapping.zeroIsMissing) {
       return { reason: `${attribute} is 0 in the source, which can't be true, so it's stored as missing` };
     }
@@ -312,7 +319,7 @@ export function readMapping(mapping: FieldMapping, feature: ArcgisFeature): { va
     return { value: { type: "quantity", value: convertUnit(number, mapping.sourceUnit ?? unit, unit), unit } };
   }
   const text = String(raw).trim();
-  if (mapping.blankValues?.includes(text)) return { reason: `${attribute} is ${text} in the source, which means it has no value` };
+  if (mapping.blankValues?.includes(text.toUpperCase())) return { reason: `${attribute} is ${text} in the source, which means it has no value` };
   return { value: { type: "text", value: text } };
 }
 

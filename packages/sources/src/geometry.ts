@@ -1,3 +1,4 @@
+import { booleanIntersects } from "@turf/turf";
 import type { Geometry } from "@eqore/contract";
 
 export type Point = [number, number];
@@ -83,6 +84,7 @@ export function closestGap(first: Segment[], second: Segment[]): Gap {
 }
 
 export function feetBetween(first: Geometry, second: Geometry): number {
+  if (booleanIntersects(first, second)) return 0;
   const { toFeet } = frameAround(first);
   return closestGap(segmentsOf(first, toFeet), segmentsOf(second, toFeet)).feet;
 }

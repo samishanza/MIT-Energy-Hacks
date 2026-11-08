@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ApiErrorSchema, RecordVersionSchema, RunProgressSchema, RunSiteResponseSchema, routes } from "@eqore/contract";
 import type { Observation, ObservedValue, RecordVersion, Value } from "@eqore/contract";
-import { fixtureFetch } from "@eqore/sources";
+import { fixtureFetch, recordedEarthEngine } from "@eqore/sources";
 import type { CaptureDeps } from "./capture.ts";
 import { createEngineerApp } from "./routes.ts";
 import { checkReadiness } from "./readiness.ts";
@@ -26,6 +26,7 @@ const testDeps = (snapshot = false): CaptureDeps => ({
   uploadDir: join(tmpdir(), "engineer-api-test-uploads"),
   capturePublicUrl: "https://tunnel.invalid",
   extractor: async () => ({ kind: "failed", reason: "No model call in this test" }),
+  earthEngine: recordedEarthEngine(dir("earthengine")),
 });
 
 function setup() {
@@ -77,15 +78,31 @@ describe("the engineer API", () => {
       ["massgis-roofprints", "done"],
       ["national-grid-hosting-capacity", "done"],
       ["national-grid-feeder-lines", "done"],
+      ["national-grid-feeder-loading", "done"],
+      ["national-grid-construction-1", "done"],
+      ["national-grid-construction-2", "done"],
+      ["national-grid-construction-4", "done"],
+      ["national-grid-construction-5", "done"],
+      ["national-grid-group-studies", "done"],
+      ["national-grid-nodal-feeders", "done"],
+      ["national-grid-nodal-primary", "done"],
+      ["national-grid-segments-1", "done"],
+      ["national-grid-segments-2", "done"],
+      ["national-grid-segments-4", "done"],
+      ["national-grid-segments-5", "done"],
       ["census-tiger-local-roads", "done"],
+      ["national-grid-proposed-substations", "done"],
+      ["hifld-transmission-lines", "done"],
+      ["national-grid-substations", "done"],
       ["massgis-municipalities", "done"],
       ["massdot-roads", "done"],
       ["massdep-wetlands", "done"],
       ["massgis-fire-stations", "done"],
       ["usgs-epqs", "done"],
       ["hifld-retail-territories", "done"],
+      ["earth-engine-worldcover", "done"],
+      ["earth-engine-3dep", "done"],
       ["massgis-lidar-dem", "done"],
-      ["earth-engine", "missing"],
       ["fema-flood-map", "person_only"],
     ]);
     expect(deps.store.observations(SITE).length).toBe(record.observations.length);
@@ -387,6 +404,30 @@ describe("the engineer API", () => {
     expect((await app.request(`${routes.readRunProgress.path}?address=nowhere`)).status).toBe(404);
   });
 
+  it("says why when an address can't be settled, rather than offering an empty choice", async () => {
+    const { deps } = setup();
+    deps.fetch = async (url) => new Response(JSON.stringify(url.includes("geocoder") ? { result: { addressMatches: [] } } : { features: [] }));
+    const app = createEngineerApp(deps);
+    const unknown = await app.request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: "nowhere in particular" }) });
+    expect(unknown.status).toBe(404);
+    deps.fetch = async () => new Response("down", { status: 503 });
+    const down = await createEngineerApp(deps).request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: "nowhere in particular" }) });
+    expect(down.status).toBe(502);
+    expect(ApiErrorSchema.parse(await down.json()).message).toContain("HTTP 503");
+  });
+
+  it("falls back to the geocoded point when the parcel lookup outlasts its limit, and still finishes", async () => {
+    const { deps, value } = setup();
+    deps.fetch = (url, init) => (url.includes("Property_Tax_Parcels") ? new Promise(() => {}) : recorded(url, init));
+    deps.resolveDeadlineMs = 50;
+    deps.runDeadlineMs = 50;
+    const response = await createEngineerApp(deps).request(routes.runSite.path, { method: "POST", body: JSON.stringify({ address: "11 Bartzak Dr, Holliston, MA" }) });
+    const body = RunSiteResponseSchema.parse(await response.json());
+    if (body.status !== "ok") throw new Error("Expected a record");
+    expect(body.record.site.locationMethod).toBe("geocoded_interpolated");
+    expect(value(body.record, "parcel_id").reason).toContain("parcel lookup's 0-second deadline");
+  });
+
   it("resolves a pin choice to a site", async () => {
     const { post } = setup();
     const response = await post(routes.runSite.path, { address: ADDRESS, choice: { kind: "pin", latitude: 42.27614096601859, longitude: -71.7694444626631 } });
@@ -401,9 +442,31 @@ describe("the engineer API", () => {
     expect(value(hyannis, "serving_utility").current).toEqual({ type: "text", value: "Eversource" });
     expect(checkReadiness(hyannis).share).toBeNull();
     const holliston = await run("11 Bartzak Dr, Holliston, MA");
-    expect(value(holliston, "serving_utility").state).toBe("conflicting");
+    expect(value(holliston, "serving_utility").current).toEqual({ type: "text", value: "Eversource" });
     expect(checkReadiness(holliston).share).toBeNull();
     expect(checkReadiness(await run()).share).not.toBeNull();
+  });
+
+  it("keeps the collector's own label and basis on equipment it inferred", async () => {
+    const { run } = setup();
+    const record = await run();
+    const entrance = record.features.find((feature) => feature.id === "service-entrance")!;
+    expect(entrance).toMatchObject({ kind: "existing_equipment", label: "(E) SERVICE ENTRANCE", attributes: { basis: { type: "text", value: "inferred" } } });
+  });
+
+  it("infers the service equipment again on a re-run instead of carrying the old copy", async () => {
+    const { run } = setup();
+    await run();
+    const again = await run();
+    const ids = again.features.map((feature) => feature.id);
+    expect(ids.filter((id) => id === "service-tap")).toHaveLength(1);
+    expect(ids.filter((id) => id === "service-entrance")).toHaveLength(1);
+  });
+
+  it("puts cross-check results on the record's values", async () => {
+    const { run, value } = setup();
+    const record = await run();
+    expect(value(record, "lot_size_acres").crossChecks?.[0]).toMatchObject({ result: "disagrees" });
   });
 
   it("sets catalog coverage on the record", async () => {

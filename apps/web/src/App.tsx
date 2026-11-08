@@ -1,17 +1,18 @@
 import type { ReadinessReport, RecordVersion, RunProgress } from "@eqore/contract";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
 import type { EngineerApi, ExportFormat, RunSiteRequest, RunSiteResponse } from "./api";
-import { factsFound } from "./app/facts";
-import { isLinkOpen, trackLink, type TrackedLink } from "./app/links";
-import { isEquipmentPoint } from "./map/layers";
+import { attentionItems, factsFound } from "./app/facts";
 import { SiteMap } from "./map/SiteMap";
 import { AttentionList } from "./panels/AttentionList";
-import { ConfirmPanel } from "./panels/ConfirmPanel";
+import { ElectricalSheet } from "./panels/ElectricalSheet";
+import { StreetViewPanel } from "./panels/StreetViewPanel";
+import { demoSpecsFor } from "./app/demoSpecs";
 import { EvidencePanel } from "./panels/EvidencePanel";
 import { FactsPanel } from "./panels/FactsPanel";
-import { ReadinessPanel } from "./panels/ReadinessPanel";
-import { SitePlanSheet } from "@eqore/sheets";
-import { StatusStrip } from "./ui/StatusStrip";
+import { EngineeringSitePlan, featureLabels } from "@eqore/sheets";
+import { conceptSiteLayout } from "@eqore/electrical";
+import { Menu } from "./ui/Menu";
+import { RecordSummary, StatusStrip } from "./ui/StatusStrip";
 
 const ACTOR_KEY = "eqore.actorName";
 
@@ -31,7 +32,6 @@ function saveActor(name: string) {
   }
 }
 
-const POLL_MS = 3000;
 const PROGRESS_MS = 700;
 
 type Candidates = Extract<RunSiteResponse, { status: "needs_choice" }>["candidates"];
@@ -102,18 +102,12 @@ export function App({ api }: { api: EngineerApi }) {
   const [record, setRecord] = useState<RecordVersion | null>(null);
   const [report, setReport] = useState<ReadinessReport | null>(null);
   const [selected, setSelected] = useState<Selection>(NOTHING);
-  const [links, setLinks] = useState<TrackedLink[]>([]);
   const [actorName, setActorName] = useState(loadActor);
-  const [confirmField, setConfirmField] = useState<string | null>(null);
   const [placingField, setPlacingField] = useState<string | null>(null);
   const [focusField, setFocusField] = useState<string | null>(null);
   // The map answers "where is it"; the sheet answers "what can we build". Different
   // instruments, so they get their own view rather than layers on one canvas.
-  const [view, setView] = useState<"map" | "sheet">("map");
-  const [selectedPad, setSelectedPad] = useState(0);
-  // The evidence check, requests, and capture links stay out of the first view and open on request.
-  const [reportOpen, setReportOpen] = useState(false);
-  const [arrival, setArrival] = useState<string | null>(null);
+  const [view, setView] = useState<"map" | "sheet" | "electrical" | "street">("map");
   const [change, setChange] = useState<string | null>(null);
   const [exportNote, setExportNote] = useState<string | null>(null);
   const current = useRef<{ record: RecordVersion | null; report: ReadinessReport | null }>({ record, report });
@@ -124,8 +118,6 @@ export function App({ api }: { api: EngineerApi }) {
   // Only the most recent request to show a record may land, however the responses are ordered.
   // A skipped older version must not take the token from a newer request still waiting on its check.
   const showRequest = useRef(0);
-  // The last record whose evidence check landed, so a poll retries a version whose check failed.
-  const checked = useRef<RecordVersion | null>(null);
   const show = useCallback(
     async (next: RecordVersion) => {
       const shown = current.current.record;
@@ -135,48 +127,11 @@ export function App({ api }: { api: EngineerApi }) {
       setRecord(next);
       const nextReport = await api.readReadiness(next.site.id, next.version);
       if (request !== showRequest.current) return null;
-      checked.current = next;
       setReport(nextReport);
       return nextReport;
     },
     [api],
   );
-
-  const hasOpenLink = record ? links.some((tracked) => isLinkOpen(tracked, record)) : false;
-  // Also while comparing a draft, so new evidence is noticed even with no link to watch, as after a reload.
-  const watching = hasOpenLink || confirmField !== null;
-  const siteId = record?.site.id;
-  useEffect(() => {
-    if (!watching || !siteId) return;
-    let checking = false;
-    const timer = setInterval(() => {
-      if (checking) return;
-      checking = true;
-      void api
-        .readVersion(siteId, "latest")
-        .then(async (latest) => {
-          const previous = checked.current?.site.id === latest.site.id ? checked.current : current.current.record;
-          if (!previous || previous.site.id !== latest.site.id || latest.version <= previous.version) return;
-          const seen = new Set(previous.observations.map((o) => o.id));
-          const labels = [
-            ...new Set(
-              latest.observations
-                .filter((o) => !seen.has(o.id))
-                .map((o) => latest.values.find((v) => v.field === o.field)?.label ?? o.field),
-            ),
-          ];
-          const shown = await show(latest);
-          if (shown && labels.length > 0) setArrival(`New evidence for ${labels.join(", ")}`);
-        })
-        .catch(() => {
-          // A missed check is retried on the next tick.
-        })
-        .finally(() => {
-          checking = false;
-        });
-    }, POLL_MS);
-    return () => clearInterval(timer);
-  }, [api, watching, siteId, show]);
 
   async function afterAction(next: RecordVersion) {
     const before = current.current;
@@ -226,12 +181,8 @@ export function App({ api }: { api: EngineerApi }) {
       } else {
         setCandidates(null);
         setSelected(NOTHING);
-        setLinks([]);
-        setConfirmField(null);
         setPlacingField(null);
         setFocusField(null);
-        setReportOpen(false);
-        setArrival(null);
         setChange(null);
         setExportNote(null);
         setReport(null);
@@ -251,30 +202,6 @@ export function App({ api }: { api: EngineerApi }) {
   function submitAddress(event: FormEvent) {
     event.preventDefault();
     if (address.trim()) void run({ address: address.trim() });
-  }
-
-  async function createLink(field: string) {
-    if (!record) return;
-    setError(null);
-    try {
-      const link = await api.createCaptureLink(record.site.id, field);
-      setLinks((current) => [...current, trackLink(link, record)]);
-    } catch (failure) {
-      failed(failure);
-    }
-  }
-
-  async function upload(field: string, file: File) {
-    if (!record) return;
-    setError(null);
-    try {
-      await api.uploadEvidence(record.site.id, field, file);
-      await show(await api.readVersion(record.site.id, "latest"));
-      select(field);
-      setConfirmField(field);
-    } catch (failure) {
-      failed(failure);
-    }
   }
 
   async function place(field: string, longitude: number, latitude: number) {
@@ -314,6 +241,13 @@ export function App({ api }: { api: EngineerApi }) {
   const live = running && progress?.site ? progress : null;
   const mapSite = live?.site ?? record?.site;
   const dockOpen = !live && selected.fields.length > 0;
+  // The concept layout is drawn from the record each time, never stored, so a re-run can't carry a stale one.
+  const drawn = useMemo(() => (record ? { ...record, features: [...record.features, ...conceptSiteLayout(record)] } : null), [record]);
+  const labels = useMemo(() => (drawn && !live ? featureLabels(drawn) : undefined), [drawn, live]);
+  const pick = (close: () => void) => (field: string) => {
+    select(field);
+    close();
+  };
 
   return (
     <div className="app">
@@ -330,20 +264,48 @@ export function App({ api }: { api: EngineerApi }) {
         {record && !live ? (
           <div className="site-summary">
             <p className="site-address">{record.site.address}</p>
-            <p>Record v{record.version}</p>
-            <div className="downloads" role="group" aria-label="Download the site geometry">
-              <button type="button" onClick={() => void download("dxf")}>
-                DXF for CAD
-              </button>
-              <button type="button" onClick={() => void download("kml")}>
-                KML for Google Earth
-              </button>
+            <div className="menus">
+              <Menu label="Needs attention" count={attentionItems(record).length} alert={attentionItems(record).length > 0}>
+                {(close) => <AttentionList record={record} selectedFields={selected.fields} onSelect={pick(close)} />}
+              </Menu>
+              <Menu label="Public facts" count={factsFound(record)}>
+                {(close) => (
+                  <>
+                    <RecordSummary record={record} report={report} />
+                    <FactsPanel record={record} selectedFields={selected.fields} onSelect={pick(close)} />
+                  </>
+                )}
+              </Menu>
+              <Menu label="Download" align="right">
+                {(close) => (
+                  <div className="downloads" role="group" aria-label="Download the site geometry">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        close();
+                        void download("dxf");
+                      }}
+                    >
+                      DXF for CAD
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        close();
+                        void download("kml");
+                      }}
+                    >
+                      KML for Google Earth
+                    </button>
+                  </div>
+                )}
+              </Menu>
             </div>
           </div>
         ) : null}
       </header>
 
-      <StatusStrip record={live ? null : record} report={report} progress={progress} running={running} />
+      <StatusStrip record={live ? null : record} progress={progress} running={running} />
 
       {record?.snapshot && !live ? (
         <div role="status" aria-label="Snapshot" className="snapshot-banner">
@@ -355,15 +317,6 @@ export function App({ api }: { api: EngineerApi }) {
         <div role="status" aria-label="Download" className="notice-bar">
           {exportNote}
           <button type="button" onClick={() => setExportNote(null)}>
-            Dismiss
-          </button>
-        </div>
-      ) : null}
-
-      {arrival ? (
-        <div role="status" aria-label="New evidence" className="notice-bar">
-          {arrival}
-          <button type="button" onClick={() => setArrival(null)}>
             Dismiss
           </button>
         </div>
@@ -406,44 +359,6 @@ export function App({ api }: { api: EngineerApi }) {
 
       {mapSite ? (
         <main className="workspace">
-          <section className="side" aria-label="Site facts">
-            {live || !record ? (
-              <p className="note">Reading sources. The facts list fills in when the run finishes; the map draws as they answer.</p>
-            ) : reportOpen ? (
-              <>
-                <button type="button" className="back" onClick={() => setReportOpen(false)}>
-                  Back to the facts
-                </button>
-                {report ? (
-                  <ReadinessPanel
-                    record={record}
-                    report={report}
-                    links={links}
-                    selectedFields={selected.fields}
-                    onSelectFields={(fields) => setSelected({ fields, featureId: null })}
-                    onCreateLink={(field) => void createLink(field)}
-                    onUpload={(field, file) => void upload(field, file)}
-                    onOpenConfirm={(field) => {
-                      select(field);
-                      setConfirmField(field);
-                    }}
-                  />
-                ) : (
-                  <p className="note">The evidence check couldn't be read. Run the site again to retry.</p>
-                )}
-              </>
-            ) : (
-              <>
-                <AttentionList record={record} selectedFields={selected.fields} onSelect={(field) => select(field)} />
-                <FactsPanel
-                  record={record}
-                  selectedFields={selected.fields}
-                  onSelect={(field) => select(field)}
-                  onOpenReport={() => setReportOpen(true)}
-                />
-              </>
-            )}
-          </section>
           <div className={`map-region${dockOpen ? " dock-open" : ""}`}>
             <div className="view-tabs" role="tablist" aria-label="Site view">
               <button type="button" role="tab" aria-selected={view === "map"} className={view === "map" ? "on" : ""} onClick={() => setView("map")}>
@@ -452,15 +367,25 @@ export function App({ api }: { api: EngineerApi }) {
               <button type="button" role="tab" aria-selected={view === "sheet"} className={view === "sheet" ? "on" : ""} disabled={!record || Boolean(live)} onClick={() => setView("sheet")}>
                 Site plan
               </button>
+              <button type="button" role="tab" aria-selected={view === "electrical"} className={view === "electrical" ? "on" : ""} disabled={!record || Boolean(live)} onClick={() => setView("electrical")}>
+                Single line
+              </button>
+              <button type="button" role="tab" aria-selected={view === "street"} className={view === "street" ? "on" : ""} disabled={!record || Boolean(live)} onClick={() => setView("street")}>
+                Street view
+              </button>
             </div>
-            {view === "sheet" && record && !live ? (
-              <SitePlanSheet record={record} selectedPad={selectedPad} onSelectPad={setSelectedPad} />
+            {view === "street" && record && !live ? (
+              <StreetViewPanel api={api} record={drawn ?? record} />
+            ) : view === "electrical" && record && !live ? (
+              <ElectricalSheet record={record} api={api} actorName={actorName} onActorName={updateActor} onRecord={(next) => void afterAction(next)} prefill={demoSpecsFor(record.site.address)} />
+            ) : view === "sheet" && record && !live ? (
+              <EngineeringSitePlan record={drawn ?? record} />
             ) : (
               <SiteMap
                 key={mapSite.id}
                 site={mapSite}
                 baseMap={record?.site.id === mapSite.id ? record.baseMap : null}
-                features={live ? live.features : (record?.features ?? [])}
+                features={live ? live.features : (drawn?.features ?? [])}
                 values={live ? [] : (record?.values ?? [])}
                 loading={Boolean(live)}
                 selectedFields={live ? [] : selected.fields}
@@ -471,12 +396,13 @@ export function App({ api }: { api: EngineerApi }) {
                 onPlace={(field, longitude, latitude) => void place(field, longitude, latitude)}
                 onCancelPlace={() => setPlacingField(null)}
                 focusField={focusField}
+                featureLabels={labels}
               />
             )}
             {dockOpen && record ? (
               <EvidencePanel
                 api={api}
-                record={record}
+                record={drawn ?? record}
                 report={report}
                 fields={selected.fields}
                 featureId={selected.featureId}
@@ -491,29 +417,6 @@ export function App({ api }: { api: EngineerApi }) {
         </main>
       ) : null}
 
-      {record && confirmField ? (
-        <ConfirmPanel
-          api={api}
-          record={record}
-          field={confirmField}
-          actorName={actorName}
-          onActorName={updateActor}
-          onRecord={(next) => {
-            const hasPoint = next.features.some((f) => f.field === confirmField && isEquipmentPoint(f));
-            // Only a photographed item has somewhere to go on the map. A bill's meter number doesn't.
-            const isPhoto = report?.gaps.some((g) => g.field === confirmField && g.route === "capture_photo");
-            if (hasPoint) setFocusField(confirmField);
-            else if (isPhoto) setPlacingField(confirmField);
-            setConfirmField(null);
-            void afterAction(next);
-          }}
-          onClose={() => setConfirmField(null)}
-          onPlace={(field) => {
-            setConfirmField(null);
-            setPlacingField(field);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

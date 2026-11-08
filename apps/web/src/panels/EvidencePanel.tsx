@@ -1,3 +1,4 @@
+import { EquipmentSpecs } from "./EquipmentSpecs";
 import type { MapFeature, Observation, ReadinessReport, RecordVersion, Value } from "@eqore/contract";
 import type { EngineerApi } from "../api";
 import { centerOf, isEquipmentPoint, zoneTier, ZONE_WORDS } from "../map/layers";
@@ -63,7 +64,8 @@ const attributeWords = (name: string) => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-function FeatureFacts({ feature }: { feature: MapFeature }) {
+function FeatureFacts({ feature, record }: { feature: MapFeature; record: RecordVersion }) {
+  if (feature.kind === "existing_equipment" || feature.kind === "utility_line") return <EquipmentSpecs record={record} feature={feature} />;
   const [longitude, latitude] = centerOf(feature);
   const position: [number, number] = [longitude, latitude];
   const attributes = Object.entries(feature.attributes ?? {});
@@ -174,7 +176,7 @@ export function EvidencePanel(props: EvidencePanelProps) {
       <button type="button" className="dock-close" onClick={props.onClose}>
         Close
       </button>
-      {feature ? <FeatureFacts feature={feature} /> : null}
+      {feature ? <FeatureFacts feature={feature} record={props.record} /> : null}
       {values.length === 0 ? <p>No value yet.</p> : null}
       {values.map((value) => (
         <ValueEvidence key={value.field} {...props} value={value} />

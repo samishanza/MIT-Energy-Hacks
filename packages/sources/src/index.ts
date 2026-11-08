@@ -1,9 +1,15 @@
 export { REGIONS, californiaPge, massachusetts } from "../config/index.ts";
 export * from "./catalog-map.ts";
+export * from "./checks/cross-checks.ts";
 export * from "./geometry.ts";
+export * from "./earthengine.ts";
+export * from "./ept.ts";
+export * from "./checks/lidar-equipment.ts";
+export * from "./checks/lidar-collect.ts";
 export * from "./json-api.ts";
 export * from "./layers.ts";
 export * from "./arcgis.ts";
+export * from "./checks/candidates.ts";
 export * from "./collect.ts";
 export * from "./derive.ts";
 export * from "./fields.ts";

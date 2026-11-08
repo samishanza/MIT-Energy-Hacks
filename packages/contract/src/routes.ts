@@ -47,6 +47,29 @@ export const RunSiteResponseSchema = z.discriminatedUnion("status", [
 ]);
 
 export const ConfirmValueRequestSchema = z.object({ ...actor, expectedObservationId: z.string().min(1) });
+export const StreetViewMarkerSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  note: z.string(),
+  x: z.number(),
+  y: z.number(),
+  inFrame: z.boolean(),
+  hidden: z.boolean(),
+  distanceFt: z.number(),
+  basis: z.enum(["detected", "inferred", "concept"]),
+});
+export const StreetViewSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("unavailable"), reason: z.string(), markers: z.array(StreetViewMarkerSchema) }),
+  z.object({
+    status: z.literal("ok"),
+    pano: z.object({ lat: z.number(), lng: z.number(), date: z.string().nullable() }),
+    camera: z.object({ heading: z.number(), pitch: z.number(), fov: z.number(), width: z.number(), height: z.number() }),
+    imagePath: z.string(),
+    target: z.string(),
+    markers: z.array(StreetViewMarkerSchema),
+  }),
+]);
+export type StreetView = z.infer<typeof StreetViewSchema>;
 export const CorrectValueRequestSchema = z.object({ ...actor, value: ObservedValueSchema });
 export const ResolveConflictRequestSchema = z.object({ ...actor, candidateId: z.string().min(1) });
 export const CreateCaptureLinkRequestSchema = z.object({ field: z.string().min(1) });
@@ -98,6 +121,21 @@ export const routes = {
   exportKml: route({
     method: "GET",
     path: "/api/sites/:siteId/versions/:version/site.kml",
+    listener: "engineer",
+    request: noBody,
+    response: z.string(),
+  }),
+  // One street-level photo facing the likely grid connection, with equipment markers.
+  readStreetView: route({
+    method: "GET",
+    path: "/api/sites/:siteId/versions/:version/street-view",
+    listener: "engineer",
+    request: noBody,
+    response: z.lazy(() => StreetViewSchema),
+  }),
+  streetViewImage: route({
+    method: "GET",
+    path: "/api/sites/:siteId/versions/:version/street-view.jpg",
     listener: "engineer",
     request: noBody,
     response: z.string(),

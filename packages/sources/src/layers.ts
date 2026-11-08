@@ -64,7 +64,8 @@ function collectItems(source: LayerSource, mode: Extract<LayerSource["mode"], { 
   const named = (feature: ArcgisFeature) => String(feature.attributes[mode.nameAttribute] ?? mode.noun);
   const dates = items.map(({ feature }) => sourceDateOf(source.entry, feature.attributes)).filter((date): date is string => Boolean(date)).sort();
   const closest = items[0]!;
-  const summary = `${items.length} ${items.length === 1 ? mode.noun : mode.plural} within ${radius} m. Nearest: ${named(closest.feature)}, about ${Math.round(closest.feet)} ft`;
+  const where = closest.feet === 0 ? "which overlaps the site" : `about ${Math.round(closest.feet)} ft`;
+  const summary = `${items.length} ${items.length === 1 ? mode.noun : mode.plural} within ${radius} m. Nearest: ${named(closest.feature)}, ${where}`;
   const observations = [
     observe(result, ctx, {
       field: mode.field,
@@ -84,7 +85,7 @@ function collectItems(source: LayerSource, mode: Extract<LayerSource["mode"], { 
       const read = readMapping(mapping, feature);
       if ("value" in read) attributes[mapping.field] = read.value;
     }
-    return [{ id: `${source.entry.id}-${index + 1}`, kind: mode.feature, field: mode.field, geometry: feature.geometry, label: named(feature), attributes }];
+    return [{ id: `${source.entry.id}-${index + 1}`, kind: mode.feature, field: mode.field, geometry: feature.geometry, label: `${mode.labelPrefix ?? ""}${named(feature)}`, attributes }];
   });
   return { observations, features };
 }

@@ -1,8 +1,11 @@
+import { appendEquipmentLabel } from "./equipment-labels.ts";
+import { mapsKey, streetView, streetViewImage } from "./street-view.ts";
 import { Hono, type MiddlewareHandler } from "hono";
 import { ENGINEER_PORT, WEB_PORT, routes } from "@eqore/contract";
 import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps } from "./capture.ts";
 import { checkReadiness } from "./readiness.ts";
 import { toSiteMap } from "./site-map.ts";
+import { toDxf, toKml } from "./export-files.ts";
 import { ApiFailure, runProgressKey, confirmValue, correctValue, movePin, resolveConflict, runSite } from "./run.ts";
 
 async function jsonBody(request: Request): Promise<unknown> {
@@ -65,6 +68,32 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
   app.get(routes.readReadiness.path, (c) => c.json(checkReadiness(requestedVersion(c.req.param("siteId")!, c.req.param("version")!))));
 
   app.get(routes.readSiteMap.path, (c) => c.json(toSiteMap(requestedVersion(c.req.param("siteId")!, c.req.param("version")!), deps.now())));
+
+  const download = (text: string, type: string, name: string) =>
+    new Response(text, { headers: { "content-type": type, "content-disposition": `attachment; filename="${name}"` } });
+  app.get(routes.exportDxf.path, (c) => {
+    const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
+    return download(toDxf(record, deps.now()), "application/dxf", `${record.site.id}-v${record.version}.dxf`);
+  });
+  // The browser's Google 3D view needs the key. This API only answers the local app.
+  app.get("/api/maps-config", (c) => c.json({ key: mapsKey() }));
+  // True and false labels on detected equipment, collected for training and measuring the detector.
+  app.post("/api/equipment-labels", async (c) => c.json(appendEquipmentLabel(await c.req.json(), deps.now())));
+  app.get(routes.readStreetView.path, async (c) => {
+    const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
+    return c.json(await streetView(record, deps.fetch, mapsKey()));
+  });
+  app.get(routes.streetViewImage.path, async (c) => {
+    const key = mapsKey();
+    if (!key) return c.text("No Google Maps key is configured.", 404);
+    const q = { lat: c.req.query("lat") ?? "", lng: c.req.query("lng") ?? "", heading: c.req.query("heading") ?? "0", pitch: c.req.query("pitch") ?? "0" };
+    if (![q.lat, q.lng, q.heading, q.pitch].every((v) => v !== "" && Number.isFinite(Number(v)))) return c.text("lat, lng, heading, and pitch must be numbers.", 400);
+    return streetViewImage(deps.fetch, key, q);
+  });
+  app.get(routes.exportKml.path, (c) => {
+    const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
+    return download(toKml(record, deps.now()), "application/vnd.google-earth.kml+xml", `${record.site.id}-v${record.version}.kml`);
+  });
 
   app.post(routes.confirmValue.path, async (c) =>
     c.json(confirmValue(deps, c.req.param("siteId")!, c.req.param("field")!, await jsonBody(c.req.raw))),

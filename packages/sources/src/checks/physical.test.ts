@@ -157,7 +157,8 @@ describe("physical collection", () => {
     expect(resolved.status).toBe("resolved");
     if (resolved.status !== "resolved" || resolved.anchor.kind !== "parcel") throw new Error("Expected a parcel anchor");
     expect(resolved.anchor.parcel.objectId).toBe("M_206064_886636");
-    expect(geocoderCalls).toBe(0);
+    // One geocode for the fast location search, which misses here, so the address search decides.
+    expect(geocoderCalls).toBe(1);
   });
 
   it("lists every candidate and stores no site values when an address matches several parcels", async () => {
@@ -201,5 +202,23 @@ describe("physical collection", () => {
     expect(collection.sourceRuns.find((run) => run.sourceId === "alameda-county-assessor")!.status).toBe("person_only");
     expect(collection.site.locationMethod).toBe("geocoded_interpolated");
     expect(value("site_location").flags.join(" ")).toContain("interpolated");
+  });
+});
+
+describe("finding the parcel quickly", () => {
+  it("takes the parcel around the geocoded point whose assessor address matches, without the slow address search", async () => {
+    const searched: string[] = [];
+    const fetch: FetchLike = async (url, init) => {
+      if (url.includes("geocoding.geo.census.gov")) {
+        return new Response(JSON.stringify({ result: { addressMatches: [{ matchedAddress: "1 TEST WAY, WORCESTER, MA, 01605", coordinates: { x: -71.8, y: 42.27 } }] } }), { status: 200 });
+      }
+      const body = new URLSearchParams(String(init?.body ?? new URL(url).search));
+      searched.push(body.get("geometry") ? "location" : "address");
+      return parcelService([parcel({ LOC_ID: "P-NEXT", SITE_ADDR: "3 TEST WAY" }), parcel({ LOC_ID: "P-1", SITE_ADDR: "1 TEST WAY" })])(url, init);
+    };
+    const resolved = await resolveSite("1 Test Way, Worcester, MA", massachusetts, context(fetch));
+    if (resolved.status !== "resolved" || resolved.anchor.kind !== "parcel") throw new Error("Expected a parcel anchor");
+    expect(resolved.anchor.parcel.objectId).toBe("P-1");
+    expect(searched).toEqual(["location"]);
   });
 });

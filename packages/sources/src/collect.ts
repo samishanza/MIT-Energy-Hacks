@@ -1,13 +1,18 @@
 import type { BaseMap, MapFeature, Observation, Site, SourceRun } from "@eqore/contract";
 import { observe, queryArcgis, type CollectContext, type FetchLike, type PolygonGeometry } from "./arcgis.ts";
 import { queryTerritories, servingUtility } from "./checks/energy.ts";
+import { area } from "@turf/turf";
 import { collectGrid } from "./checks/grid.ts";
+import { collectLidarEquipment } from "./checks/lidar-collect.ts";
+import { inferServicePath } from "./checks/service-path.ts";
+import { padCandidates, type CandidateResult } from "./checks/candidates.ts";
 import { measureSite, type Measurements } from "./checks/measure.ts";
 import { anchorPhysical, collectOutlines } from "./checks/physical.ts";
 import { boxOf, verticesOf } from "./geometry.ts";
-import { collectJson } from "./json-api.ts";
+import { collectEarthEngine, earthEngineMissing, IMAGERY_SOURCE, LAND_COVER_SOURCE, TERRAIN_SOURCE } from "./earthengine.ts";
+import { appliesTo, collectJson } from "./json-api.ts";
 import { collectLayer } from "./layers.ts";
-import type { NamedRoute, RegionConfig } from "./registry.ts";
+import { sourceOf, type NamedRoute, type RegionConfig } from "./registry.ts";
 import { parseAddress, type SiteAnchor } from "./resolve-site.ts";
 
 export type SiteCollection = {
@@ -27,13 +32,16 @@ class RunDeadlineError extends Error {
   override name = "RunDeadlineError";
 }
 
+// Finding the site before the run starts, so a cold parcel service can't hold a run for minutes.
+export const RESOLVE_DEADLINE_MS = 100_000;
+
 // Past the deadline every unanswered request fails, and each source reports that through its usual path.
-function withRunDeadline(fetchImpl: FetchLike, milliseconds: number) {
+export function withRunDeadline(fetchImpl: FetchLike, milliseconds: number, what = "run") {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      const error = new RunDeadlineError(`No answer before the run's ${Math.round(milliseconds / 1000)}-second deadline`);
+      const error = new RunDeadlineError(`No answer before the ${what}'s ${Math.round(milliseconds / 1000)}-second deadline`);
       controller.abort(error);
       reject(error);
     }, milliseconds);
@@ -44,7 +52,13 @@ function withRunDeadline(fetchImpl: FetchLike, milliseconds: number) {
     const signal = init?.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
     return Promise.race([fetchImpl(url, { ...init, signal }), deadline]);
   };
-  return { limited, cancel: () => clearTimeout(timer) };
+  return {
+    limited,
+    cancel: () => {
+      clearTimeout(timer);
+      controller.abort(new Error("The run ended"));
+    },
+  };
 }
 
 // Spellings of one address name one site: 100 Research Drive, Worcester, MA 01605 and 100 Research Dr, Worcester, MA.
@@ -63,6 +77,26 @@ function routeObservations(route: NamedRoute, kind: "earth_engine" | "human_evid
     retrievedAt: ctx.now(),
   };
   return route.fields.map((field) => observe(origin, ctx, { field, kind: "no_value", value: null, reason: route.reason }));
+}
+
+// A small square around a point, for a site with no parcel polygon.
+function squareAround([longitude, latitude]: [number, number], meters: number): PolygonGeometry {
+  const dLat = meters / 111_320;
+  const dLon = meters / (111_320 * Math.cos((latitude * Math.PI) / 180));
+  const ring: [number, number][] = [
+    [longitude - dLon, latitude - dLat],
+    [longitude + dLon, latitude - dLat],
+    [longitude + dLon, latitude + dLat],
+    [longitude - dLon, latitude + dLat],
+    [longitude - dLon, latitude - dLat],
+  ];
+  return { type: "Polygon", coordinates: [ring] };
+}
+
+async function collectRaster(region: RegionConfig, area: PolygonGeometry, ctx: CollectContext) {
+  if (!region.earthEngine) return null;
+  if (!ctx.earthEngine || "missing" in ctx.earthEngine) return earthEngineMissing(region.earthEngine, ctx.earthEngine?.missing ?? "Earth Engine isn't connected for this run.", ctx);
+  return collectEarthEngine(region.earthEngine, area, ctx.earthEngine, ctx);
 }
 
 // Measured by the agent layer's sampler, which the caller passes in, because it can't be imported from here.
@@ -87,7 +121,9 @@ async function collectSlope(region: RegionConfig, parcel: PolygonGeometry | null
             method: "computed",
             sourceDate: config.sourceDate,
             grade: "reference",
-            reason: `From ${slope.sampleCount} samples across the parcel at about ${Math.round(slope.demResolutionFt)} ft resolution, not at a chosen pad.`,
+            reason:
+              `From ${slope.sampleCount} samples across the parcel at about ${Math.round(slope.demResolutionFt)} ft resolution, not at a chosen pad.` +
+              (slope.aspectDegrees === undefined ? "" : ` The ground falls toward ${Math.round(slope.aspectDegrees)} degrees from north.`),
           }),
         ],
       };
@@ -123,11 +159,19 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   for (const source of region.grid) {
     pending(source.entry.id, source.entry.name);
     if (source.lineGeometry) pending(source.lineGeometry.id, source.lineGeometry.name);
+    for (const detail of source.details ?? []) for (const entry of detail.kind === "construction" ? detail.entries : [detail.entry]) pending(entry.id, entry.name);
+    for (const entry of source.segments?.entries ?? []) pending(entry.id, entry.name);
   }
   if (region.roads && parcel) pending(region.roads.entry.id, region.roads.entry.name);
   for (const layer of region.layers ?? []) pending(layer.entry.id, layer.entry.name);
-  for (const json of region.jsonSources ?? []) pending(json.id, json.name);
+  const jsonSources = (region.jsonSources ?? []).filter((source) => appliesTo(source, address));
+  for (const json of jsonSources) pending(json.id, json.name);
   if (region.territories) pending(region.territories.entry.id, region.territories.entry.name);
+  if (region.lidarPoints && ctx.readLidar && region.buildings && physical.parcelGeometry) pending(region.lidarPoints.source.id, region.lidarPoints.source.name);
+  if (region.earthEngine) {
+    const { landCover, terrain, imagery } = region.earthEngine;
+    for (const [wanted, entry] of [[landCover, LAND_COVER_SOURCE], [terrain, TERRAIN_SOURCE], [imagery, IMAGERY_SOURCE]] as const) if (wanted) pending(entry.id, entry.name);
+  }
   if (region.lidarSlope && ctx.measureSlope && physical.parcelGeometry) pending(region.lidarSlope.source.id, region.lidarSlope.source.name);
 
   const liveFeatures: MapFeature[] = [...physical.features];
@@ -143,17 +187,27 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   const layerAnchor = { parcel: physical.parcelGeometry, location: physical.location };
   const request = { location: physical.location, address };
 
-  const [outlines, grid, roads, layers, json, slope, territories] = await Promise.all([
-    region.buildings && physical.parcelGeometry ? collectOutlines(region.buildings, physical.parcelGeometry, parcel?.yearBuilt ?? null, ctx).then(landed) : null,
-    collectGrid(region, physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] }, ctx).then(landed),
+  const outlinesRead = region.buildings && physical.parcelGeometry ? collectOutlines(region.buildings, physical.parcelGeometry, parcel?.yearBuilt ?? null, ctx).then(landed) : Promise.resolve(null);
+  const roadsRead =
     region.roads && parcel
       ? queryArcgis(region.roads.entry, { kind: "polygon", geometry: parcel.parcel.geometry, bufferMeters: region.roads.entry.searchRadiusMeters }, ctx).then((result) => {
           landed({ run: result.run });
           return result;
         })
+      : Promise.resolve(null);
+  // Lidar needs the buildings and roads first, then runs alongside the rest.
+  const lidarRead = Promise.all([outlinesRead, roadsRead]).then(([found, roadResult]) =>
+    region.lidarPoints && ctx.readLidar && found && region.roads
+      ? collectLidarEquipment(region.lidarPoints, ctx.readLidar, found.measurable.features.map((feature) => feature.geometry), roadResult?.features ?? [], region.roads.nameAttribute, address, ctx).then((part) => (part ? landed(part) : null))
       : null,
+  );
+
+  const [outlines, grid, roads, layers, json, slope, territories, earth, lidar] = await Promise.all([
+    outlinesRead,
+    collectGrid(region, physical.parcelGeometry ? { parcel: physical.parcelGeometry } : { longitude: physical.location[0], latitude: physical.location[1] }, ctx).then(landed),
+    roadsRead,
     Promise.all((region.layers ?? []).map((layer) => collectLayer(layer, layerAnchor, address, ctx).then(landed))),
-    Promise.all((region.jsonSources ?? []).map((source) => collectJson(source, request, ctx).then(landed))),
+    Promise.all(jsonSources.map((source) => collectJson(source, request, ctx).then(landed))),
     collectSlope(region, physical.parcelGeometry, ctx).then((part) => (part ? landed(part) : null)),
     region.territories
       ? queryTerritories(region.territories, physical.location, ctx).then((result) => {
@@ -161,9 +215,14 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
           return result;
         })
       : null,
+    collectRaster(region, physical.parcelGeometry ?? squareAround(physical.location, 50), ctx).then((part) => (part ? landed(part) : null)),
+    lidarRead,
   ]);
 
   const collected = [...physical.observations, ...(outlines?.observations ?? []), ...grid.observations];
+  const mainBuilding = [...(outlines?.measurable.features ?? [])].sort((a, b) => area(b.geometry) - area(a.geometry))[0];
+  // A service drop seen in the lidar is direct evidence, so it replaces the guess from the nearest mapped line.
+  const service = region.grid.some((source) => source.segments) && !lidar?.servicePathDetected ? inferServicePath(mainBuilding?.geometry ?? null, grid.segments, grid.lines[0]?.result ?? null, ctx) : null;
   let measurements: Measurements = { observations: [], features: [] };
   if (parcel) {
     const assessorArea = collected.find((observation) => observation.field === "building_area_sqft" && observation.value?.type === "quantity")?.value;
@@ -181,6 +240,24 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
     );
   }
 
+  // Candidate pad areas are derived here, once, so the record carries them and the
+  // site-plan sheet draws what the record says instead of recomputing its own.
+  let candidates: CandidateResult = { observations: [], features: [] };
+  if (parcel && region.parcels) {
+    candidates = padCandidates(
+      {
+        parcel: parcel.parcel.geometry,
+        outlines: (outlines?.measurable.features ?? []).map((feature) => feature.geometry),
+        origin: {
+          source: sourceOf(region.parcels.entry),
+          query: "derived from the collected parcel and roofprint geometry",
+          retrievedAt: ctx.now(),
+        },
+      },
+      ctx,
+    );
+  }
+
   const unavailable = region.unavailable.flatMap((route) => routeObservations(route, "earth_engine", ctx));
   const personRoutes = region.personRoutes.flatMap((route) => routeObservations(route, "human_evidence", ctx));
   for (const route of region.unavailable) runs.set(route.sourceId, { sourceId: route.sourceId, name: route.name, status: "missing", reason: route.reason });
@@ -191,6 +268,11 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
     observations: [
       ...collected,
       ...measurements.observations,
+      ...(service?.observations ?? []),
+      ...(lidar?.observations ?? []),
+      ...candidates.observations,
+      // A better local value, such as lidar slope or a 1 m point elevation, is read after Earth Engine's, so it stays current.
+      ...(earth?.observations ?? []),
       ...layers.flatMap((layer) => layer.observations),
       ...json.flatMap((source) => source.observations),
       ...(slope?.observations ?? []),
@@ -198,8 +280,10 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...unavailable,
       ...personRoutes,
     ],
-    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...layers.flatMap((layer) => layer.features)],
+    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features), ...(service?.features ?? []), ...(lidar?.features ?? [])],
     baseMap: physical.baseMap,
-    sourceRuns: [...runs.values()],
+    // A source still pending at the end was never read, such as a feeder's detail layers when no feeder was found.
+    // The value it would have filled says why, so the finished record lists only sources that ran.
+    sourceRuns: [...runs.values()].filter((run) => run.status !== "pending"),
   };
 }

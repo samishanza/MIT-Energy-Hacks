@@ -48,6 +48,7 @@ export const FIELDS: FieldDefinition[] = [
   { field: "building_stories", label: "Stories", owner: "public_data", grade: "reference" },
   { field: "use_description", label: "Assessor use", owner: "public_data", grade: "reference" },
   { field: "building_height_ft", label: "Building height (estimate)", owner: "public_data", grade: "reference" },
+  { field: "candidate_areas", label: "Largest candidate pad area", owner: "public_data", grade: "reference" },
   ...[
     ["municipality", "Municipality"],
     ["county", "County"],
@@ -55,9 +56,19 @@ export const FIELDS: FieldDefinition[] = [
     ["road_width_ft", "Road surface width"],
     ["road_lanes", "Road lanes"],
     ["road_surface_type", "Road surface type"],
-    ["flood_zone", "Flood zone"],
     ["wetlands_nearby", "Wetlands nearby"],
     ["fire_stations_nearby", "Fire stations nearby"],
+    ["substations_nearby", "Substations nearby"],
+    ["land_cover", "Land cover across the site"],
+    ["transmission_nearby", "Transmission lines nearby"],
+    ["proposed_substations_nearby", "Proposed substations nearby"],
+    ["grid_service_path", "How the building is likely fed (inferred)"],
+    ["detected_grid_equipment", "Grid equipment detected in lidar"],
+    ["electrical_permit_history", "Electrical permits on file"],
+    ["service_size_a", "Service size on a permit"],
+    ["service_construction", "Overhead or underground service, on a permit"],
+    ["service_phase", "Service phases, on a permit"],
+    ["transformer_kva", "Transformer size, on a permit"],
     ["ground_elevation_ft", "Ground elevation"],
     ["site_slope_pct", "Ground slope across the parcel"],
   ].map(([field, label]): FieldDefinition => ({ field: field!, label: label!, owner: "public_data", grade: "reference", comparison: { kind: "latest" }, missingReason: "No source has answered for this site." })),
@@ -126,6 +137,12 @@ export const FIELDS: FieldDefinition[] = [
 ].map((definition) => ({ ...definition, missingReason: definition.missingReason ?? NO_EVIDENCE })) as FieldDefinition[];
 
 const HAND_FAMILY: Record<string, Family> = {
+  substations_nearby: "utility",
+  transmission_nearby: "utility",
+  proposed_substations_nearby: "utility",
+  grid_service_path: "utility",
+  detected_grid_equipment: "utility",
+  electrical_permit_history: "customer",
   serving_utility: "utility",
   feeder: "utility",
   peak_demand_kw: "energy",
@@ -149,6 +166,15 @@ export const FEEDER_ATTRIBUTES: Record<string, string> = {
   feeder_load_capacity: "load_capacity",
   feeder_limiting_criterion: "limiting_criterion",
   feeder_screen_result: "screen_result",
+  feeder_peak_loading_pct: "peak_loading",
+  feeder_peak_forecast: "peak_forecast",
+  feeder_rating_mva: "rating",
+  feeder_construction: "construction",
+  feeder_study_status: "study_status",
+  feeder_installed_dg: "installed_dg",
+  feeder_queued_dg: "queued_dg",
+  feeder_aso_study: "aso_study",
+  feeder_nodal_hosting_capacity: "hosting_capacity_near_site",
 };
 
 export function fieldDefinition(field: string): FieldDefinition | undefined {

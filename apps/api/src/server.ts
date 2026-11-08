@@ -8,6 +8,7 @@ import { createCaptureApp } from "./capture-server.ts";
 import { createClaudeExtractor } from "./extract.ts";
 import { createEngineerApp } from "./routes.ts";
 import { Store } from "./store.ts";
+import { liveEarthEngine, readLidarAround } from "@eqore/sources";
 
 try {
   process.loadEnvFile();
@@ -28,6 +29,8 @@ const deps: CaptureDeps = {
   capturePublicUrl: process.env.CAPTURE_PUBLIC_URL || `http://${LOOPBACK_HOST}:${CAPTURE_PORT}`,
   extractor: createClaudeExtractor(),
   progress: new Map(),
+  earthEngine: await liveEarthEngine(),
+  readLidar: readLidarAround,
   evidenceManifest: loadEvidenceManifest(inRepo("fixtures/evidence/manifest.json")),
 };
 

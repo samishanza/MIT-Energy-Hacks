@@ -35,7 +35,7 @@ function candidateFrom(field: string, observation: Observation, attributes: Cand
   };
 }
 
-// Details of one feeder, read from the observations that share its source and object.
+// Details of one feeder, read from any of its utility's layers by the feeder's id.
 function candidateAttributes(reading: Observation, related: Observation[]): Candidate["attributes"] {
   const attributes: NonNullable<Candidate["attributes"]> = {};
   for (const observation of related) {
@@ -44,7 +44,6 @@ function candidateAttributes(reading: Observation, related: Observation[]): Cand
       key &&
       observation.kind === "reading" &&
       observation.value &&
-      observation.source.id === reading.source.id &&
       observation.locator.objectId === reading.locator.objectId
     ) {
       attributes[key] = observation.value;
@@ -52,6 +51,52 @@ function candidateAttributes(reading: Observation, related: Observation[]): Cand
   }
   if (reading.sourceDate) attributes.source_date = { type: "text", value: reading.sourceDate };
   return attributes;
+}
+
+// A source that now says it has no value for an object takes back what it read for that object before,
+// as when a placeholder such as a zoning code of 0 is recognized after earlier runs read it. The older
+// readings stay in the evidence. A failure names no object, so an outage never takes back a reading.
+function withoutSuperseded(observations: Observation[]): Observation[] {
+  const superseded = new Set<Observation>();
+  observations.forEach((later, index) => {
+    if (later.kind !== "no_value" || !later.locator.objectId) return;
+    for (const earlier of observations.slice(0, index)) {
+      if (
+        earlier.kind === "reading" &&
+        earlier.source.id === later.source.id &&
+        earlier.locator.attribute === later.locator.attribute &&
+        earlier.locator.objectId === later.locator.objectId
+      ) {
+        superseded.add(earlier);
+      }
+    }
+  });
+  // A later answer to the same question, from the same source and for the same field, replaces what the
+  // source read before: the latest run's readings are current, and older ones stay only as evidence. The
+  // question is the query for a reading of one object, and the attribute for a whole-answer reading, so a
+  // changed query, such as a wider search, still replaces it. Readings count as answers, and so does a no-value
+  // that names its attribute, as a run that looked and found nothing. A failure names no attribute, so an
+  // outage never takes anything back.
+  const questionOf = (observation: Observation) =>
+    JSON.stringify([
+      observation.source.id,
+      observation.field,
+      observation.locator.objectId || !observation.locator.attribute ? `query:${observation.identity.query}` : `attribute:${observation.locator.attribute}`,
+    ]);
+  const answers = (observation: Observation) =>
+    observation.source.kind !== "human_evidence" && (observation.kind === "reading" || (observation.kind === "no_value" && Boolean(observation.locator.attribute) && !observation.locator.objectId));
+  const latest = new Map<string, string>();
+  for (const observation of observations) {
+    if (!answers(observation)) continue;
+    const question = questionOf(observation);
+    const at = latest.get(question);
+    if (!at || Date.parse(observation.retrievedAt) > Date.parse(at)) latest.set(question, observation.retrievedAt);
+  }
+  for (const observation of observations) {
+    if (observation.kind !== "reading" || observation.source.kind === "human_evidence") continue;
+    if (Date.parse(observation.retrievedAt) < Date.parse(latest.get(questionOf(observation))!)) superseded.add(observation);
+  }
+  return superseded.size ? observations.filter((observation) => !superseded.has(observation)) : observations;
 }
 
 // Folds one field's observations, oldest first, into its current value.
@@ -76,7 +121,7 @@ export function deriveValue(definition: FieldDefinition, observations: Observati
   const conflictKindFor = (): Value["conflictKind"] =>
     definition.comparison?.kind !== "candidates" ? "source_disagreement" : definition.field === "feeder" ? "feeder_candidates" : "listed_candidates";
 
-  for (const observation of observations) {
+  for (const observation of withoutSuperseded(observations)) {
     const identity = identityKey(observation);
     const repeat = seen.has(identity);
     seen.add(identity);

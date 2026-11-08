@@ -1,5 +1,8 @@
 import type { FitnessGrade, MapFeature, ObservedValue, Source } from "@eqore/contract";
+import type { LidarConfig } from "./checks/lidar-collect.ts";
+import type { EarthEngineConfig } from "./earthengine.ts";
 import type { JsonSource } from "./json-api.ts";
+import type { Transform } from "./transforms.ts";
 import { parseAddress } from "./resolve-site.ts";
 
 // How a date in a source's attributes is written.
@@ -19,6 +22,9 @@ export type FieldMapping = {
   zeroIsMissing?: boolean;
   // Text a source uses to mean it has no value, such as a surface type of 0.
   blankValues?: string[];
+  // Numbers a source uses to mean it has no value, such as -99.99.
+  sentinels?: number[];
+  transform?: Transform;
 };
 
 export type ArcgisEntry = {
@@ -76,11 +82,37 @@ export type GridSource = {
   lineGeometry?: ArcgisEntry;
   // A wider search when nothing is mapped within the entry's radius, as downtown, where lines are drawn along streets.
   widenToMeters?: number;
+  // Other layers of the same utility, joined to each feeder candidate by the feeder's id.
+  details?: FeederDetail[];
+  // Line segments near the site, drawn as mapped, with how each is built. They also show how the building is likely fed.
+  segments?: LineSegments;
 };
+
+export type LineSegments = {
+  entries: ArcgisEntry[];
+  // The search reaches at least this far, so a line just beyond the feeder search still shows.
+  searchMeters: number;
+  feederAttribute: string;
+  constructionAttribute: string;
+  phasesAttribute: string;
+  // Construction codes to words, such as OH to overhead.
+  construction: Record<string, string>;
+};
+
+export type FeederDetail =
+  // One row per feeder, found by its id.
+  | { kind: "by_feeder"; entry: ArcgisEntry; joinAttribute: string }
+  // Rows along the feeder, of which the one nearest the site is kept.
+  | { kind: "nearest"; entry: ArcgisEntry; joinAttribute: string }
+  // Overhead and underground segments across several layers, read as the share underground by mapped length.
+  | { kind: "construction"; entries: ArcgisEntry[]; joinAttribute: string; constructionAttribute: string; lengthAttribute: string; underground: string; field: string };
 
 export type TerritorySource = {
   entry: ArcgisEntry;
   nameAttribute: string;
+  // A territory's customer count and polygon area, whose ratio ranks overlapping territories.
+  customersAttribute?: string;
+  areaAttribute?: string;
   // Legal names to the names people use, such as MASSACHUSETTS ELECTRIC CO to National Grid.
   commonNames: Record<string, string>;
   // Why a utility with no map this tool reads has no feeder, by its common name.
@@ -124,6 +156,8 @@ export type LayerSource = {
         noun: string;
         plural: string;
         nameAttribute: string;
+        // Words before each item's name on the map, such as "Transmission line ".
+        labelPrefix?: string;
         feature: MapFeature["kind"];
         limit: number;
         // Whether an empty search means none are mapped here, or says nothing either way.
@@ -150,6 +184,8 @@ export type RegionConfig = {
   layers?: LayerSource[];
   jsonSources?: JsonSource[];
   lidarSlope?: LidarSlope;
+  earthEngine?: EarthEngineConfig;
+  lidarPoints?: LidarConfig;
   imagery?: ImageryConfig;
   // Sources with no working adapter yet. They report missing with the reason.
   unavailable: NamedRoute[];

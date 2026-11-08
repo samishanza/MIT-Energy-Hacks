@@ -51,8 +51,10 @@ describe("the catalog map", () => {
   it("counts Worcester's coverage as a hand count of its recorded values", async () => {
     const coverage = catalogCoverage(await worcesterValues());
     // address, parcel ID, year built, lot width and depth, building x, y, width, and depth, height,
-    // road side, slope, zoning district, serving utility, and hosting capacity on the feeder candidates.
-    expect(coverage).toEqual({ filled: 15, total: FIELD_CATALOG.length, byOwner: { public_data: 1, customer: 23, engineer: 30, qualified_person: 7, utility: 2 } });
+    // road side, slope, zoning district, serving utility, hosting capacity on the feeder candidates,
+    // and the largest candidate pad area derived from the parcel and roofprint polygons.
+    // Flood zone is an engineer's, because no public source fills it.
+    expect(coverage).toEqual({ filled: 16, total: FIELD_CATALOG.length, byOwner: { customer: 23, engineer: 31, qualified_person: 7, utility: 2 } });
   });
 
   it("sets a family on every value", async () => {

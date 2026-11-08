@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Value } from "@eqore/contract";
 import { REGIONS, massachusetts, californiaPge, type CollectContext, type FetchLike, type RegionConfig } from "../index.ts";
+import { readMapping } from "../arcgis.ts";
 import { collectSite, siteIdFor } from "../collect.ts";
 import { deriveValues } from "../derive.ts";
 import { fixtureFetch } from "../fixtures.ts";
@@ -57,7 +58,13 @@ describe("the general registry", () => {
 describe("address spellings", () => {
   it("reaches one site from all four spellings", async () => {
     const spellings = ["100 Research Dr, Worcester, MA", "100 Research Dr, Worcester MA", "100 Research Dr Worcester MA 01605", "100 Research Drive, Worcester, Massachusetts"];
-    const ids = await Promise.all(spellings.map(async (spelling) => siteIdFor((await canonicalAddress(spelling, context()))!)));
+    const ids = await Promise.all(
+      spellings.map(async (spelling) => {
+        const canonical = await canonicalAddress(spelling, context());
+        if (canonical.status !== "ok") throw new Error(`${spelling} didn't settle`);
+        return siteIdFor(canonical.address);
+      }),
+    );
     expect(new Set(ids)).toEqual(new Set(["100-research-dr-worcester-ma"]));
   });
 
@@ -70,14 +77,23 @@ describe("address spellings", () => {
 
   it("gives no address when the geocoder can't settle on one", async () => {
     const none: FetchLike = async () => new Response(JSON.stringify({ result: { addressMatches: [] } }));
-    expect(await canonicalAddress("nowhere in particular", context(none))).toBeNull();
+    expect(await canonicalAddress("nowhere in particular", context(none))).toEqual({ status: "unknown" });
+    const down: FetchLike = async () => new Response("down", { status: 503 });
+    expect((await canonicalAddress("nowhere in particular", context(down))).status).toBe("failed");
   });
 });
 
 describe("running sources in parallel, with a deadline", () => {
   it("stores a source that never answers as missing at the deadline, and still finishes", async () => {
-    const hang: FetchLike = (url, init) => (url.includes("DEP_Wetlands") ? new Promise(() => {}) : recorded(url, init));
+    const aborted: unknown[] = [];
+    const hang: FetchLike = (url, init) =>
+      url.includes("DEP_Wetlands")
+        ? new Promise((_, reject) => init?.signal?.addEventListener("abort", () => (aborted.push(init.signal!.reason), reject(init.signal!.reason))))
+        : recorded(url, init);
     const { value, collection } = await collect("100 Research Dr, Worcester, MA", hang, { runDeadlineMs: 50 });
+    // The request itself is cancelled, not only abandoned.
+    expect(aborted.length).toBeGreaterThan(0);
+    expect((aborted[0] as Error).name).toBe("RunDeadlineError");
     expect(value("wetlands_nearby").state).toBe("missing");
     expect(value("wetlands_nearby").reason).toContain("deadline");
     expect(collection.sourceRuns.find((run) => run.sourceId === "massdep-wetlands")).toMatchObject({ status: "missing" });
@@ -128,6 +144,12 @@ describe("the wider physical record", () => {
     expect(collection.features.filter((feature) => feature.field === "fire_stations_nearby")).toHaveLength(3);
   });
 
+  it("reports a wetland that overlaps the parcel as overlapping, at 0 ft", async () => {
+    const { value, collection } = await collect("11 Bartzak Dr, Holliston, MA");
+    expect((value("wetlands_nearby").current as { value: string }).value).toContain("WOODED SWAMP DECIDUOUS, which overlaps the site");
+    expect(collection.features.find((feature) => feature.field === "wetlands_nearby")!.attributes!.distance_ft).toEqual({ type: "quantity", value: 0, unit: "ft" });
+  });
+
   it("stores no wetlands as none mapped within the distance, and not as missing", async () => {
     const empty: FetchLike = async (url, init) => (url.includes("DEP_Wetlands") ? new Response(JSON.stringify({ features: [] })) : recorded(url, init));
     const { value } = await collect("100 Research Dr, Worcester, MA", empty);
@@ -171,6 +193,31 @@ describe("the wider physical record", () => {
     const { value } = await collect("47200 Bayside Pkwy, Fremont, CA", recorded, {}, californiaPge);
     expect(value("ground_elevation_ft").state).toBe("inferred");
     expect(value("municipality").state).toBe("missing");
+  });
+});
+
+describe("a finished record", () => {
+  it("lists no source as pending, such as a feeder's detail layers when no feeder was found", async () => {
+    const { collection, value } = await collect("11 Bartzak Dr, Holliston, MA");
+    expect(collection.sourceRuns.filter((run) => run.status === "pending")).toEqual([]);
+    expect(collection.sourceRuns.some((run) => run.sourceId === "national-grid-feeder-loading")).toBe(false);
+    expect(value("feeder").state).toBe("missing");
+  });
+
+  it("stores a placeholder zoning code such as 0 as missing, with the reason", () => {
+    const zoning = massachusetts.parcels!.entry.fields.find((mapping) => mapping.field === "zoning_district")!;
+    for (const placeholder of ["0", "n/a", "None"]) {
+      expect(readMapping(zoning, { objectId: "1", attributes: { ZONING: placeholder }, geometry: null })).toEqual({ reason: `ZONING is ${placeholder} in the source, which means it has no value` });
+    }
+    expect(readMapping(zoning, { objectId: "1", attributes: { ZONING: "ML-.5" }, geometry: null })).toEqual({ value: { type: "text", value: "ML-.5" } });
+  });
+
+  it("draws the mapped roads, with the address's street named", async () => {
+    const { collection } = await collect("100 Research Dr, Worcester, MA");
+    const roads = collection.features.filter((feature) => feature.kind === "road");
+    expect(roads.length).toBeGreaterThan(0);
+    expect(roads.some((road) => road.label === "Research Dr" && road.attributes?.fronting?.type === "boolean" && road.attributes.fronting.value)).toBe(true);
+    expect(roads.every((road) => road.field === "road_name" && road.attributes?.distance_ft)).toBe(true);
   });
 });
 
