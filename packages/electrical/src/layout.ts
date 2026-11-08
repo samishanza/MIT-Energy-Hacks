@@ -1,4 +1,5 @@
 import type { MapFeature, RecordVersion } from "@eqore/contract";
+import { feasibleBessZone } from "./zone.ts";
 
 type Point = [number, number];
 type Segment = [Point, Point];
@@ -62,8 +63,12 @@ const isEntrance = (feature: MapFeature) => feature.attributes?.equipment_type?.
 
 export type ShortestRun = { from: Point; to: Point; feet: number; target: "inferred service entrance" | "nearest building wall" };
 
-// The shortest plausible run: from the nearest point of open ground to where the service likely enters, in a straight line.
+// The shortest plausible run: from the best pad in the feasible zone to where the service likely enters, in a
+// straight line. Without a lot to build the zone from, from the nearest open ground instead.
 export function shortestRun(record: RecordVersion): ShortestRun | null {
+  const zone = feasibleBessZone(record);
+  if (zone.pad) return { from: zone.pad.run.from, to: zone.pad.run.to, feet: zone.pad.run.feet, target: zone.target === "service entrance" ? "inferred service entrance" : "nearest building wall" };
+  if (zone.reason && !zone.reason.startsWith("The record has no lot")) return null;
   const open = record.features.filter((feature) => feature.kind === "candidate_area");
   const entrance = record.features.find(isEntrance);
   const buildings = record.features.filter((feature) => feature.kind === "building_outline");
@@ -81,18 +86,35 @@ const text = (value: string) => ({ type: "text" as const, value });
 // Where the new equipment could go and how it could connect, for the site plan to draw. These are concept
 // locations from public geometry: the engineer sets the real pad, clearances, and route.
 export function conceptSiteLayout(record: RecordVersion, breakerLabel = "NEW BREAKER IN THE MAIN DISTRIBUTION PANEL"): MapFeature[] {
+  const zone = feasibleBessZone(record);
   const run = shortestRun(record);
   if (!run) return [];
   const shared = (equipment: string, reason: string) => ({ equipment_type: text(equipment), basis: text("concept"), confidence_reason: text(reason) });
   const where = run.target === "inferred service entrance" ? "the inferred service entrance" : "the nearest building wall, since no service entrance was inferred";
+  const pad = zone.pad;
   return [
+    ...(zone.zone ? [zone.zone] : []),
     {
       id: "concept-bess-pad",
       kind: "existing_equipment",
       field: "pad_zone_x_ft",
-      geometry: { type: "Point", coordinates: run.from },
+      geometry: { type: "Point", coordinates: pad ? pad.center : run.from },
       label: "(N) BESS PAD",
-      attributes: shared("bess_pad", `The point of open ground nearest ${where}. Clearances, setbacks, and the real pad location are the engineer's.`),
+      attributes: {
+        ...shared(
+          "bess_pad",
+          pad
+            ? `The spot in the feasible zone with the shortest run to ${where}${pad.inWetlandBuffer ? ", inside a wetland buffer, which needs a Conservation Commission filing" : ""}${pad.beyondRoadAccess ? ", beyond 150 ft of a mapped road, so fire access is on site drives" : ""}. The engineer sets the real pad.`
+            : `The point of open ground nearest ${where}. Clearances, setbacks, and the real pad location are the engineer's.`,
+        ),
+        ...(pad
+          ? {
+              rotation_deg: { type: "quantity" as const, value: pad.rotationDeg, unit: "deg" },
+              width_ft: { type: "quantity" as const, value: pad.widthFt, unit: "ft" },
+              depth_ft: { type: "quantity" as const, value: pad.depthFt, unit: "ft" },
+            }
+          : {}),
+      },
     },
     {
       id: "concept-ac-disconnect",
