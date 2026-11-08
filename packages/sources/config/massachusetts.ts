@@ -1,6 +1,6 @@
 import type { ArcgisEntry, FeederDetail, RegionConfig } from "../src/registry.ts";
 import { censusLocalRoads } from "./census-roads.ts";
-import { hifldTerritories, usgsPointElevation } from "./national.ts";
+import { hifldTerritories, hifldTransmission, usgsPointElevation } from "./national.ts";
 
 const NATIONAL_GRID = "https://systemdataportal.nationalgrid.com/arcgis/rest/services/MASDP";
 const NATIONAL_GRID_NOTE = "National Grid public portal, no key. No terms were found on the portal or service, and robots.txt returned 404. Utility-published context, not a site answer.";
@@ -193,6 +193,21 @@ export const massachusetts: RegionConfig = {
       utilityName: "National Grid",
       widenToMeters: 150,
       details: nationalGridDetails,
+      segments: {
+        searchMeters: 150,
+        feederAttribute: "Master_CDF",
+        constructionAttribute: "Construction",
+        phasesAttribute: "Phases",
+        construction: { OH: "overhead", UG: "underground" },
+        entries: [1, 2, 4, 5].map((layer) =>
+          ngEntry(`national-grid-segments-${layer}`, `line segments, overview layer ${layer}`, "MASDP_Overview", layer, {
+            attributesOnly: false,
+            objectIdAttribute: "OBJECTID",
+            outFields: ["OBJECTID", "Master_CDF", "Construction", "Phases"],
+            fields: [],
+          }),
+        ),
+      },
       // The hosting capacity layer returns no geometry, so the lines come from the feeder layer.
       lineGeometry: {
         kind: "arcgis_rest",
@@ -235,7 +250,21 @@ export const massachusetts: RegionConfig = {
   roads: censusLocalRoads,
   layers: [
     {
-      mode: { kind: "items", field: "substations_nearby", noun: "mapped substation", plural: "mapped substations", nameAttribute: "NAME", feature: "substation", limit: 3, absent: "unknown", note: "Nearby context with measured distance. Distance doesn't show which substation serves the site." },
+      mode: { kind: "items", field: "proposed_substations_nearby", noun: "proposed substation", plural: "proposed substations", nameAttribute: "OBJECTID", labelPrefix: "Proposed substation #", feature: "substation", limit: 10, absent: "unknown", note: "A substation National Grid proposes, with measured distance. It isn't built, and the utility decides whether it ever serves the site." },
+      entry: ngEntry("national-grid-proposed-substations", "proposed substations", "MASDP_Proposed_Substation", 0, {
+        attributesOnly: false,
+        searchRadiusMeters: 10000,
+        objectIdAttribute: "OBJECTID",
+        outFields: ["OBJECTID", "CIP_Fee"],
+        fields: [{ field: "cip_fee", attribute: "CIP_Fee", type: "text", grade: "reference" }],
+      }),
+    },
+    {
+      mode: { kind: "items", field: "transmission_nearby", noun: "mapped transmission line", plural: "mapped transmission lines", nameAttribute: "SUB_1", labelPrefix: "Transmission line from ", feature: "utility_line", limit: 50, absent: "unknown", note: "Nearby context with measured distance. A transmission line isn't a point of interconnection for this site, and the owner named in this national layer can be out of date." },
+      entry: hifldTransmission,
+    },
+    {
+      mode: { kind: "items", field: "substations_nearby", noun: "mapped substation", plural: "mapped substations", nameAttribute: "NAME", feature: "substation", limit: 50, absent: "unknown", note: "Nearby context with measured distance. Distance doesn't show which substation serves the site." },
       entry: ngEntry("national-grid-substations", "substations", "MASDP_Substations", 0, {
         attributesOnly: false,
         searchRadiusMeters: 3000,

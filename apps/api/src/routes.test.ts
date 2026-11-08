@@ -86,7 +86,13 @@ describe("the engineer API", () => {
       ["national-grid-group-studies", "done"],
       ["national-grid-nodal-feeders", "done"],
       ["national-grid-nodal-primary", "done"],
+      ["national-grid-segments-1", "done"],
+      ["national-grid-segments-2", "done"],
+      ["national-grid-segments-4", "done"],
+      ["national-grid-segments-5", "done"],
       ["census-tiger-local-roads", "done"],
+      ["national-grid-proposed-substations", "done"],
+      ["hifld-transmission-lines", "done"],
       ["national-grid-substations", "done"],
       ["massgis-municipalities", "done"],
       ["massdot-roads", "done"],
@@ -439,6 +445,13 @@ describe("the engineer API", () => {
     expect(value(holliston, "serving_utility").state).toBe("conflicting");
     expect(checkReadiness(holliston).share).toBeNull();
     expect(checkReadiness(await run()).share).not.toBeNull();
+  });
+
+  it("keeps the label on equipment the collector inferred, which says it isn't field verified", async () => {
+    const { run } = setup();
+    const record = await run();
+    const entrance = record.features.find((feature) => feature.id === "service-entrance")!;
+    expect(entrance).toMatchObject({ kind: "existing_equipment", label: expect.stringContaining("INFERRED, NOT FIELD VERIFIED") });
   });
 
   it("puts cross-check results on the record's values", async () => {

@@ -61,6 +61,8 @@ export const FIELDS: FieldDefinition[] = [
     ["substations_nearby", "Substations nearby"],
     ["land_cover", "Land cover across the site"],
     ["transmission_nearby", "Transmission lines nearby"],
+    ["proposed_substations_nearby", "Proposed substations nearby"],
+    ["grid_service_path", "How the building is likely fed (inferred)"],
     ["ground_elevation_ft", "Ground elevation"],
     ["site_slope_pct", "Ground slope across the parcel"],
   ].map(([field, label]): FieldDefinition => ({ field: field!, label: label!, owner: "public_data", grade: "reference", comparison: { kind: "latest" }, missingReason: "No source has answered for this site." })),
@@ -131,6 +133,8 @@ export const FIELDS: FieldDefinition[] = [
 const HAND_FAMILY: Record<string, Family> = {
   substations_nearby: "utility",
   transmission_nearby: "utility",
+  proposed_substations_nearby: "utility",
+  grid_service_path: "utility",
   serving_utility: "utility",
   feeder: "utility",
   peak_demand_kw: "energy",

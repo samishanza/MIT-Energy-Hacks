@@ -85,7 +85,7 @@ function collectItems(source: LayerSource, mode: Extract<LayerSource["mode"], { 
       const read = readMapping(mapping, feature);
       if ("value" in read) attributes[mapping.field] = read.value;
     }
-    return [{ id: `${source.entry.id}-${index + 1}`, kind: mode.feature, field: mode.field, geometry: feature.geometry, label: named(feature), attributes }];
+    return [{ id: `${source.entry.id}-${index + 1}`, kind: mode.feature, field: mode.field, geometry: feature.geometry, label: `${mode.labelPrefix ?? ""}${named(feature)}`, attributes }];
   });
   return { observations, features };
 }

@@ -37,7 +37,7 @@ describe("utility-side collection", () => {
       phase: { type: "quantity", value: 3, unit: "phase" },
     });
     expect(feeder.candidates[0]!.attributes!.hosting_capacity).toMatchObject({ unit: "MW" });
-    const lines = collection.features.filter((feature) => feature.kind === "utility_line");
+    const lines = collection.features.filter((feature) => feature.kind === "utility_line" && feature.label?.startsWith("Nearby line"));
     expect(lines.map((line) => line.label).sort()).toEqual([
       "Nearby line: 05_01_10J323",
       "Nearby line: 05_01_10J366",
@@ -121,5 +121,28 @@ describe("deeper utility data, joined to each feeder candidate", () => {
     // PG&E publishes its substation DG totals with no unit, so they aren't read as kW or MW.
     const pgeSubstation = fremont.collection.features.find((feature) => feature.kind === "substation")!;
     expect(Object.keys(pgeSubstation.attributes!).sort()).toEqual(["distance_ft", "substation_voltage"]);
+  });
+});
+
+describe("every collected grid feature, drawn", () => {
+  it("draws each mapped segment near the site with how it's built, and puts feeder details on the feeder lines", async () => {
+    const { collection } = await values("100 Research Dr, Worcester, MA", massachusetts);
+    const segments = collection.features.filter((feature) => feature.attributes?.line_class?.type === "text" && feature.attributes.line_class.value === "distribution segment");
+    expect(segments.length).toBeGreaterThan(0);
+    expect(new Set(segments.map((segment) => (segment.attributes!.construction as { value: string }).value))).toEqual(new Set(["overhead", "underground"]));
+    const feederLine = collection.features.find((feature) => feature.label === "Nearby line: 05_01_27W2")!;
+    expect(feederLine.attributes).toMatchObject({ peak_loading: { type: "quantity", value: 54.3, unit: "percent" }, rating: { value: 11.8, unit: "MVA" }, construction: { value: "Mixed: 57% underground by mapped length" } });
+  });
+
+  it("draws every substation within 3 km, proposed substations, and transmission lines with their voltage", async () => {
+    const { collection, value } = await values("100 Research Dr, Worcester, MA", massachusetts);
+    const existing = collection.features.filter((feature) => feature.field === "substations_nearby");
+    expect(existing).toHaveLength(11);
+    expect((value("substations_nearby").current as { value: string }).value).toMatch(/^11 mapped substations within 3000 m/);
+    expect(collection.features.some((feature) => feature.field === "proposed_substations_nearby" && feature.label?.startsWith("Proposed substation #"))).toBe(true);
+    const transmission = collection.features.filter((feature) => feature.field === "transmission_nearby");
+    expect(transmission).toHaveLength(9);
+    expect(transmission.every((line) => line.label?.startsWith("Transmission line from "))).toBe(true);
+    expect(transmission.some((line) => line.attributes?.line_voltage?.type === "quantity" && line.attributes.line_voltage.value === 345)).toBe(true);
   });
 });
