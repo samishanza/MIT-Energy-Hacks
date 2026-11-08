@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LidarPoint } from "../ept.ts";
+import { followsStreet } from "./lidar-collect.ts";
 import { detectEquipment } from "./lidar-equipment.ts";
 
 // A synthetic scene in metres, flat ground at z = 100, a road along y = 0, and a building from y = 30 to 55.
@@ -83,5 +84,136 @@ describe("finding grid equipment in lidar by shape", () => {
 
   it("finds nothing in an empty cloud", () => {
     expect(detectEquipment([], [building], [road])).toEqual({ poles: [], conductors: [], drop: null, padMounts: [] });
+  });
+
+  it("reports the pole in the crown as inferred and the poles in the open as measured", () => {
+    expect(found.poles.find((p) => Math.round(p.at[0]) === 120)!.detection).toBe("inferred");
+    expect(found.poles.filter((p) => !p.inCanopy).every((p) => p.detection === "measured")).toBe(true);
+  });
+});
+
+// A thin column of returns from 1 m to `top`, labelled vegetation as 3DEP often labels a pole.
+const column = (add: Add, x: number, y: number, top: number) => {
+  for (let h = 1; h <= top; h += 0.25) add(x + ((h * 7) % 3) * 0.05, y, h, 5, 2);
+};
+// A wire as QL1 lidar often samples one: a pair of returns every 10 m, labelled high noise.
+const sparseWire = (add: Add, x0: number, x1: number, y: number) => {
+  for (let x = x0 + 10; x < x1 - 1; x += 10) { add(x, y, 9.5, 18); add(x + 0.3, y - 0.2, 10.2, 18); }
+};
+const near = <T extends { at: [number, number] }>(poles: T[], x: number, y: number, radius = 2) => poles.filter((p) => Math.hypot(p.at[0] - x, p.at[1] - y) < radius);
+
+describe("placing poles and rejecting what isn't one", () => {
+  it("places a pole at the centre of its column, not at the tip of a crossarm on one side, and keeps the top height", () => {
+    const poles = detectEquipment(
+      scene((add) => {
+        for (const x of [0, 40]) pole(add, x, 6);
+        // A pole at x = 80 whose one-sided arm reaches 1.8 m toward the building; an insulator at its tip is the top.
+        column(add, 80, 6, 10.8);
+        for (let d = 0; d <= 1.8; d += 0.2) add(80, 6 + d, 11, 5, 2);
+        add(80, 7.8, 11.2, 5, 2);
+        wire(add, 0, 40, 6); wire(add, 40, 80, 6);
+      }),
+      [building],
+      [road],
+    ).poles;
+    const placed = near(poles, 80, 7);
+    expect(placed).toHaveLength(1);
+    expect(placed[0]!.at[0]).toBeCloseTo(80, 0);
+    expect(Math.abs(placed[0]!.at[1] - 6)).toBeLessThan(0.3);
+    expect(placed[0]!.heightM).toBeCloseTo(11.2, 1);
+  });
+
+  it("rejects a pole-shaped tree joined to a pole only through canopy", () => {
+    const poles = detectEquipment(
+      scene((add) => {
+        for (const x of [0, 40]) pole(add, x, 6);
+        wire(add, 0, 40, 6);
+        // A bare trunk with a small head at x = 75, and a row of small trees between it and the pole at x = 40.
+        column(add, 75, 6, 10.5);
+        for (let a = 0; a < 360; a += 45) add(75 + 0.4 * Math.cos((a * Math.PI) / 180), 6 + 0.4 * Math.sin((a * Math.PI) / 180), 10.8, 5, 2);
+        for (const x of [50, 58, 66]) crown(add, x, 6, 8, 2.5);
+      }),
+      [building],
+      [road],
+    ).poles;
+    expect(near(poles, 75, 6)).toHaveLength(0);
+    expect(poles.map((p) => Math.round(p.at[0])).sort((a, b) => a - b)).toEqual([0, 40]);
+  });
+
+  it("rejects a 7 m light and an 18 m mast, even with a wire to the mast", () => {
+    const poles = detectEquipment(
+      scene((add) => {
+        for (const x of [0, 40, 80]) pole(add, x, 6);
+        wire(add, 0, 40, 6); wire(add, 40, 80, 6);
+        column(add, 20, 3, 7); // a street light with its arm over the road
+        for (let d = 0; d <= 1.5; d += 0.25) add(20, 3 - d, 7, 1, 1);
+        column(add, 120, 6, 18); // a mast on the line, with a wire strung to it at pole height
+        wire(add, 80, 120, 6);
+      }),
+      [building],
+      [road],
+    ).poles;
+    expect(near(poles, 20, 3)).toHaveLength(0);
+    expect(near(poles, 120, 6)).toHaveLength(0);
+    expect(poles.map((p) => Math.round(p.at[0])).sort((a, b) => a - b)).toEqual([0, 40, 80]);
+  });
+
+  it("accepts poles wired only by a few high-noise returns per span, as 3DEP samples a wire", () => {
+    const found = detectEquipment(
+      scene((add) => {
+        for (const x of [0, 40, 80]) pole(add, x, 6);
+        sparseWire(add, 0, 40, 6); sparseWire(add, 40, 80, 6);
+      }),
+      [building],
+      [road],
+    );
+    expect(found.poles.map((p) => Math.round(p.at[0])).sort((a, b) => a - b)).toEqual([0, 40, 80]);
+    expect(found.conductors).toHaveLength(2);
+    expect(found.conductors.every((span) => span.heightM > 9 && span.heightM < 10.5)).toBe(true);
+  });
+
+  it("rejects a pole-shaped object with building returns within 2 m, even when the footprint isn't the site's", () => {
+    const poles = detectEquipment(
+      scene((add) => {
+        for (const x of [0, 40]) pole(add, x, 6);
+        wire(add, 0, 40, 6);
+        // A neighbor's roof from y = 9.5, beside a mast at x = 80 that a wire reaches.
+        for (let x = 74; x <= 90; x += 0.5) for (let y = 9.5; y <= 20; y += 0.5) add(x, y, 6, 6);
+        pole(add, 80, 8);
+        wire(add, 40, 80, 8);
+      }),
+      [building],
+      [road],
+    ).poles;
+    expect(near(poles, 80, 8)).toHaveLength(0);
+  });
+
+  it("doesn't infer a pole in a crown, or accept the far pole, without wire running to the far pole", () => {
+    const poles = detectEquipment(
+      scene((add) => {
+        for (const x of [0, 40, 80, 160]) pole(add, x, 6);
+        wire(add, 0, 40, 6); wire(add, 40, 80, 6); wire(add, 80, 120, 6);
+        crown(add, 120, 6, 10.5);
+        for (let h = 1; h <= 11.5; h += 0.25) add(120, 6, h, 5, 2);
+      }),
+      [building],
+      [road],
+    ).poles;
+    expect(poles.map((p) => Math.round(p.at[0])).sort((a, b) => a - b)).toEqual([0, 40, 80]);
+  });
+
+  it("looks for poles only along streets, not along a parking-lot aisle", () => {
+    const aisle = { ...road, name: "parking aisle", street: false };
+    const build = (add: Add) => {
+      for (const x of [0, 40, 80]) pole(add, x, 6);
+      wire(add, 0, 40, 6); wire(add, 40, 80, 6);
+    };
+    expect(detectEquipment(scene(build), [building], [aisle]).poles).toHaveLength(0);
+    expect(detectEquipment(scene(build), [building], [road]).poles).toHaveLength(3);
+  });
+
+  it("treats only primary, secondary, and local streets as streets, by TIGER feature class", () => {
+    expect(["S1100", "S1200", "S1400", undefined].map(followsStreet)).toEqual([true, true, true, true]);
+    expect(["S1780", "S1730", "S1740", "S1640", "S1710"].map(followsStreet)).toEqual([false, false, false, false, false]);
   });
 });

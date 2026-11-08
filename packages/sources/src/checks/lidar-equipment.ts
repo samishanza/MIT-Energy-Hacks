@@ -1,31 +1,52 @@
 import type { LidarPoint } from "../ept.ts";
 
 // Grid equipment found by shape in airborne lidar. USGS 3DEP labels ground, vegetation, and buildings but not
-// poles or wires, and it often labels a pole beside a tree as vegetation. So each rule below is a geometric test,
-// strict enough that a tree, a bush, a car, or a rooftop unit fails it:
+// poles or wires, and it often labels a pole beside a tree as vegetation and a wire as high noise. So each rule below
+// is a geometric test, strict enough that a tree, a bush, a car, a light, or a rooftop unit fails it:
 //
-// - A pole is a compact top 8.5 m or more above ground, within 10 m of a road centerline, with its returns at
-//   mid-height packed into a single column, as a pole body is and a tree crown isn't, and wired to another pole.
-// - A wire is a run of returns along the straight line between two poles 20 to 70 m apart.
-// - A pole hidden in a tree's crown is found only between two wired poles on the same road, where the gap is
-//   about twice the usual span, as the tallest compact top on the line near the middle.
+// - A pole is a compact top 8.5 to 15 m above ground, within 10 m of a public street's centerline, with no building
+//   returns within 2 m, with its returns at mid-height packed into a single column, as a pole body is and a tree
+//   crown isn't, and wired to another pole. It is placed at the centre of that column, not at its top return, which
+//   is often a crossarm tip or the head of a leaning pole.
+// - A wire is a thin layer of returns along the line between two poles 20 to 70 m apart, at the height of a
+//   conductor hung between their tops, with little beside it. Canopy is thick and wide, so it isn't a wire.
+// - A pole hidden in a tree's crown is found only between two poles on the same road, where the gap is about twice
+//   the usual span, as a single column near the middle with wire running to both. Unless its own shape passes the
+//   pole test, it is reported as inferred, not measured.
 // - A service drop is a narrow, continuous run of returns from a pole to a wall, below the roof.
 // - An equipment box is a solid, flat-topped object 1 to 2.4 m tall and 1 to 3 m across, not vegetation, mostly
 //   single returns, with nothing overhanging, away from walls and roads.
 //
-// Tuned against one supplied engineered plan set and the 2025 orthophoto, where it finds every pole on the
-// frontage and reports nothing false. It can still miss equipment, and every result is a detection to confirm.
+// Tuned against one supplied engineered plan set, the 2025 orthophoto, and the 2021 lidar at that site. It can
+// still miss equipment, and every result is a detection to confirm.
 
 type Point = [number, number];
-export type Road = { name: string; line: Point[]; onAddress: boolean };
-export type Pole = { at: Point; heightM: number; roadFeet: number; road: string; inCanopy: boolean };
+// `street` is false for a road a distribution line doesn't follow, such as a parking-lot aisle or a service drive.
+// Poles are looked for only along streets; every road still keeps equipment boxes off the pavement.
+export type Road = { name: string; line: Point[]; onAddress: boolean; street?: boolean };
+// `detection` is "measured" when the pole's own shape passed the pole test, and "inferred" when only the wires on
+// either side and a column in a crown place it.
+export type Pole = { at: Point; heightM: number; roadFeet: number; road: string; inCanopy: boolean; detection: "measured" | "inferred" };
 export type Span = { from: Point; to: Point; returns: number; coverage: number; heightM: number; lengthM: number };
 export type PadMount = { at: Point; widthM: number; depthM: number; heightM: number; wallM: number };
 export type Detection = { poles: Pole[]; conductors: Span[]; drop: (Span & { pole: Pole; wall: Point; roofM: number | null }) | null; padMounts: PadMount[] };
 
-const NOT_ABOVE_GROUND = new Set([2, 6, 7, 9, 18]);
+// High noise (18) is kept, because 3DEP projects often put wire returns there, but it is read only as wire evidence.
+const NOT_ABOVE_GROUND = new Set([2, 6, 7, 9]);
+const HIGH_NOISE = 18;
+const BUILDING = 6;
 const VEGETATION = new Set([3, 4, 5]);
 const FEET = 3.280839895;
+
+// Wood distribution poles are mostly 30 to 45 ft long, set about 10% of their length plus 2 ft into the ground, so a
+// 35 ft pole stands about 8.8 m and a 45 ft pole about 11.7 m, with crossarms and insulators a little higher; the
+// taller 50 to 55 ft poles reach about 13 to 14.5 m. Below the band are street and parking-lot lights, signs, and the
+// short service poles; above it are trees and transmission structures.
+const POLE_TOP_MIN_M = 8.5;
+const POLE_TOP_MAX_M = 15;
+// A candidate with building returns this close is a roof corner, parapet, chimney, or rooftop unit.
+const BUILDING_CLEARANCE_M = 2;
+const BUILDING_RETURNS = 3;
 
 // Points bucketed by 1 m cell, for radius queries.
 class Grid {
@@ -134,50 +155,210 @@ const along = (p: Point, a: Point, b: Point) => {
 };
 const distance = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+};
+
 export function detectEquipment(points: LidarPoint[], buildings: Point[][], roads: Road[]): Detection {
   if (points.length === 0) return { poles: [], conductors: [], drop: null, padMounts: [] };
   const ground = groundModel(points);
   const roadLines = roads.map((road) => road.line);
+  const streets = roads.filter((road) => road.street !== false);
+  const streetLines = streets.map((road) => road.line);
 
-  // Everything above the ground that isn't ground, building, noise, or water.
+  // Everything above the ground that isn't ground, building, or water. High noise only counts as wire.
   const kept = points.filter((p) => !NOT_ABOVE_GROUND.has(p.classification));
   const xs = new Float64Array(kept.length), ys = new Float64Array(kept.length), hs = new Float64Array(kept.length);
-  kept.forEach((p, i) => { xs[i] = p.x; ys[i] = p.y; hs[i] = p.z - ground(p.x, p.y); });
+  const noise = new Uint8Array(kept.length);
+  kept.forEach((p, i) => { xs[i] = p.x; ys[i] = p.y; hs[i] = p.z - ground(p.x, p.y); noise[i] = p.classification === HIGH_NOISE ? 1 : 0; });
   const grid = new Grid(xs, ys);
   const at = (i: number): Point => [xs[i]!, ys[i]!];
-  const within = (p: Point, radius: number, test: (h: number, i: number) => boolean) => grid.near(p[0], p[1], radius).filter((i) => test(hs[i]!, i));
+  const within = (p: Point, radius: number, test: (h: number, i: number) => boolean) => grid.near(p[0], p[1], radius).filter((i) => !noise[i] && test(hs[i]!, i));
+  const roofs = points.filter((p) => p.classification === BUILDING);
+  const roofGrid = new Grid(Float64Array.from(roofs, (p) => p.x), Float64Array.from(roofs, (p) => p.y));
+  const byBuilding = (p: Point) => roofGrid.near(p[0], p[1], BUILDING_CLEARANCE_M).length >= BUILDING_RETURNS;
 
+  // A pole body: the returns from 3 m up, above cars and shrubs, to 2.5 m below the top, under the crossarms and the
+  // pole-top equipment. Its centre comes from medians over shrinking circles that start at the top return, so a
+  // crossarm tip or a leaning head 1 to 2 m away doesn't move it, and its position from the lower half of the body,
+  // nearest the base. `filled` is the share of 1 m slices of the body with a return within 0.5 m of the centre.
   const describe = (i: number) => {
     const top = hs[i]!, p = at(i);
+    const low = 3, high = top - 2.5;
+    const body = (h: number) => h >= low && h <= high;
+    let centre = p;
+    for (const radius of [2.5, 1.2, 0.6]) {
+      const near = within(centre, radius, body);
+      if (near.length < 3) break;
+      centre = [median(near.map((j) => xs[j]!))!, median(near.map((j) => ys[j]!))!];
+    }
+    const lower = within(centre, 0.6, (h) => h >= low && h <= (low + high) / 2);
+    const base: Point = lower.length >= 3 ? [median(lower.map((j) => xs[j]!))!, median(lower.map((j) => ys[j]!))!] : centre;
+    const slices = new Set(within(centre, 0.5, body).map((j) => Math.floor(hs[j]! - low)));
+    const filled = slices.size / Math.max(1, Math.ceil(high - low));
     const ring = within(p, 4, (h, j) => h >= top - 2.5 && distance(at(j), p) >= 1.5).length;
     const head = within(p, 1.5, (h) => h >= top - 2);
     const hx = head.map((j) => xs[j]!), hy = head.map((j) => ys[j]!);
     const span = head.length > 1 ? Math.max(Math.max(...hx) - Math.min(...hx), Math.max(...hy) - Math.min(...hy)) : 0;
-    const mid1 = within(p, 1, (h) => h >= 3 && h <= top - 2.5).length;
-    const mid2 = within(p, 2, (h) => h >= 3 && h <= top - 2.5).length;
-    return { top, ring, span, mid1, mid2 };
+    const mid1 = within(centre, 1, body).length;
+    const mid2 = within(centre, 2, body).length;
+    return { top, at: base, ring, span, mid1, mid2, filled };
   };
+  type Shape = ReturnType<typeof describe>;
+  const poleShaped = (shape: Shape) => shape.ring <= 20 && shape.span <= 3 && shape.mid1 >= 10 && shape.mid2 <= 1.6 * shape.mid1;
 
-  // Pole candidates: the local top within 3 m, near a road, off the buildings, with a single-column body.
+  // Pole candidates: the local top within 3 m, at pole height, near a street, off the buildings, with a
+  // single-column body.
   type Candidate = { index: number; at: Point; top: number; mid1: number; road: { distance: number; line: number; direction: Point } };
   const candidates: Candidate[] = [];
   for (let i = 0; i < kept.length; i++) {
-    if (hs[i]! < 8.5 || hs[i]! > 25) continue;
+    if (noise[i] || hs[i]! < POLE_TOP_MIN_M || hs[i]! > POLE_TOP_MAX_M) continue;
     const p = at(i);
-    // The cheap tests first: near a road and off the buildings, then the local top.
-    const road = nearestOnLines(p, roadLines);
-    if (road.distance > 10) continue;
+    // The cheap tests first: near a street and off the buildings, then the local top.
+    if (nearestOnLines(p, streetLines).distance > 10) continue;
     if (buildings.length && nearestOnLines(p, buildings).distance < 2) continue;
+    if (byBuilding(p)) continue;
     if (within(p, 3, (h) => h > hs[i]! + 1e-6).length) continue;
     const shape = describe(i);
-    if (shape.ring > 20 || shape.span > 3 || shape.mid1 < 10 || shape.mid2 > 1.6 * shape.mid1) continue;
-    candidates.push({ index: i, at: p, top: shape.top, mid1: shape.mid1, road });
+    if (!poleShaped(shape) || byBuilding(shape.at)) continue;
+    const road = nearestOnLines(shape.at, streetLines);
+    if (road.distance > 10) continue;
+    candidates.push({ index: i, at: shape.at, top: shape.top, mid1: shape.mid1, road });
   }
   candidates.sort((a, b) => b.mid1 - a.mid1);
   const distinct: Candidate[] = [];
   for (const candidate of candidates) if (distinct.every((other) => distance(other.at, candidate.at) >= 4)) distinct.push(candidate);
 
-  // Wires: returns 4 to 15 m up along the middle of the line between two poles.
+  // Wire between two pole tops, read 2 m at a time from 1.5 m off each pole. A stretch holds wire when it has returns
+  // within 1.6 m of the line (a crossarm spreads the phases about 1.2 m either side) at conductor height, between
+  // 5 m below and 1 m above the straight line joining the two tops; when everything within 1.6 m of the line, from
+  // 7 m below that line, falls in no more than five 0.5 m layers, as a few wires do and a crown's body doesn't; and
+  // when fewer returns at conductor height lie 1.6 to 3.5 m off the line than on it. Canopy is thick and wide, so a
+  // stretch that fails is canopy, and a thin stretch beside canopy is taken for the crown's edge rather than wire.
+  // 3DEP often samples a wire with only a few returns per span, so the test counts thin stretches rather than asking
+  // for an unbroken run.
+  type Wire = Omit<Span, "from" | "to"> & { wireBins: number; canopyBins: number; bins: number };
+  const wireBetween = (a: Point, topA: number, b: Point, topB: number): Wire => {
+    const length = distance(a, b);
+    const count = Math.max(1, Math.floor((length - 3) / 2));
+    const bins = Array.from({ length: count }, () => ({ heights: [] as number[], layers: new Set<number>(), side: 0 }));
+    for (const i of grid.near((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, length / 2 + 1)) {
+      const s = along(at(i), a, b) * length;
+      if (s < 1.5 || s >= length - 1.5) continue;
+      const line = topA + ((topB - topA) * s) / length;
+      const h = hs[i]!;
+      if (h < Math.max(3, line - 7) || h > line + 1) continue;
+      const bin = bins[Math.min(count - 1, Math.floor((s - 1.5) / 2))]!;
+      const off = offLine(at(i), a, b);
+      const conductor = h >= Math.max(4, line - 5);
+      if (off < 1.6) {
+        bin.layers.add(Math.floor(h * 2));
+        if (conductor) bin.heights.push(h);
+      } else if (off < 3.5 && conductor) bin.side++;
+    }
+    const state = bins.map((bin) => {
+      if (bin.heights.length && bin.layers.size <= 5 && bin.side * 2 < bin.heights.length) return "wire";
+      return bin.heights.length || bin.side >= 3 ? "canopy" : "empty";
+    });
+    const wire = state.flatMap((s, k) => (s === "wire" && state[k - 1] !== "canopy" && state[k + 1] !== "canopy" ? [k] : []));
+    const heights = wire.flatMap((k) => bins[k]!.heights);
+    return {
+      returns: heights.length,
+      coverage: wire.length / count,
+      heightM: median(heights) ?? 0,
+      lengthM: length,
+      wireBins: wire.length,
+      canopyBins: state.filter((s) => s === "canopy").length,
+      bins: count,
+    };
+  };
+  // Wired: wire in at least two stretches, and canopy along no more than half the span.
+  const isWired = (wire: Wire) => wire.wireBins >= 2 && wire.returns >= 3 && wire.canopyBins <= 0.5 * wire.bins;
+  const spanOf = (from: Point, to: Point, wire: Wire): Span => ({ from, to, returns: wire.returns, coverage: wire.coverage, heightM: wire.heightM, lengthM: wire.lengthM });
+
+  const links: { a: number; b: number; span: Span }[] = [];
+  for (let a = 0; a < distinct.length; a++) for (let b = a + 1; b < distinct.length; b++) {
+    const A = distinct[a]!, B = distinct[b]!;
+    const length = distance(A.at, B.at);
+    if (length < 20 || length > 70) continue;
+    const wire = wireBetween(A.at, A.top, B.at, B.top);
+    if (isWired(wire)) links.push({ a, b, span: spanOf(A.at, B.at, wire) });
+  }
+  // A wire doesn't pass a pole it is strung to: where a wired pole stands on the line between two others, the long
+  // link is the same conductor seen past it, and the span it hides is one canopy covered.
+  const linked = (x: number, y: number) => links.some((l) => (l.a === x && l.b === y) || (l.a === y && l.b === x));
+  const passes = (l: { a: number; b: number }) =>
+    distinct.some((c, index) => {
+      if (index === l.a || index === l.b) return false;
+      const t = along(c.at, distinct[l.a]!.at, distinct[l.b]!.at);
+      return t > 0.05 && t < 0.95 && offLine(c.at, distinct[l.a]!.at, distinct[l.b]!.at) < 2 && (linked(l.a, index) || linked(l.b, index));
+    });
+  const direct = links.filter((l) => !passes(l));
+  // From each pole, only the nearest wired pole in each direction, so the line is a chain, not every pair.
+  const chain = new Map<string, Span>();
+  distinct.forEach((pole, index) => {
+    const used: Point[] = [];
+    for (const link of direct.filter((l) => l.a === index || l.b === index).sort((l, m) => l.span.lengthM - m.span.lengthM)) {
+      const other = distinct[link.a === index ? link.b : link.a]!;
+      const v: Point = [(other.at[0] - pole.at[0]) / link.span.lengthM, (other.at[1] - pole.at[1]) / link.span.lengthM];
+      if (used.every((u) => u[0] * v[0] + u[1] * v[1] < 0.5)) {
+        used.push(v);
+        chain.set([link.a, link.b].sort().join("-"), link.span);
+      }
+    }
+  });
+  const wired = new Set([...chain.keys()].flatMap((key) => key.split("-").map(Number)));
+  const roadOf = (c: Candidate) => streets[c.road.line];
+  const measured = (c: Candidate): Pole => ({ at: c.at, heightM: c.top, roadFeet: Math.round(c.road.distance * FEET), road: roadOf(c)?.name ?? "a road", inCanopy: false, detection: "measured" });
+  const poles: Pole[] = [...wired].map((index) => measured(distinct[index]!));
+  const conductors: Span[] = [...chain.values()];
+
+  // A pole hidden in a crown: between a wired pole and another pole on the same road, about twice the usual span
+  // apart, a single column near the middle of the gap with wire running from it to both. The far pole is accepted
+  // only through that tested wire.
+  const spans = conductors.map((span) => span.lengthM).sort((a, b) => a - b);
+  const usual = spans[Math.floor(spans.length / 2)] ?? 0;
+  const wiredCandidates = [...wired].map((index) => distinct[index]!);
+  for (let a = 0; a < wiredCandidates.length && usual; a++) for (const B of distinct) {
+    const A = wiredCandidates[a]!;
+    if (B === A || (wired.has(distinct.indexOf(B)) && distinct.indexOf(B) < distinct.indexOf(A))) continue;
+    const length = distance(A.at, B.at);
+    if (length < 1.6 * usual || length > 2.6 * usual) continue;
+    const middle: Point = [(A.at[0] + B.at[0]) / 2, (A.at[1] + B.at[1]) / 2];
+    const midRoad = nearestOnLines(middle, streetLines);
+    const v: Point = [(B.at[0] - A.at[0]) / length, (B.at[1] - A.at[1]) / length];
+    if (A.road.line !== B.road.line || midRoad.line !== A.road.line || Math.abs(v[0] * midRoad.direction[0] + v[1] * midRoad.direction[1]) < 0.94) continue;
+    if (wiredCandidates.some((c) => c !== A && c !== B && along(c.at, A.at, B.at) > 0.1 && along(c.at, A.at, B.at) < 0.9 && offLine(c.at, A.at, B.at) < 8)) continue;
+    // The highest return in each 1 m cell at pole height within 2 m of the line, near the middle; each is read as
+    // the top of a column, and the most complete column, then the one nearest the middle, is the hidden pole.
+    const tops = new Map<number, number>();
+    for (const i of within(middle, length / 4, (h) => h >= POLE_TOP_MIN_M && h <= POLE_TOP_MAX_M)) {
+      if (offLine(at(i), A.at, B.at) > 2) continue;
+      const key = Grid.key(Math.floor(xs[i]!), Math.floor(ys[i]!));
+      const held = tops.get(key);
+      if (held === undefined || hs[i]! > hs[held]!) tops.set(key, i);
+    }
+    let best: Shape | null = null;
+    for (const i of tops.values()) {
+      const shape = describe(i);
+      if (shape.span > 3 || shape.mid1 < 10 || shape.filled < 0.6 || byBuilding(shape.at)) continue;
+      if (!best || shape.filled > best.filled || (shape.filled === best.filled && distance(shape.at, middle) < distance(best.at, middle))) best = shape;
+    }
+    if (!best) continue;
+    const p = best.at;
+    if (poles.some((pole) => distance(pole.at, p) < 4)) continue;
+    const first = wireBetween(A.at, A.top, p, best.top), second = wireBetween(p, best.top, B.at, B.top);
+    if (!isWired(first) || !isWired(second)) continue;
+    const road = nearestOnLines(p, streetLines);
+    poles.push({ at: p, heightM: best.top, roadFeet: Math.round(road.distance * FEET), road: streets[road.line]?.name ?? "a road", inCanopy: true, detection: poleShaped(best) ? "measured" : "inferred" });
+    if (!poles.some((pole) => pole.at === B.at)) poles.push(measured(B));
+    conductors.push(spanOf(A.at, p, first), spanOf(p, B.at, second));
+  }
+
+
+  // A service drop: a narrow, continuous run of returns from a wired pole to a wall point, below the roof.
+  // Returns low to high up within width of the middle 70% of the line from a to b, in 2 m stretches.
   const corridor = (a: Point, b: Point, width: number, low: number, high: number) => {
     const length = distance(a, b);
     const bins = new Set<number>();
@@ -195,67 +376,6 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
     heights.sort((x, y) => x - y);
     return { returns: heights.length, side, coverage: bins.size / Math.max(1, Math.floor((length * 0.7) / 2)), heightM: heights[Math.floor(heights.length / 2)] ?? 0, lengthM: length };
   };
-  const links: { a: number; b: number; span: Span }[] = [];
-  for (let a = 0; a < distinct.length; a++) for (let b = a + 1; b < distinct.length; b++) {
-    const length = distance(distinct[a]!.at, distinct[b]!.at);
-    if (length < 20 || length > 70) continue;
-    const wire = corridor(distinct[a]!.at, distinct[b]!.at, 0.8, 4, Math.max(distinct[a]!.top, distinct[b]!.top) + 1);
-    if (wire.coverage >= 0.25 && wire.returns >= 10) links.push({ a, b, span: { from: distinct[a]!.at, to: distinct[b]!.at, ...wire } });
-  }
-  // From each pole, only the nearest wired pole in each direction, so the line is a chain, not every pair.
-  const chain = new Map<string, Span>();
-  distinct.forEach((pole, index) => {
-    const used: Point[] = [];
-    for (const link of links.filter((l) => l.a === index || l.b === index).sort((l, m) => l.span.lengthM - m.span.lengthM)) {
-      const other = distinct[link.a === index ? link.b : link.a]!;
-      const v: Point = [(other.at[0] - pole.at[0]) / link.span.lengthM, (other.at[1] - pole.at[1]) / link.span.lengthM];
-      if (used.every((u) => u[0] * v[0] + u[1] * v[1] < 0.5)) {
-        used.push(v);
-        chain.set([link.a, link.b].sort().join("-"), link.span);
-      }
-    }
-  });
-  const wired = new Set([...chain.keys()].flatMap((key) => key.split("-").map(Number)));
-  const roadOf = (c: Candidate) => roads[c.road.line];
-  const poles: Pole[] = [...wired].map((index) => {
-    const c = distinct[index]!;
-    return { at: c.at, heightM: c.top, roadFeet: Math.round(c.road.distance * FEET), road: roadOf(c)?.name ?? "a road", inCanopy: false };
-  });
-  const conductors: Span[] = [...chain.values()];
-
-  // A pole hidden in a crown: between a wired pole and another pole on the same road, about twice the usual span
-  // apart, with wire returns across the gap. The far pole is accepted with it.
-  const spans = conductors.map((span) => span.lengthM).sort((a, b) => a - b);
-  const usual = spans[Math.floor(spans.length / 2)] ?? 0;
-  const wiredCandidates = [...wired].map((index) => distinct[index]!);
-  for (let a = 0; a < wiredCandidates.length && usual; a++) for (const B of distinct) {
-    const A = wiredCandidates[a]!;
-    if (B === A || (wired.has(distinct.indexOf(B)) && distinct.indexOf(B) < distinct.indexOf(A))) continue;
-    const length = distance(A.at, B.at);
-    if (length < 1.6 * usual || length > 2.6 * usual) continue;
-    const across = corridor(A.at, B.at, 0.8, 4, Math.max(A.top, B.top) + 1);
-    if (across.coverage < 0.25) continue;
-    const middle: Point = [(A.at[0] + B.at[0]) / 2, (A.at[1] + B.at[1]) / 2];
-    const midRoad = nearestOnLines(middle, roadLines);
-    const v: Point = [(B.at[0] - A.at[0]) / length, (B.at[1] - A.at[1]) / length];
-    if (A.road.line !== B.road.line || midRoad.line !== A.road.line || Math.abs(v[0] * midRoad.direction[0] + v[1] * midRoad.direction[1]) < 0.94) continue;
-    if (wiredCandidates.some((c) => c !== A && c !== B && along(c.at, A.at, B.at) > 0.1 && along(c.at, A.at, B.at) < 0.9 && offLine(c.at, A.at, B.at) < 8)) continue;
-    let best = -1;
-    for (const i of grid.near(middle[0], middle[1], length / 4)) {
-      if (hs[i]! < 9 || offLine(at(i), A.at, B.at) > 2) continue;
-      if (best < 0 || hs[i]! > hs[best]!) best = i;
-    }
-    if (best < 0 || describe(best).span > 3) continue;
-    const p = at(best);
-    if (poles.some((pole) => distance(pole.at, p) < 4)) continue;
-    poles.push({ at: p, heightM: hs[best]!, roadFeet: Math.round(midRoad.distance * FEET), road: roads[midRoad.line]?.name ?? "a road", inCanopy: true });
-    if (!poles.some((pole) => pole.at === B.at)) poles.push({ at: B.at, heightM: B.top, roadFeet: Math.round(B.road.distance * FEET), road: roadOf(B)?.name ?? "a road", inCanopy: false });
-    const first = corridor(A.at, p, 0.8, 4, hs[best]! + 1), second = corridor(p, B.at, 0.8, 4, hs[best]! + 1);
-    conductors.push({ from: A.at, to: p, ...first }, { from: p, to: B.at, ...second });
-  }
-
-  // A service drop: a narrow, continuous run of returns from a wired pole to a wall point, below the roof.
-  const roofs = points.filter((p) => p.classification === 6);
   const roofNear = (p: Point) => {
     const heights = roofs.filter((r) => Math.abs(r.x - p[0]) < 4 && Math.abs(r.y - p[1]) < 4).map((r) => r.z - ground(r.x, r.y)).sort((a, b) => a - b);
     return heights.length ? heights[Math.floor(heights.length / 2)]! : null;
@@ -268,7 +388,7 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
     }),
   );
   let drop: Detection["drop"] = null;
-  for (const pole of poles.filter((p) => !p.inCanopy)) {
+  for (const pole of poles.filter((p) => !p.inCanopy && p.detection === "measured")) {
     for (const target of targets) {
       const length = distance(pole.at, target);
       if (length < 5 || length > 60) continue;
@@ -286,6 +406,7 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
   const overhang = new Set<number>();
   const low = new Map<number, { i: number; j: number; tops: number; single: number; count: number }>();
   kept.forEach((p, index) => {
+    if (noise[index]) return;
     const h = hs[index]!;
     if (h > 2.8) overhang.add(cellOf(p.x, p.y));
     if (h < 0.6 || h > 2.6 || VEGETATION.has(p.classification)) return;
