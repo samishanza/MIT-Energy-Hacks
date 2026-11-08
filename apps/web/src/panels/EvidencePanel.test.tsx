@@ -307,5 +307,7 @@ describe("readable values", () => {
     expect(readable("880 ft")).toBe("880 ft");
     expect(readable("feasible_bess_recommended")).toBe("feasible bess recommended");
     expect(readable("05_01_10J323")).toBe("05_01_10J323");
+    expect(readable("42.209731, -71.414467")).toBe("42.209731, -71.414467");
+    expect(readable("1122433.5 sqft")).toBe("1,122,433.5 sqft");
   });
 });

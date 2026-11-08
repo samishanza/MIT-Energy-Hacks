@@ -14,6 +14,8 @@ import { conceptSiteLayout } from "@eqore/electrical";
 import { loadPlanFeatures, planMapFeatures, withPlanSet } from "./app/planFeatures";
 import { Menu } from "./ui/Menu";
 import { RecordSummary, StatusStrip } from "./ui/StatusStrip";
+import { Icon } from "./ui/icons";
+import { Landing } from "./ui/Landing";
 
 const ACTOR_KEY = "eqore.actorName";
 
@@ -293,18 +295,23 @@ export function App({ api }: { api: EngineerApi }) {
     close();
   };
 
+  // Before any site opens, the landing holds the address field; after, the top bar does.
+  const landing = !mapSite && !candidates;
+  const addressForm = (large: boolean) => (
+    <form className={`address is-address${large ? " is-address--lg" : ""}`} onSubmit={submitAddress}>
+      <Icon name={large ? "pin" : "search"} small={!large} />
+      <input aria-label="Site address" placeholder="Enter a site address" value={address} onChange={(event) => setAddress(event.target.value)} />
+      <button type="submit" className="primary" disabled={running}>
+        Run site {large ? <Icon name="arrow" small /> : null}
+      </button>
+    </form>
+  );
+
   return (
-    <div className="app">
+    <div className={`app${landing ? " app-landing" : ""}`}>
       <header className="header">
-        <form className="address" onSubmit={submitAddress}>
-          <label className="field">
-            <span>Site address</span>
-            <input value={address} onChange={(event) => setAddress(event.target.value)} />
-          </label>
-          <button type="submit" className="primary" disabled={running}>
-            Run site
-          </button>
-        </form>
+        <img className="brand-logo" src="/insite-logo.png" alt="InSite" />
+        {landing ? null : addressForm(false)}
         {record && !live ? (
           <div className="site-summary">
             <p className="site-address">{record.site.address}</p>
@@ -398,6 +405,17 @@ export function App({ api }: { api: EngineerApi }) {
             }
           />
         </section>
+      ) : null}
+
+      {landing ? (
+        <Landing
+          form={addressForm(true)}
+          disabled={running}
+          onTry={(next) => {
+            setAddress(next);
+            void run({ address: next });
+          }}
+        />
       ) : null}
 
       {mapSite ? (

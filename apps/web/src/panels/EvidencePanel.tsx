@@ -7,6 +7,7 @@ import { CHECK_WORDS, formatCurrent, formatValue, locationWords, METHOD_WORDS, o
 import { googleEarthUrl, streetViewUrl } from "../app/siteLinks";
 import { GradeTag, ProvenanceTag, StateBadge } from "../ui/marks";
 import { ResolveControls } from "./ResolveControls";
+import { Icon, type IconName } from "../ui/icons";
 
 // The details dock: what was clicked, what the record says about it, and what a person can do.
 // One header with the item's name, then sections that open and close, so the value and its
@@ -30,6 +31,8 @@ export interface EvidencePanelProps {
   onCollapse?: () => void;
   onExpand?: () => void;
 }
+
+const CHECK_ICONS: Record<keyof typeof CHECK_WORDS, IconName> = { agrees: "check", disagrees: "cross", not_checked: "info" };
 
 function Section({ title, count, open = false, children }: { title: string; count?: number; open?: boolean; children: ReactNode }) {
   return (
@@ -103,7 +106,8 @@ const KIND_WORDS: Record<MapFeature["kind"], string> = {
 /** Large numbers with separators, and code words as plain words. */
 export function readable(text: string): string {
   const spaced = /^[a-z0-9]+(_[a-z0-9]+)+$/.test(text) ? text.replace(/_/g, " ") : text;
-  return spaced.replace(/\b\d{5,}(\.\d+)?\b/g, (n) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 }));
+  // Only whole-number runs: digits after a decimal point, as in a coordinate, are left alone.
+  return spaced.replace(/(?<![\d.])\d{5,}(\.\d+)?\b/g, (n) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 }));
 }
 
 const attributeWords = (name: string) => {
@@ -142,7 +146,10 @@ function FeatureFacts({ feature, record, api, onRecord }: { feature: MapFeature;
       {feature.kind === "candidate_area" ? (
         <>
           <p>{ZONE_WORDS[zoneTier(feature)]}</p>
-          <p className="dock-caution">Eligibility screen from public data, not code approval. Local amendments go to a person.</p>
+          <p className="dock-caution">
+            <Icon name="alert" small />
+            <span>Eligibility screen from public data, not code approval. Local amendments go to a person.</span>
+          </p>
         </>
       ) : null}
       {attributes.length > 0 ? (
@@ -172,7 +179,7 @@ function ValueEvidence(props: EvidencePanelProps & { value: Value; titled: boole
   const fromAFile = record.observations.some((o) => o.field === value.field && o.locator.evidenceFileId);
   const history = record.observations.filter((o) => o.field === value.field);
   const checks = value.flags.length + (value.crossChecks?.length ?? 0) + (value.conflictKind === "feeder_candidates" ? 1 : 0);
-  const notes = [position, !onMap ? "Not a map item." : null, !required ? "Not required by this form. Shown for context." : null].filter(Boolean);
+  const notes = [position ? `${position}.` : null, !onMap ? "Not a map item." : null, !required ? "Not required by this form. Shown for context." : null].filter(Boolean);
   return (
     <article className="dock-card evidence">
       {props.titled ? <h3>{value.label}</h3> : null}
@@ -189,17 +196,26 @@ function ValueEvidence(props: EvidencePanelProps & { value: Value; titled: boole
         <Section title="Checks" count={checks} open>
           <ul className="dock-checks" aria-label="Cross-checks">
             {value.conflictKind === "feeder_candidates" ? (
-              <li className="check-note">These are nearby feeders, not a source disagreement. The utility's Pre-Application Report settles this.</li>
+              <li className="check-note">
+                <Icon name="info" small />
+                <span>These are nearby feeders, not a source disagreement. The utility's Pre-Application Report settles this.</span>
+              </li>
             ) : null}
             {value.flags.map((flag) => (
               <li key={flag} className="check-flag">
-                <strong>Flag:</strong> {flag}
+                <Icon name="alert" small />
+                <span>
+                  <strong>Flag:</strong> {flag}
+                </span>
               </li>
             ))}
             {(value.crossChecks ?? []).map((check) => (
               <li key={check.label} className={`check-${check.result}`}>
-                <strong>{CHECK_WORDS[check.result]}:</strong> {check.label}
-                {check.detail ? `. ${check.detail}` : ""}
+                <Icon name={CHECK_ICONS[check.result]} small />
+                <span>
+                  <strong>{CHECK_WORDS[check.result].replace(/^./, (c) => c.toUpperCase())}:</strong> {check.label}
+                  {check.detail ? `. ${check.detail}` : ""}
+                </span>
               </li>
             ))}
           </ul>
