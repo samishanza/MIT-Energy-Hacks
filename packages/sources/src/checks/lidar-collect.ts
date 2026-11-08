@@ -3,6 +3,7 @@ import { observe, type ArcgisFeature, type CollectContext, type PolygonGeometry 
 import type { LidarPoint } from "../ept.ts";
 import { normalizeStreet, streetNameOf } from "../resolve-site.ts";
 import { detectEquipment, type Road } from "./lidar-equipment.ts";
+import { describeShift, estimateShift } from "./lidar-registration.ts";
 
 type Point = [number, number];
 
@@ -75,9 +76,22 @@ export async function collectLidarEquipment(
       const follows = followsStreet(feature.attributes.MTFCC);
       return lines.map((line) => ({ name, line: line.map(local), onAddress: normalizeStreet(name) === street, street: follows }));
     });
-  const detection = detectEquipment(found.points, buildings.map((polygon) => (polygon.type === "Polygon" ? polygon.coordinates[0]! : polygon.coordinates[0]![0]!).map((point) => local(point as Point))), roads);
+  const outlines = buildings.map((polygon) => (polygon.type === "Polygon" ? polygon.coordinates[0]! : polygon.coordinates[0]![0]!).map((point) => local(point as Point)));
+  // The lidar is registered to the building outlines first, so every position below is in the map's frame.
+  const registration = estimateShift(found.points, outlines);
+  const points = registration.applied ? found.points.map((p) => ({ ...p, x: p.x - registration.dx, y: p.y - registration.dy })) : found.points;
+  const shift = describeShift(registration);
+  const registered = registration.applied
+    ? ` Lidar positions are moved ${shift} to register the lidar to the mapped building outline: ${registration.reason}.`
+    : ` No registration shift is applied (${registration.reason}).`;
+  const detection = detectEquipment(points, outlines, roads);
   const retrievedAt = ctx.now();
-  const shared = (equipment: string, reason: string) => ({ equipment_type: text(equipment), basis: BASIS, confidence_reason: text(reason) });
+  const shared = (equipment: string, reason: string) => ({
+    equipment_type: text(equipment),
+    basis: BASIS,
+    confidence_reason: text(reason + registered),
+    registration_shift_m: text(shift),
+  });
 
   const features: MapFeature[] = [];
   detection.poles.forEach((pole, index) =>
@@ -149,7 +163,7 @@ export async function collectLidarEquipment(
       method: "computed",
       sourceDate: config.sourceDate,
       grade: "reference",
-      reason: "Found by shape in public lidar, which doesn't label poles or wires. Each is a detection to confirm in the field.",
+      reason: `Found by shape in public lidar, which doesn't label poles or wires. Each is a detection to confirm in the field.${registered}`,
     }),
   );
 
@@ -199,7 +213,7 @@ export async function collectLidarEquipment(
         method: "computed",
         sourceDate: config.sourceDate,
         grade: "reference",
-        reason: `${why} Detected in public lidar, not field verified; the utility confirms the service.`,
+        reason: `${why} Detected in public lidar, not field verified; the utility confirms the service.${registered}`,
       }),
     );
   }
