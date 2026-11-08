@@ -1,5 +1,5 @@
 import type { MapFeature, RecordVersion } from "@eqore/contract";
-import { feasibleBessZone } from "./zone.ts";
+import { APPLIED_RULES, feasibleBessZone } from "./zone.ts";
 
 type Point = [number, number];
 type Segment = [Point, Point];
@@ -94,6 +94,7 @@ export function conceptSiteLayout(record: RecordVersion, breakerLabel = "NEW BRE
   const pad = zone.pad;
   return [
     ...(zone.zone ? [zone.zone] : []),
+    ...(zone.remote ? [zone.remote] : []),
     {
       id: "concept-bess-pad",
       kind: "existing_equipment",
@@ -104,7 +105,7 @@ export function conceptSiteLayout(record: RecordVersion, breakerLabel = "NEW BRE
         ...shared(
           "bess_pad",
           pad
-            ? `The spot in the feasible zone with the shortest run to ${where}${pad.inWetlandBuffer ? ", inside a wetland buffer, which needs a Conservation Commission filing" : ""}${pad.beyondRoadAccess ? ", beyond 150 ft of a mapped road, so fire access is on site drives" : ""}. The engineer sets the real pad.`
+            ? `The spot in the feasible zone with the shortest run to ${where}.${pad.exposure === "needs_hazard_analysis" ? " Within 100 ft of exposures and over 600 kWh, so it needs a hazard analysis and AHJ approval (NFPA 855 4.8)." : ""}${pad.flags.length ? ` Flags: ${pad.flags.map((id) => APPLIED_RULES.find((rule) => rule.id === id)?.text ?? id).join("; ")}.` : ""} The engineer sets the real pad.`
             : `The point of open ground nearest ${where}. Clearances, setbacks, and the real pad location are the engineer's.`,
         ),
         ...(pad
@@ -112,6 +113,7 @@ export function conceptSiteLayout(record: RecordVersion, breakerLabel = "NEW BRE
               rotation_deg: { type: "quantity" as const, value: pad.rotationDeg, unit: "deg" },
               width_ft: { type: "quantity" as const, value: pad.widthFt, unit: "ft" },
               depth_ft: { type: "quantity" as const, value: pad.depthFt, unit: "ft" },
+              exposure: { type: "text" as const, value: pad.exposure },
             }
           : {}),
       },

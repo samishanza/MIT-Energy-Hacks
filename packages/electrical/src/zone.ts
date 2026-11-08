@@ -1,33 +1,71 @@
 import type { MapFeature, RecordVersion } from "@eqore/contract";
 
-// Where a battery pad can go on a site, by fixed rules applied to the record's geometry. A 2 ft grid, turned to
-// the main building's axis so pads line up with it, is marked cell by cell. Exact distance transforms give each
-// cell's distance to the lot line, buildings, roads, overhead lines, and wetlands. The zone is every cell some
-// pad placement covers, and the best pad is the one with the shortest run. A concept, which the engineer sets.
+// Where a battery pad can go on a site, by the siting rule table (fixtures/bess-siting-rules.json, each rule
+// labeled confirmed, secondary, or inference) applied to the record's geometry. A 2 ft grid, turned to the main
+// building's axis so pads line up with it, is marked cell by cell, with exact distance transforms giving each
+// cell's distance to the lot line, buildings, roads, overhead lines, wetlands, and utility transformers. The zone
+// is every cell some pad placement covers, and the best pad is the one with the shortest run. A concept, which the
+// engineer sets; checks the record can't run are listed as not checked.
 
 type Point = [number, number];
 
 export const PAD = { widthFt: 11.5, depthFt: 14, workingFt: 3 };
-export const MAX_RUN_FT = 150;
+// Search within 250 ft of the point of interconnection, and prefer 150 ft or less: a cost limit, not voltage drop.
+export const MAX_RUN_FT = 250;
+export const PREFERRED_RUN_FT = 150;
 const CELL = 2;
 const FEET_PER_DEGREE = (6371008.8 * Math.PI * 3.280839895) / 180;
+const EXPOSURE_FT = 10;
+const REMOTE_FT = 100;
 const WETLAND_BUFFER_FT = 100;
 const FIRE_ACCESS_FT = 150;
-const CLEAR_FT = 10;
+const LINE_FT = 10;
+const LINE_PREFERRED_FT = 20;
+const PADMOUNT_FT = 10;
+const MAX_ENERGY_NEAR_EXPOSURES_KWH = 600;
 // Distances run between 2 ft cell centers, so each clearance adds a cell to stay on the safe side.
 const MARGIN = CELL;
 
-export type ZoneRule = { rule: string; citation: string; effect: "excludes" | "flags" };
-export const ZONE_RULES: ZoneRule[] = [
-  { rule: "Inside the lot, at least 10 ft from the lot line", citation: "IFC 1207.8 / NFPA 855, adopted through 527 CMR 1.00", effect: "excludes" },
-  { rule: "At least 10 ft from every building wall", citation: "IFC 1207.8 / NFPA 855, adopted through 527 CMR 1.00", effect: "excludes" },
-  { rule: "At least 10 ft from the edge of a public way", citation: "IFC 1207.8 / NFPA 855, adopted through 527 CMR 1.00", effect: "excludes" },
-  { rule: "At least 10 ft from overhead conductors", citation: "Clearance from overhead lines", effect: "excludes" },
-  { rule: "Outside mapped wetlands", citation: "310 CMR 10.02", effect: "excludes" },
-  { rule: `Within ${MAX_RUN_FT} ft straight line of the service entrance, or the building when it isn't known`, citation: "Run length for a 400 A, 480 V connection", effect: "excludes" },
-  { rule: `Room for the ${PAD.widthFt} × ${PAD.depthFt} ft pad plus ${PAD.workingFt} ft of working space`, citation: "NEC 110.26", effect: "excludes" },
-  { rule: `Within ${WETLAND_BUFFER_FT} ft of a mapped wetland needs a Conservation Commission filing`, citation: "310 CMR 10.02(2)(b)", effect: "flags" },
-  { rule: `More than ${FIRE_ACCESS_FT} ft from a mapped public road needs fire access on site drives`, citation: "IFC 503.1.1", effect: "flags" },
+export type RuleStatus = "confirmed" | "secondary" | "inference";
+export type SitingRule = { id: string; status: RuleStatus; use: "excludes" | "flags" | "ranks" | "marks"; text: string; citation: string };
+
+// The rules this function applies, by their id in the rule table. A test checks them against the table.
+export const APPLIED_RULES: SitingRule[] = [
+  { id: "fire.exposure_lot_lines_10ft", status: "confirmed", use: "excludes", text: "At least 10 ft from lot lines", citation: "NFPA 855 (2020) 4.4.3.3 via 527 CMR 1.00 ch. 52" },
+  { id: "fire.exposure_buildings_10ft", status: "confirmed", use: "excludes", text: "At least 10 ft from buildings", citation: "NFPA 855 (2020) 4.4.3.3 via 527 CMR 1.00 ch. 52" },
+  { id: "fire.exposure_public_ways_10ft", status: "confirmed", use: "excludes", text: "At least 10 ft from the edge of public ways", citation: "NFPA 855 (2020) 4.4.3.3 via 527 CMR 1.00 ch. 52" },
+  { id: "util.overhead_line_10ft", status: "confirmed", use: "excludes", text: "At least 10 ft horizontally from overhead lines", citation: "29 CFR 1926.1408(a)(2)" },
+  { id: "util.padmount_objects_10ft", status: "confirmed", use: "excludes", text: "At least 10 ft from a utility pad-mount transformer", citation: "National Grid ESB 759B sec. 9A; Eversource C3802" },
+  { id: "env.wetland_resource_area", status: "secondary", use: "excludes", text: "Outside mapped wetlands", citation: "M.G.L. c.131 s.40; 310 CMR 10.02(1)" },
+  { id: "env.flood_v_coastal_a", status: "inference", use: "excludes", text: "Outside FEMA V and VE zones, when the record names one", citation: "780 CMR 10th ed. flood provisions, ASCE 24" },
+  { id: "elec.run_search_cap_250ft", status: "inference", use: "excludes", text: "Within 250 ft straight line of the point of interconnection", citation: "Project inference from NEC Ch. 9 Table 9" },
+  { id: "site.pad_fit", status: "inference", use: "excludes", text: "Room for the 11.5 x 14 ft pad plus 3 ft of working space", citation: "Project algorithm; NEC 110.26" },
+  { id: "elec.run_preferred_150ft", status: "inference", use: "ranks", text: "Shortest run first, preferring 150 ft or less", citation: "Project inference" },
+  { id: "util.overhead_line_20ft", status: "confirmed", use: "flags", text: "Prefer 20 ft from overhead lines of unconfirmed voltage", citation: "29 CFR 1926.1408(a)(2) Option 2" },
+  { id: "env.wetland_buffer_100ft", status: "secondary", use: "flags", text: "Within 100 ft of a wetland needs a Conservation Commission filing", citation: "310 CMR 10.02(2)(b)" },
+  { id: "fire.access_road_150ft", status: "confirmed", use: "flags", text: "More than 150 ft from a mapped public road: fire access must come by site drives", citation: "NFPA 855 (2020) 4.4.3.8; NFPA 1 (2021) 18.2.3.2.2" },
+  { id: "env.flood_a_zone", status: "secondary", use: "flags", text: "In an A zone, elevate to BFE + 2 ft", citation: "780 CMR 10th ed. ch. 16 via ASCE 24" },
+  { id: "env.slope_exclusion_10pct", status: "inference", use: "flags", text: "Site slope over 10% (a heuristic; the record has only the site's average slope)", citation: "Project inference" },
+  { id: "fire.remote_outdoor_100ft", status: "confirmed", use: "marks", text: "Remote: more than 100 ft from buildings, lot lines, and public ways", citation: "NFPA 855 (2020) 4.4.3.1 via 527 CMR 1.00 ch. 52" },
+  { id: "fire.max_stored_energy_600kwh", status: "confirmed", use: "marks", text: "Over 600 kWh near exposures needs a hazard analysis and AHJ approval", citation: "NFPA 855 (2020) 4.8 via 527 CMR 1.00 ch. 52" },
+];
+
+// Rules the record has no data to check. They stay for a person or a site visit.
+export const NOT_CHECKED: { id: string; text: string }[] = [
+  { id: "fire.egress_10ft", text: "10 ft from doors and other means of egress" },
+  { id: "fire.exposure_other_hazards_10ft", text: "10 ft from stored combustibles and hazardous materials" },
+  { id: "fire.vegetation_10ft", text: "Clear vegetation within 10 ft" },
+  { id: "fire.access_road_keep_clear", text: "The pad can't narrow a fire lane below 20 ft" },
+  { id: "site.drive_aisles_loading", text: "Out of drive aisles, loading docks, and dumpster enclosures" },
+  { id: "site.parking_stalls", text: "Parking stalls taken" },
+  { id: "site.underground_utilities", text: "Buried water, gas, storm, and electric lines" },
+  { id: "zoning.setbacks", text: "Town zoning setbacks and height limits" },
+  { id: "env.riverfront_200ft", text: "Riverfront Area, 200 ft (25 ft in listed cities), which needs a river layer" },
+  { id: "util.padmount_front_10ft", text: "10 ft in front of a utility transformer's doors, which needs its orientation" },
+  { id: "env.noise_massdep", text: "Sound at the property line" },
+  { id: "fire.water_supply", text: "Water supply for fire protection" },
+  { id: "fire.vehicle_impact", text: "Bollards where a vehicle could hit the pad" },
+  { id: "site.same_side_as_service", text: "Same side of the building as the electrical room" },
 ];
 
 export type BessPad = {
@@ -37,17 +75,22 @@ export type BessPad = {
   widthFt: number;
   depthFt: number;
   run: { from: Point; to: Point; feet: number };
-  inWetlandBuffer: boolean;
-  beyondRoadAccess: boolean;
+  exposure: "remote" | "needs_hazard_analysis" | "near_exposures";
+  flags: string[];
 };
 
 export type BessZone = {
   zone: MapFeature | null;
+  // The part of the zone more than 100 ft from every exposure.
+  remote: MapFeature | null;
   pad: BessPad | null;
   target: "service entrance" | "building wall";
   // When nothing qualifies, the rule that removed the last cells.
   reason: string | null;
 };
+
+const ruleText = (id: string) => APPLIED_RULES.find((rule) => rule.id === id)!.text;
+const isPadMount = (feature: MapFeature) => feature.attributes?.equipment_type?.type === "text" && /pad_mount_transformer/.test(feature.attributes.equipment_type.value);
 
 const isEntrance = (feature: MapFeature) => feature.attributes?.equipment_type?.type === "text" && feature.attributes.equipment_type.value === "service_entrance";
 const isOverhead = (feature: MapFeature) => {
@@ -175,12 +218,18 @@ const inside = (p: Point, ring: Point[]) => {
   return hit;
 };
 
-export function feasibleBessZone(record: RecordVersion): BessZone {
+export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: number } = {}): BessZone {
+  const energyKwh = options.energyKwh ?? 760;
   const parcels = record.features.filter((f) => f.kind === "property_line").flatMap(polygonsOf);
   const buildings = record.features.filter((f) => f.kind === "building_outline").flatMap(polygonsOf);
   const entrance = record.features.find(isEntrance);
   const target = entrance ? "service entrance" : "building wall";
-  if (!parcels.length || !buildings.length) return { zone: null, pad: null, target, reason: "The record has no lot or no building outline to place a pad against." };
+  const none = (reason: string): BessZone => ({ zone: null, remote: null, pad: null, target, reason });
+  if (!parcels.length || !buildings.length) return none("The record has no lot or no building outline to place a pad against.");
+  const value = (field: string) => record.values.find((v) => v.field === field)?.current ?? null;
+  const flood = value("flood_zone");
+  const floodZone = flood?.type === "text" ? flood.value.toUpperCase() : "";
+  if (/\bV/.test(floodZone)) return none(`No spot qualifies after this rule: ${ruleText("env.flood_v_coastal_a")}.`);
 
   // Local feet, then turned so the main building's long axis runs along the grid.
   const origin = (record.site.location ?? parcels[0]![0]![0]!) as Point;
@@ -195,7 +244,6 @@ export function feasibleBessZone(record: RecordVersion): BessZone {
     return [origin[0] + x / perLon, origin[1] + y / FEET_PER_DEGREE];
   };
   const turnRings = (polygon: Point[][]) => polygon.map((ring) => ring.map(turn));
-
   const lots = parcels.map(turnRings);
   const houses = buildings.map(turnRings);
   const entrancePoint = entrance && entrance.geometry.type === "Point" ? turn(entrance.geometry.coordinates as Point) : null;
@@ -241,33 +289,36 @@ export function feasibleBessZone(record: RecordVersion): BessZone {
   const toBuilding = distanceField(inBuilding, w, h);
   const roadLines = record.features.filter((f) => f.kind === "road").flatMap(linesOf).map((line) => line.map(turn));
   const toRoad = distanceField(draw(roadLines), w, h);
-  const width = record.values.find((v) => v.field === "road_width_ft")?.current;
+  const width = value("road_width_ft");
   const halfRoad = width?.type === "quantity" && width.value > 0 ? width.value / 2 : 15;
   const toLine = distanceField(draw(record.features.filter(isOverhead).flatMap(linesOf).map((line) => line.map(turn))), w, h);
+  const toPadMount = distanceField(draw(record.features.filter(isPadMount).flatMap(linesOf).map((line) => line.map(turn))), w, h);
   const wetlands = record.features.filter((f) => f.kind === "constraint" && f.field === "wetlands_nearby").flatMap(polygonsOf).map(turnRings);
   const inWetland = fill(wetlands);
   const toWetland = distanceField(inWetland, w, h);
-  const toTarget = entrancePoint ? null : toBuilding;
-  const run = (x: number, y: number) => (entrancePoint ? Math.hypot(center(x, y)[0] - entrancePoint[0], center(x, y)[1] - entrancePoint[1]) : toTarget![y * w + x]!);
+  const run = (x: number, y: number) => (entrancePoint ? Math.hypot(center(x, y)[0] - entrancePoint[0], center(x, y)[1] - entrancePoint[1]) : toBuilding[y * w + x]!);
+  const toExposure = (i: number) => Math.min(toLotLine[i]!, toBuilding[i]!, toRoad[i]! - halfRoad);
 
   // The exclusions in order, counting what survives each, to name the one that removed everything.
   const allowed = new Uint8Array(w * h).fill(1);
   const steps: [string, (i: number, x: number, y: number) => boolean][] = [
-    [ZONE_RULES[0]!.rule, (i) => inLot[i] === 1 && toLotLine[i]! >= CLEAR_FT + MARGIN],
-    [ZONE_RULES[1]!.rule, (i) => inBuilding[i] === 0 && toBuilding[i]! >= CLEAR_FT + MARGIN],
-    [ZONE_RULES[2]!.rule, (i) => toRoad[i]! >= halfRoad + CLEAR_FT + MARGIN],
-    [ZONE_RULES[3]!.rule, (i) => toLine[i]! >= CLEAR_FT + MARGIN],
-    [ZONE_RULES[4]!.rule, (i) => inWetland[i] === 0],
-    [ZONE_RULES[5]!.rule, (_, x, y) => run(x, y) <= MAX_RUN_FT],
+    ["fire.exposure_lot_lines_10ft", (i) => inLot[i] === 1 && toLotLine[i]! >= EXPOSURE_FT + MARGIN],
+    ["fire.exposure_buildings_10ft", (i) => inBuilding[i] === 0 && toBuilding[i]! >= EXPOSURE_FT + MARGIN],
+    ["fire.exposure_public_ways_10ft", (i) => toRoad[i]! >= halfRoad + EXPOSURE_FT + MARGIN],
+    ["util.overhead_line_10ft", (i) => toLine[i]! >= LINE_FT + MARGIN],
+    // A detected box's half-width added, since the box is drawn as a point.
+    ["util.padmount_objects_10ft", (i) => toPadMount[i]! >= PADMOUNT_FT + MARGIN + 3],
+    ["env.wetland_resource_area", (i) => inWetland[i] === 0],
+    ["elec.run_search_cap_250ft", (_, x, y) => run(x, y) <= MAX_RUN_FT],
   ];
-  for (const [rule, keep] of steps) {
+  for (const [id, keep] of steps) {
     let left = 0;
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const i = y * w + x;
       if (allowed[i] && !keep(i, x, y)) allowed[i] = 0;
       left += allowed[i]!;
     }
-    if (left === 0) return { zone: null, pad: null, target, reason: `No spot qualifies after this rule: ${rule}.` };
+    if (left === 0) return none(`No spot qualifies after this rule: ${ruleText(id)}.`);
   }
 
   // Pad placements, both ways round, where every cell of the pad and its working space is allowed.
@@ -275,44 +326,53 @@ export function feasibleBessZone(record: RecordVersion): BessZone {
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) sums[(y + 1) * (w + 1) + x + 1] = allowed[y * w + x]! + sums[y * (w + 1) + x + 1]! + sums[(y + 1) * (w + 1) + x]! - sums[y * (w + 1) + x]!;
   const block = (x: number, y: number, bw: number, bh: number) => sums[(y + bh) * (w + 1) + x + bw]! - sums[y * (w + 1) + x + bw]! - sums[(y + bh) * (w + 1) + x]! + sums[y * (w + 1) + x]!;
   const long = Math.ceil((PAD.depthFt + PAD.workingFt) / CELL), short = Math.ceil(PAD.widthFt / CELL);
-  const zone = new Int32Array((w + 1) * (h + 1));
-  type Placement = { x: number; y: number; bw: number; bh: number; run: number; buffer: boolean; access: boolean };
-  // Shortest run first, in 10 ft steps; then outside the wetland buffer; then within reach of a road; then run.
-  const rank = (p: Placement) => [Math.round(p.run / 10), p.buffer ? 1 : 0, p.access ? 1 : 0, p.run];
+  const marks = new Int32Array((w + 1) * (h + 1));
+  type Placement = { x: number; y: number; bw: number; bh: number; run: number; flags: string[]; remote: boolean };
+  // Shortest run first in 10 ft steps, with the preferred 150 ft ahead of beyond it; then fewer flags; then run.
+  const rank = (p: Placement) => [p.run > PREFERRED_RUN_FT ? 1 : 0, Math.round(p.run / 10), p.flags.length, p.run];
   const before = (a: Placement, b: Placement) => {
     const ra = rank(a), rb = rank(b);
-    const k = ra.findIndex((value, index) => value !== rb[index]);
+    const k = ra.findIndex((v, index) => v !== rb[index]);
     return k >= 0 && ra[k]! < rb[k]!;
   };
   let best: Placement | null = null;
   for (const [bw, bh] of [[long, short], [short, long]] as const) {
     for (let y = 0; y + bh <= h; y++) for (let x = 0; x + bw <= w; x++) {
       if (block(x, y, bw, bh) !== bw * bh) continue;
-      zone[y * (w + 1) + x]! += 1; zone[y * (w + 1) + x + bw]! -= 1; zone[(y + bh) * (w + 1) + x]! -= 1; zone[(y + bh) * (w + 1) + x + bw]! += 1;
-      let nearest = Infinity, buffer = false, access = false;
+      marks[y * (w + 1) + x]! += 1; marks[y * (w + 1) + x + bw]! -= 1; marks[(y + bh) * (w + 1) + x]! -= 1; marks[(y + bh) * (w + 1) + x + bw]! += 1;
+      let nearest = Infinity, buffer = false, access = false, line = false, exposure = Infinity;
       for (let yy = y; yy < y + bh; yy++) for (let xx = x; xx < x + bw; xx++) {
         const i = yy * w + xx;
         if (yy === y || yy === y + bh - 1 || xx === x || xx === x + bw - 1) nearest = Math.min(nearest, run(xx, yy));
         if (toWetland[i]! < WETLAND_BUFFER_FT) buffer = true;
         if (toRoad[i]! > FIRE_ACCESS_FT + halfRoad) access = true;
+        if (toLine[i]! < LINE_PREFERRED_FT) line = true;
+        exposure = Math.min(exposure, toExposure(i));
       }
-      const placement = { x, y, bw, bh, run: nearest, buffer, access };
+      const flags = [buffer && "env.wetland_buffer_100ft", access && "fire.access_road_150ft", line && "util.overhead_line_20ft"].filter((f): f is string => Boolean(f));
+      const placement = { x, y, bw, bh, run: nearest, flags, remote: exposure > REMOTE_FT };
       if (!best || before(placement, best)) best = placement;
     }
   }
-  if (!best) return { zone: null, pad: null, target, reason: `No spot qualifies after this rule: ${ZONE_RULES[6]!.rule}.` };
+  if (!best) return none(`No spot qualifies after this rule: ${ruleText("site.pad_fit")}.`);
 
-  const covered = new Uint8Array(w * h);
   // Two-dimensional prefix sum of the placement marks gives how many placements cover each cell.
   const cover = new Int32Array(w * h);
+  const covered = new Uint8Array(w * h), remoteCells = new Uint8Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    cover[y * w + x] = zone[y * (w + 1) + x]! + (x > 0 ? cover[y * w + x - 1]! : 0) + (y > 0 ? cover[(y - 1) * w + x]! : 0) - (x > 0 && y > 0 ? cover[(y - 1) * w + x - 1]! : 0);
-    covered[y * w + x] = cover[y * w + x]! > 0 ? 1 : 0;
+    const i = y * w + x;
+    cover[i] = marks[y * (w + 1) + x]! + (x > 0 ? cover[i - 1]! : 0) + (y > 0 ? cover[i - w]! : 0) - (x > 0 && y > 0 ? cover[i - w - 1]! : 0);
+    covered[i] = cover[i]! > 0 ? 1 : 0;
+    remoteCells[i] = covered[i] && toExposure(i) > REMOTE_FT + MARGIN ? 1 : 0;
   }
-  const cells = covered.reduce((sum, v) => sum + v, 0);
-  const rings = outline(covered, w, h).map((ring) => ring.map(([x, y]) => back([minU + x * CELL, minV + y * CELL])));
-  const outer = rings.filter((ring) => signedArea(ring) > 0), holes = rings.filter((ring) => signedArea(ring) <= 0);
-  const polygons = outer.map((ring) => [ring, ...holes.filter((hole) => inside(hole[0]!, ring))]);
+  const geometryOf = (mask: Uint8Array): MapFeature["geometry"] | null => {
+    const rings = outline(mask, w, h).map((ring) => ring.map(([x, y]) => back([minU + x * CELL, minV + y * CELL])));
+    const outer = rings.filter((ring) => signedArea(ring) > 0), holes = rings.filter((ring) => signedArea(ring) <= 0);
+    const polygons = outer.map((ring) => [ring, ...holes.filter((hole) => inside(hole[0]!, ring))]);
+    if (!polygons.length) return null;
+    return polygons.length === 1 ? { type: "Polygon", coordinates: polygons[0]! } : { type: "MultiPolygon", coordinates: polygons };
+  };
+  const area = (mask: Uint8Array) => mask.reduce((sum, v) => sum + v, 0) * CELL * CELL;
 
   const b = best;
   const corners: Point[] = [[b.x, b.y], [b.x + b.bw, b.y], [b.x + b.bw, b.y + b.bh], [b.x, b.y + b.bh], [b.x, b.y]].map(([x, y]) => back([minU + x! * CELL, minV + y! * CELL]));
@@ -340,35 +400,64 @@ export function feasibleBessZone(record: RecordVersion): BessZone {
       to = wall;
     }
   }
-  const longAlongAxis = b.bw >= b.bh;
+  const flags = [...b.flags];
+  if (/\bA/.test(floodZone)) flags.push("env.flood_a_zone");
+  const slope = value("site_slope_pct");
+  if (slope?.type === "quantity" && slope.value > 10) flags.push("env.slope_exclusion_10pct");
+  const exposure: BessPad["exposure"] = b.remote ? "remote" : energyKwh > MAX_ENERGY_NEAR_EXPOSURES_KWH ? "needs_hazard_analysis" : "near_exposures";
   const pad: BessPad = {
     center: back(middle),
     corners,
-    rotationDeg: Math.round((((angle * 180) / Math.PI + (longAlongAxis ? 0 : 90)) % 180 + 180) % 180),
+    rotationDeg: Math.round((((angle * 180) / Math.PI + (b.bw >= b.bh ? 0 : 90)) % 180 + 180) % 180),
     widthFt: PAD.widthFt,
     depthFt: PAD.depthFt,
     run: { from: back(from), to: back(to), feet: Math.round(Math.hypot(from[0] - to[0], from[1] - to[1])) },
-    inWetlandBuffer: b.buffer,
-    beyondRoadAccess: b.access,
+    exposure,
+    flags,
   };
-  const feature: MapFeature = {
+
+  const text = (v: string) => ({ type: "text" as const, value: v });
+  const remoteGeometry = geometryOf(remoteCells);
+  const zone: MapFeature = {
     id: "concept-feasible-bess-zone",
     kind: "candidate_area",
     field: "candidate_areas",
-    geometry: polygons.length === 1 ? { type: "Polygon", coordinates: polygons[0]! } : { type: "MultiPolygon", coordinates: polygons },
+    geometry: geometryOf(covered)!,
     label: "(N) FEASIBLE BESS ZONE",
     attributes: {
-      zone_kind: { type: "text", value: "feasible_bess" },
-      area_sqft: { type: "quantity", value: cells * CELL * CELL, unit: "sqft" },
+      zone_kind: text("feasible_bess"),
+      area_sqft: { type: "quantity", value: area(covered), unit: "sqft" },
+      remote_area_sqft: { type: "quantity", value: area(remoteCells), unit: "sqft" },
       max_run_ft: { type: "quantity", value: MAX_RUN_FT, unit: "ft" },
-      run_target: { type: "text", value: target },
-      rules: { type: "text", value: ZONE_RULES.map((r) => `${r.effect === "excludes" ? "Excludes" : "Flags"}: ${r.rule} (${r.citation})`).join("; ") },
-      basis: { type: "text", value: "concept" },
-      confidence_reason: {
-        type: "text",
-        value: `Every spot where an ${PAD.widthFt} × ${PAD.depthFt} ft pad with ${PAD.workingFt} ft of working space fits under the rules, within ${MAX_RUN_FT} ft of the ${target}. Built from mapped geometry: the lot, buildings, road centerlines, detected overhead lines, and mapped wetlands.`,
-      },
+      preferred_run_ft: { type: "quantity", value: PREFERRED_RUN_FT, unit: "ft" },
+      run_target: text(target),
+      stored_energy_kwh: { type: "quantity", value: energyKwh, unit: "kWh" },
+      near_exposures: text(
+        energyKwh > MAX_ENERGY_NEAR_EXPOSURES_KWH
+          ? `needs_hazard_analysis: ${energyKwh} kWh is over NFPA 855's 600 kWh near exposures, so spots within 100 ft of buildings, lot lines, or public ways need a hazard analysis and AHJ approval`
+          : "allowed: within NFPA 855's 600 kWh near exposures",
+      ),
+      exposure_exception: text("Option, not in the zone: the 10 ft exposure distance can drop to 3 ft with a barrier or UL 9540A results the AHJ accepts (NFPA 855 (2020) 4.4.3.3 exceptions)"),
+      rules_applied: text(APPLIED_RULES.map((rule) => `${rule.use}: ${rule.text} [${rule.status}${rule.status === "inference" ? ", heuristic" : ""}] (${rule.citation}) {${rule.id}}`).join("; ")),
+      not_checked: text(NOT_CHECKED.map((rule) => `${rule.text} {${rule.id}}`).join("; ")),
+      basis: text("concept"),
+      confidence_reason: text(`Every spot where an ${PAD.widthFt} x ${PAD.depthFt} ft pad with ${PAD.workingFt} ft of working space fits under the rules, within ${MAX_RUN_FT} ft of the ${target}, from the mapped lot, buildings, road centerlines, detected overhead lines and equipment, and mapped wetlands.`),
     },
   };
-  return { zone: feature, pad, target, reason: null };
+  const remote: MapFeature | null = remoteGeometry
+    ? {
+        id: "concept-feasible-bess-remote",
+        kind: "candidate_area",
+        field: "candidate_areas",
+        geometry: remoteGeometry,
+        label: "(N) REMOTE BESS ZONE",
+        attributes: {
+          zone_kind: text("feasible_bess_remote"),
+          area_sqft: { type: "quantity", value: area(remoteCells), unit: "sqft" },
+          basis: text("concept"),
+          confidence_reason: text("The part of the feasible zone more than 100 ft from buildings, lot lines, and public ways, where NFPA 855 treats an outdoor ESS as remote."),
+        },
+      }
+    : null;
+  return { zone, remote, pad, target, reason: null };
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { MapFeature, RecordVersion } from "@eqore/contract";
-import { feasibleBessZone, MAX_RUN_FT } from "./zone.ts";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { APPLIED_RULES, NOT_CHECKED, feasibleBessZone, MAX_RUN_FT } from "./zone.ts";
 
 // A labeled synthetic site, laid out in feet east and north of a point and converted to degrees.
 const ORIGIN = [-71.5, 42.2] as const;
@@ -71,12 +73,35 @@ describe("the feasible battery zone", () => {
     const swamp = feature("swamp", "constraint", "wetlands_nearby", { type: "Polygon", coordinates: [box(-100, -100, 700, 500)] });
     expect(feasibleBessZone(site([swamp])).reason).toBe("No spot qualifies after this rule: Outside mapped wetlands.");
     // A lot 30 ft wider than the building on each side leaves a 6 ft strip once both 10 ft clearances apply: too narrow for the pad.
-    expect(feasibleBessZone(site([], box(170, 120, 430, 280))).reason).toContain("Room for the 11.5 × 14 ft pad");
+    expect(feasibleBessZone(site([], box(170, 120, 430, 280))).reason).toContain("Room for the 11.5 x 14 ft pad");
   });
 
   it("measures to the building when no entrance is known", () => {
     const { target, pad } = feasibleBessZone(site());
     expect(target).toBe("building wall");
     expect(pad!.run.feet).toBeLessThan(16);
+  });
+});
+
+describe("the siting rule table", () => {
+  const table = JSON.parse(readFileSync(fileURLToPath(new URL("../../../fixtures/bess-siting-rules.json", import.meta.url)), "utf8")) as { id: string; notes?: string }[];
+
+  it("applies and lists only rules in the table, with the table's status", () => {
+    const ids = new Set(table.map((rule) => rule.id));
+    for (const rule of [...APPLIED_RULES, ...NOT_CHECKED]) expect(ids.has(rule.id), rule.id).toBe(true);
+    for (const rule of APPLIED_RULES) {
+      const notes = table.find((entry) => entry.id === rule.id)!.notes ?? "";
+      expect(notes.toUpperCase().startsWith(rule.status.toUpperCase()), `${rule.id} is ${rule.status}`).toBe(true);
+    }
+  });
+
+  it("marks the remote part of the zone and the pad's exposure, and lists what it can't check", () => {
+    const big = site([entrance(200, 200)], box(-300, -300, 900, 400));
+    const { zone, remote, pad } = feasibleBessZone(big);
+    expect(remote?.attributes?.zone_kind).toEqual({ type: "text", value: "feasible_bess_remote" });
+    expect(pad!.exposure).toBe("needs_hazard_analysis");
+    expect(String((zone!.attributes!.not_checked as { value: string }).value)).toContain("fire.egress_10ft");
+    expect(String((zone!.attributes!.rules_applied as { value: string }).value)).toContain("heuristic");
+    expect(feasibleBessZone(big, { energyKwh: 500 }).pad!.exposure).toBe("near_exposures");
   });
 });
