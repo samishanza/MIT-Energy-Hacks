@@ -1,5 +1,27 @@
 import type { JsonSource } from "../src/json-api.ts";
-import type { TerritorySource } from "../src/registry.ts";
+import type { ArcgisEntry, TerritorySource } from "../src/registry.ts";
+
+// HIFLD's transmission lines, as the US Fish and Wildlife Service republishes them. The national HIFLD Open site closed in 2025.
+export const hifldTransmission: ArcgisEntry = {
+  kind: "arcgis_rest",
+  id: "hifld-transmission-lines",
+  name: "HIFLD electric power transmission lines (US Fish and Wildlife Service copy)",
+  serviceUrl: "https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/US_Electric_Power_Transmission_Lines/FeatureServer",
+  layer: 0,
+  searchRadiusMeters: 3000,
+  licenseNote: "HIFLD data republished by the US Fish and Wildlife Service, whose license text disclaims liability and warranty and asks users to read the metadata. Source dates are often 2015 or older. The ArcGIS Online host answered robots.txt with 403, so no rule was read.",
+  robotsChecked: "2026-11-07",
+  objectIdAttribute: "OBJECTID",
+  sourceDate: { attribute: "SOURCEDATE", format: "epoch_ms" },
+  outFields: ["OBJECTID", "OWNER", "VOLTAGE", "SUB_1", "SUB_2", "STATUS", "SOURCEDATE"],
+  fields: [
+    { field: "line_voltage", attribute: "VOLTAGE", type: "quantity", unit: "kV", sentinels: [-999999], zeroIsMissing: true, grade: "reference" },
+    { field: "line_owner", attribute: "OWNER", type: "text", blankValues: ["NOT AVAILABLE"], grade: "reference" },
+    { field: "line_from", attribute: "SUB_1", type: "text", blankValues: ["NOT AVAILABLE"], grade: "reference" },
+    { field: "line_to", attribute: "SUB_2", type: "text", blankValues: ["NOT AVAILABLE"], grade: "reference" },
+    { field: "line_status", attribute: "STATUS", type: "text", grade: "reference" },
+  ],
+};
 
 export const hifldTerritories: Omit<TerritorySource, "withoutMap"> = {
   nameAttribute: "NAME",

@@ -46,7 +46,7 @@ export const californiaPge: RegionConfig = {
   roads: censusLocalRoads,
   layers: [
     {
-      mode: { kind: "items", field: "substations_nearby", noun: "mapped substation", plural: "mapped substations", nameAttribute: "SubstationName", feature: "substation", limit: 3, absent: "unknown", note: "Nearby context with measured distance. Distance doesn't show which substation serves the site." },
+      mode: { kind: "items", field: "substations_nearby", noun: "mapped substation", plural: "mapped substations", nameAttribute: "SubstationName", feature: "substation", limit: 50, absent: "unknown", note: "Nearby context with measured distance. Distance doesn't show which substation serves the site." },
       entry: {
         ...PGE_ENTRY,
         id: "pge-substations",
@@ -60,7 +60,7 @@ export const californiaPge: RegionConfig = {
       },
     },
     {
-      mode: { kind: "items", field: "transmission_nearby", noun: "mapped transmission line", plural: "mapped transmission lines", nameAttribute: "TLINE_NAME", feature: "utility_line", limit: 5, absent: "unknown", note: "Nearby context with measured distance. A transmission line isn't a point of interconnection for this site." },
+      mode: { kind: "items", field: "transmission_nearby", noun: "mapped transmission line", plural: "mapped transmission lines", nameAttribute: "TLINE_NAME", labelPrefix: "Transmission line ", feature: "utility_line", limit: 50, absent: "unknown", note: "Nearby context with measured distance. A transmission line isn't a point of interconnection for this site." },
       entry: {
         ...PGE_ENTRY,
         id: "pge-transmission",

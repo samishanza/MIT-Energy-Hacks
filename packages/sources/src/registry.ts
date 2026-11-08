@@ -83,6 +83,19 @@ export type GridSource = {
   widenToMeters?: number;
   // Other layers of the same utility, joined to each feeder candidate by the feeder's id.
   details?: FeederDetail[];
+  // Line segments near the site, drawn as mapped, with how each is built. They also show how the building is likely fed.
+  segments?: LineSegments;
+};
+
+export type LineSegments = {
+  entries: ArcgisEntry[];
+  // The search reaches at least this far, so a line just beyond the feeder search still shows.
+  searchMeters: number;
+  feederAttribute: string;
+  constructionAttribute: string;
+  phasesAttribute: string;
+  // Construction codes to words, such as OH to overhead.
+  construction: Record<string, string>;
 };
 
 export type FeederDetail =
@@ -139,6 +152,8 @@ export type LayerSource = {
         noun: string;
         plural: string;
         nameAttribute: string;
+        // Words before each item's name on the map, such as "Transmission line ".
+        labelPrefix?: string;
         feature: MapFeature["kind"];
         limit: number;
         // Whether an empty search means none are mapped here, or says nothing either way.

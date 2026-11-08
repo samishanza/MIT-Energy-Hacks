@@ -52,6 +52,8 @@ function equipmentLabel(value: Value): string {
 function labelVerifiedEquipment(features: MapFeature[], values: Value[]): MapFeature[] {
   return features.map((feature) => {
     if (feature.kind !== "capture_pin" && feature.kind !== "existing_equipment") return feature;
+    // Equipment the collector inferred from public maps keeps its own label, which says it isn't verified.
+    if (feature.attributes?.basis) return feature;
     const value = values.find((entry) => entry.field === feature.field);
     if (value?.state !== "verified") return { ...feature, kind: "capture_pin", label: value?.label ?? feature.label };
     return { ...feature, kind: "existing_equipment", label: equipmentLabel(value) };

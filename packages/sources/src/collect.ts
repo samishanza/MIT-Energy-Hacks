@@ -1,7 +1,9 @@
 import type { BaseMap, MapFeature, Observation, Site, SourceRun } from "@eqore/contract";
 import { observe, queryArcgis, type CollectContext, type FetchLike, type PolygonGeometry } from "./arcgis.ts";
 import { queryTerritories, servingUtility } from "./checks/energy.ts";
+import { area } from "@turf/turf";
 import { collectGrid } from "./checks/grid.ts";
+import { inferServicePath } from "./checks/service-path.ts";
 import { padCandidates, type CandidateResult } from "./checks/candidates.ts";
 import { measureSite, type Measurements } from "./checks/measure.ts";
 import { anchorPhysical, collectOutlines } from "./checks/physical.ts";
@@ -157,6 +159,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
     pending(source.entry.id, source.entry.name);
     if (source.lineGeometry) pending(source.lineGeometry.id, source.lineGeometry.name);
     for (const detail of source.details ?? []) for (const entry of detail.kind === "construction" ? detail.entries : [detail.entry]) pending(entry.id, entry.name);
+    for (const entry of source.segments?.entries ?? []) pending(entry.id, entry.name);
   }
   if (region.roads && parcel) pending(region.roads.entry.id, region.roads.entry.name);
   for (const layer of region.layers ?? []) pending(layer.entry.id, layer.entry.name);
@@ -203,6 +206,8 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
   ]);
 
   const collected = [...physical.observations, ...(outlines?.observations ?? []), ...grid.observations];
+  const mainBuilding = [...(outlines?.measurable.features ?? [])].sort((a, b) => area(b.geometry) - area(a.geometry))[0];
+  const service = region.grid.some((source) => source.segments) ? inferServicePath(mainBuilding?.geometry ?? null, grid.segments, grid.lines[0]?.result ?? null, ctx) : null;
   let measurements: Measurements = { observations: [], features: [] };
   if (parcel) {
     const assessorArea = collected.find((observation) => observation.field === "building_area_sqft" && observation.value?.type === "quantity")?.value;
@@ -248,6 +253,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
     observations: [
       ...collected,
       ...measurements.observations,
+      ...(service?.observations ?? []),
       ...candidates.observations,
       // A better local value, such as lidar slope or a 1 m point elevation, is read after Earth Engine's, so it stays current.
       ...(earth?.observations ?? []),
@@ -258,7 +264,7 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
       ...unavailable,
       ...personRoutes,
     ],
-    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features)],
+    features: [...physical.features, ...(outlines?.features ?? []), ...grid.features, ...measurements.features, ...candidates.features, ...layers.flatMap((layer) => layer.features), ...(service?.features ?? [])],
     baseMap: physical.baseMap,
     // A source still pending at the end was never read, such as a feeder's detail layers when no feeder was found.
     // The value it would have filled says why, so the finished record lists only sources that ran.

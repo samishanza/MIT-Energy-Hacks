@@ -1,14 +1,19 @@
-import type { MapFeature, Observation, SourceRun } from "@eqore/contract";
+import type { MapFeature, Observation, ObservedValue, SourceRun } from "@eqore/contract";
+import { FEEDER_ATTRIBUTES } from "../fields.ts";
 import { observe, queryArcgis, toObservations, type ArcgisFeature, type ArcgisResult, type CollectContext, type PolygonGeometry, type SpatialQuery } from "../arcgis.ts";
 import { sourceOf, type ArcgisEntry, type FeederDetail, type RegionConfig } from "../registry.ts";
 import type { GridOutcome } from "./energy.ts";
 
 export type GridAnchor = { parcel: PolygonGeometry } | { longitude: number; latitude: number };
 
+// A mapped line segment near the site, with how it's built.
+export type NearbySegment = { feature: ArcgisFeature & { geometry: NonNullable<ArcgisFeature["geometry"]> }; feeder: string; construction: string; phases: number | null; utilityName: string; source: ArcgisResult };
+
 export type GridCollection = {
   observations: Observation[];
   features: MapFeature[];
   runs: SourceRun[];
+  segments: NearbySegment[];
   // The drawn lines, for measuring distances to them.
   lines: { result: ArcgisResult; features: ArcgisFeature[]; label: (feature: ArcgisFeature) => string }[];
   outcomes: GridOutcome[];
@@ -131,6 +136,7 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
           field: "feeder",
           geometry: feature.geometry,
           label: `Nearby line: ${String(name)}`,
+          attributes: { line_class: { type: "text", value: "feeder candidate" }, feeder_id: { type: "text", value: feature.objectId }, utility: { type: "text", value: source.utilityName } },
         });
       }
     });
@@ -165,5 +171,60 @@ export async function collectGrid(region: RegionConfig, anchor: GridAnchor, ctx:
       );
     }
   }
-  return { observations, features, runs, lines: measuredLines, outcomes };
+  // Every segment near the site is drawn, overhead and underground, three-phase and single-phase.
+  const segments: NearbySegment[] = [];
+  await Promise.all(
+    results.map(async ({ source, searchedMeters }) => {
+      const config = source.segments;
+      if (!config) return;
+      const meters = Math.max(config.searchMeters, searchedMeters);
+      const found = await Promise.all(config.entries.map((entry) => queryArcgis(entry, queryFor(entry, anchor, meters), ctx)));
+      for (const result of found) {
+        runs.push(result.run);
+        for (const feature of result.features) {
+          if (!feature.geometry) continue;
+          const code = String(feature.attributes[config.constructionAttribute] ?? "");
+          const phases = Number(feature.attributes[config.phasesAttribute]);
+          segments.push({
+            feature: feature as NearbySegment["feature"],
+            feeder: String(feature.attributes[config.feederAttribute] ?? "unnamed feeder"),
+            construction: config.construction[code] ?? (code || "construction not stated"),
+            phases: Number.isFinite(phases) && phases > 0 ? phases : null,
+            utilityName: source.utilityName,
+            source: result,
+          });
+        }
+      }
+    }),
+  );
+  segments.sort((a, b) => a.feeder.localeCompare(b.feeder) || a.feature.objectId.localeCompare(b.feature.objectId));
+  segments.forEach((segment, index) => {
+    features.push({
+      id: `segment-${index + 1}`,
+      kind: "utility_line",
+      field: "feeder",
+      geometry: segment.feature.geometry,
+      label: `${segment.feeder}: ${segment.phases ? `${segment.phases}-phase ` : ""}${segment.construction} line, as mapped`,
+      attributes: {
+        line_class: { type: "text", value: "distribution segment" },
+        feeder: { type: "text", value: segment.feeder },
+        construction: { type: "text", value: segment.construction },
+        ...(segment.phases ? { phases: { type: "quantity", value: segment.phases, unit: "phase" } } : {}),
+      },
+    });
+  });
+
+  // A drawn feeder carries what the record knows about it, so the map shows it where the line is.
+  const known = new Map<string, Record<string, ObservedValue>>();
+  for (const observation of observations) {
+    const key = FEEDER_ATTRIBUTES[observation.field];
+    const id = observation.locator.objectId;
+    if (!key || !id || observation.kind !== "reading" || !observation.value) continue;
+    known.set(id, { ...(known.get(id) ?? {}), [key]: observation.value });
+  }
+  for (const feature of features) {
+    const id = feature.attributes?.feeder_id?.type === "text" ? feature.attributes.feeder_id.value : null;
+    if (id && known.has(id)) feature.attributes = { ...feature.attributes, ...known.get(id) };
+  }
+  return { observations, features, runs, lines: measuredLines, outcomes, segments };
 }
