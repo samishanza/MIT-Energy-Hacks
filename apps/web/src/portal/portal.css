@@ -1,0 +1,17 @@
+.portal { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; color: var(--ink); background: var(--paper); font-family: var(--font); }
+.portal h1 { font-size: 22px; margin: 0 0 4px; }
+.portal h2 { font-size: 16px; margin: 24px 0 8px; }
+.portal-address { font-weight: 600; margin: 0 0 8px; }
+.portal-docs, .portal-sent { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 12px; }
+.portal-doc { background: var(--white); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px; }
+.portal-doc-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.portal-status { font-size: 13px; white-space: nowrap; color: var(--missing); }
+.portal-received .portal-status { color: var(--inferred); }
+.portal-confirmed .portal-status { color: var(--verified); }
+.portal-doc .note { margin: 6px 0 10px; }
+.portal-pick { display: inline-block; padding: 8px 14px; border-radius: 999px; background: var(--accent); color: var(--white); cursor: pointer; font-size: 14px; }
+.portal-pick.disabled { opacity: 0.5; pointer-events: none; }
+.portal-ok { color: var(--verified); }
+.portal .error { color: var(--conflicting); }
+.portal footer { margin-top: 24px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

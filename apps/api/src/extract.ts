@@ -17,6 +17,9 @@ export const EXTRACTION_FIELDS: ExtractionField[] = [
   { field: "main_device_rating", type: "quantity", unit: "A", description: "The ampere rating printed on the exterior label of the main switchboard or main breaker." },
   { field: "service_voltage", type: "text", description: "The voltage printed on the exterior label, written as printed, such as 480Y/277 V." },
   { field: "transformer_kva", type: "quantity", unit: "kVA", description: "The utility transformer's kVA rating, as printed on its nameplate or stenciled on the tank or cabinet. Report the unit exactly as printed." },
+  { field: "bus_rating", type: "quantity", unit: "A", description: "The main switchboard's bus ampere rating, as printed on its label or shown on a one-line diagram." },
+  { field: "kaic_rating", type: "quantity", unit: "kA", description: "The short-circuit (interrupting or withstand) rating of the main switchboard or main breaker, as printed, such as 65 kAIC. Report the unit exactly as printed." },
+  { field: "switchgear_make_model", type: "text", description: "The main switchboard's manufacturer and model, as printed on its label or named on the drawings." },
 ];
 
 const DraftReadingSchema = z.object({

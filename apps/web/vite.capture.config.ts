@@ -8,6 +8,6 @@ export default defineConfig({
   build: {
     outDir: "dist-capture",
     emptyOutDir: true,
-    rollupOptions: { input: "capture.html" },
+    rollupOptions: { input: ["capture.html", "portal.html"] },
   },
 });

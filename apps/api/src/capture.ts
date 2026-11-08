@@ -116,9 +116,9 @@ export function readCaptureRequest(deps: CaptureDeps, token: string): CaptureReq
   });
 }
 
-type AcceptedType = { contentType: ExtractionRequest["contentType"]; extension: string };
+export type AcceptedType = { contentType: ExtractionRequest["contentType"]; extension: string };
 
-function sniffType(bytes: Uint8Array): AcceptedType | null {
+export function sniffType(bytes: Uint8Array): AcceptedType | null {
   const starts = (...signature: number[]) => signature.every((byte, index) => bytes[index] === byte);
   if (starts(0xff, 0xd8, 0xff)) return { contentType: "image/jpeg", extension: ".jpg" };
   if (starts(0x89, 0x50, 0x4e, 0x47)) return { contentType: "image/png", extension: ".png" };
@@ -158,7 +158,7 @@ function checkPosition(metadata: CaptureMetadata, latest: RecordVersion): Positi
   };
 }
 
-const UNIT_NAMES: Record<string, string> = { a: "A", amp: "A", amps: "A", ampere: "A", amperes: "A", kw: "kW" };
+const UNIT_NAMES: Record<string, string> = { a: "A", amp: "A", amps: "A", ampere: "A", amperes: "A", kw: "kW", ka: "kA", kaic: "kA", kva: "kVA" };
 
 function normalizeUnit(unit: string | null): string | null {
   if (!unit) return null;
@@ -168,7 +168,7 @@ function normalizeUnit(unit: string | null): string | null {
 type ImageSize = { width: number; height: number };
 
 // Read from the file's header, so a region can be stored in the original image's pixels.
-function imageSize(bytes: Uint8Array, contentType: AcceptedType["contentType"]): ImageSize | null {
+export function imageSize(bytes: Uint8Array, contentType: AcceptedType["contentType"]): ImageSize | null {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (contentType === "image/png") {
     return bytes.length >= 24 ? { width: view.getUint32(16), height: view.getUint32(20) } : null;
@@ -216,9 +216,9 @@ function interpret(reading: DraftReading, spec: ExtractionField): Interpreted {
   };
 }
 
-type EvidenceFile = { id: string; hash: string; uploadedBy: string; synthetic: boolean };
+export type EvidenceFile = { id: string; hash: string; uploadedBy: string; synthetic: boolean };
 
-function draftObservations(file: EvidenceFile, siteId: string, extraction: Extraction, fields: ExtractionField[], primary: string, now: string, size: ImageSize | null, positionFlag?: string): Observation[] {
+export function draftObservations(file: EvidenceFile, siteId: string, extraction: Extraction, fields: ExtractionField[], primary: string, now: string, size: ImageSize | null, positionFlag?: string): Observation[] {
   const source: Source = {
     id: "capture-draft",
     name: `Claude draft from a file uploaded by ${file.uploadedBy}`,

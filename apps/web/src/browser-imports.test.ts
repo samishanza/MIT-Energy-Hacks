@@ -113,7 +113,7 @@ describe("browser bundle", () => {
   const { visited, problems } = walk(entries);
 
   it("walks from every page's entry script into the workspace packages", () => {
-    expect(entries.map((file) => relative(WEB, file).replaceAll("\\", "/")).sort()).toEqual(["src/capture/main.tsx", "src/main.tsx"]);
+    expect(entries.map((file) => relative(WEB, file).replaceAll("\\", "/")).sort()).toEqual(["src/capture/main.tsx", "src/main.tsx", "src/portal/main.tsx"]);
     expect(visited.some((file) => file.startsWith("packages/"))).toBe(true);
   });
 
