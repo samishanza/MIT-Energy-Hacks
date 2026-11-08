@@ -66,6 +66,23 @@ const POLE_TOP_MAX_M = 15;
 const BUILDING_CLEARANCE_M = 2;
 const BUILDING_RETURNS = 3;
 
+// The thresholds of the box, light-pole, and hydrant rules, in metres unless named otherwise. The defaults are the
+// tuned values; an evaluation run passes others to compare against plan sets.
+export const DEFAULT_PARAMS = {
+  box: {
+    minHeightM: 0.8, maxHeightM: 2.5, minSizeM: 0.8, maxSizeM: 3.2, joinToleranceM: 0.35, maxTopSpreadM: 0.3,
+    minFill: 0.5, minSingleReturns: 0.5, minWallM: 1, maxWallM: 40, streetClearanceM: 4, pavedDepthM: 1.5, typicalHeightM: 1.5,
+  },
+  light: {
+    minTopM: 4, maxTopM: 13, headDepthM: 1.5, minHeadReturns: 3, maxHeadSpanM: 2.5, bodyFromM: 2.5, maxBodyExtentM: 1,
+    ringRadiusM: 4, maxRingReturns: 4, minOpenShare: 0.4,
+  },
+  hydrant: {
+    minTopM: 0.5, maxTopM: 1.1, maxRingReturns: 1, clearAboveM: 1.3, maxRoadM: 12, maxPavedEdgeM: 4, minOpenShare: 0.5,
+  },
+};
+export type DetectorParams = typeof DEFAULT_PARAMS;
+
 // Points bucketed by 1 m cell, for radius queries.
 class Grid {
   private cells = new Map<number, number[]>();
@@ -189,7 +206,8 @@ const insideRing = (p: Point, ring: Point[]) => {
 
 // `paved` holds the outer rings of paved parking and drives, in the same frame, when known. A box well inside one is
 // a parked car, not equipment.
-export function detectEquipment(points: LidarPoint[], buildings: Point[][], roads: Road[], paved: Point[][] = []): Detection {
+export function detectEquipment(points: LidarPoint[], buildings: Point[][], roads: Road[], paved: Point[][] = [], params: DetectorParams = DEFAULT_PARAMS): Detection {
+  const { box: B, light: L, hydrant: H } = params;
   if (points.length === 0) return { poles: [], conductors: [], drop: null, padMounts: [], lightPoles: [], hydrants: [] };
   const ground = groundModel(points);
   const roadLines = roads.map((road) => road.line);
@@ -485,41 +503,41 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
     for (const member of object) objectOf.set(Grid.key(member.i, member.j), shape);
   }
   const carSized = (shape: { long: number; short: number }) => shape.long >= 3.4 && shape.long <= 5.8 && shape.short >= 1.4 && shape.short <= 2.3;
-  const deepInPaved = (p: Point) => paved.some((ring) => insideRing(p, ring) && nearestOnLines(p, [ring]).distance >= 1.5);
+  const deepInPaved = (p: Point) => paved.some((ring) => insideRing(p, ring) && nearestOnLines(p, [ring]).distance >= B.pavedDepthM);
   const seen = new Set<number>();
   const padMounts: PadMount[] = [];
   for (const [key, start] of low) {
     if (seen.has(key)) continue;
     // Only cells near the group's mean height join, so a cabinet stands apart from a taller generator or fence.
-    const group = flood(start, (meanTop, to) => Math.abs(to.tops - meanTop) <= 0.35, seen);
+    const group = flood(start, (meanTop, to) => Math.abs(to.tops - meanTop) <= B.joinToleranceM, seen);
     if (group.length < 3) continue;
     const is = group.map((cell) => cell.i), js = group.map((cell) => cell.j);
     const widthM = (Math.max(...is) - Math.min(...is) + 1) * size;
     const depthM = (Math.max(...js) - Math.min(...js) + 1) * size;
-    if (Math.min(widthM, depthM) < 0.8 || Math.max(widthM, depthM) > 3.2) continue;
+    if (Math.min(widthM, depthM) < B.minSizeM || Math.max(widthM, depthM) > B.maxSizeM) continue;
     const tops = group.map((cell) => cell.tops).sort((a, b) => a - b);
     const heightM = tops[Math.floor(tops.length / 2)]!;
     const mean = tops.reduce((sum, t) => sum + t, 0) / tops.length;
     const spread = Math.sqrt(tops.reduce((sum, t) => sum + (t - mean) ** 2, 0) / tops.length);
-    if (heightM < 0.8 || heightM > 2.5 || spread > 0.3) continue;
+    if (heightM < B.minHeightM || heightM > B.maxHeightM || spread > B.maxTopSpreadM) continue;
     const fill = group.length / ((Math.max(...is) - Math.min(...is) + 1) * (Math.max(...js) - Math.min(...js) + 1));
-    if (fill < 0.5) continue;
+    if (fill < B.minFill) continue;
     const returns = group.reduce((sum, cell) => sum + cell.count, 0);
     const single = group.reduce((sum, cell) => sum + cell.single, 0) / returns;
     // A bush lets pulses through to the ground, so most of its returns are one of several; a cabinet's edges beside a
     // fence give some multiple returns too, so the bar is half.
-    if (single < 0.5) continue;
+    if (single < B.minSingleReturns) continue;
     const labelledVegetation = group.reduce((sum, cell) => sum + cell.vegetation, 0) / returns > 0.5;
     if (group.some((cell) => { for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) if (overhang.has(Grid.key(cell.i + di, cell.j + dj))) return true; return false; })) continue;
     if (group.some((cell) => carSized(objectOf.get(Grid.key(cell.i, cell.j))!))) continue;
     const middle: Point = [((Math.min(...is) + Math.max(...is) + 1) / 2) * size, ((Math.min(...js) + Math.max(...js) + 1) / 2) * size];
     if (deepInPaved(middle) || buildings.some((ring) => insideRing(middle, ring))) continue;
     const wall = buildings.length ? nearestOnLines(middle, buildings).distance : Infinity;
-    if (wall < 1 || wall > 40) continue;
-    if (streetLines.length && nearestOnLines(middle, streetLines).distance < 4) continue;
+    if (wall < B.minWallM || wall > B.maxWallM) continue;
+    if (streetLines.length && nearestOnLines(middle, streetLines).distance < B.streetClearanceM) continue;
     // Higher for a flatter, fuller, single-return block close to the building it feeds, and for one near 1.5 m tall,
     // the middle of the usual height of a three-phase pad-mounted cabinet.
-    const score = fill + (1 - spread / 0.3) + single + Math.max(0, 1 - wall / 40) + Math.max(0, 1 - Math.abs(heightM - 1.5) / 0.7);
+    const score = fill + (1 - spread / B.maxTopSpreadM) + single + Math.max(0, 1 - wall / B.maxWallM) + Math.max(0, 1 - Math.abs(heightM - B.typicalHeightM) / 0.7);
     padMounts.push({ at: middle, widthM, depthM, heightM, wallM: wall, fill, singleReturns: single, topSpreadM: spread, labelledVegetation, score });
   }
 
@@ -547,17 +565,17 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
   };
   for (let i = 0; i < kept.length; i++) {
     const top = hs[i]!;
-    if (noise[i] || top < 4 || top > 13) continue;
+    if (noise[i] || top < L.minTopM || top > L.maxTopM) continue;
     const p = at(i);
     if (nearWall(p, 1.5) || byBuilding(p) || buildings.some((ring) => insideRing(p, ring))) continue;
     if (within(p, 2.5, (h) => h > top + 1e-6).length) continue;
-    const head = within(p, 1.5, (h) => h >= top - 1.5);
-    if (head.length < 3) continue;
+    const head = within(p, 1.5, (h) => h >= top - L.headDepthM);
+    if (head.length < L.minHeadReturns) continue;
     const headSpanM = extentOf(head);
-    if (headSpanM > 2.5) continue;
-    if (extentOf(within(p, 1.5, (h) => h >= 2.5 && h < top - 1.5)) > 1) continue;
-    if (within(p, 4, (h, j) => h >= 2.5 && h <= top + 1 && distance(at(j), p) > 1.5).length > 4) continue;
-    if (open(p, 2) < 0.4 * groundDensity * Math.PI * 4) continue;
+    if (headSpanM > L.maxHeadSpanM) continue;
+    if (extentOf(within(p, 1.5, (h) => h >= L.bodyFromM && h < top - L.headDepthM)) > L.maxBodyExtentM) continue;
+    if (within(p, L.ringRadiusM, (h, j) => h >= 2.5 && h <= top + 1 && distance(at(j), p) > 1.5).length > L.maxRingReturns) continue;
+    if (open(p, 2) < L.minOpenShare * groundDensity * Math.PI * 4) continue;
     const centre: Point = [median(head.map((j) => xs[j]!))!, median(head.map((j) => ys[j]!))!];
     if (poles.some((pole) => distance(pole.at, centre) < 3) || lightPoles.some((light) => distance(light.at, centre) < 4)) continue;
     lightPoles.push({ at: centre, heightM: top, headReturns: head.length, headSpanM });
@@ -571,18 +589,18 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
   const insideBuilding = (p: Point) => buildings.some((ring) => insideRing(p, ring));
   for (let i = 0; i < kept.length; i++) {
     const h0 = hs[i]!;
-    if (noise[i] || h0 < 0.5 || h0 > 1.1) continue;
+    if (noise[i] || h0 < H.minTopM || h0 > H.maxTopM) continue;
     const p = at(i);
     const body = within(p, 0.35, (h) => h >= 0.3 && h <= 1.2);
     if (body.some((j) => hs[j]! > h0)) continue;
-    if (within(p, 1.5, (h, j) => h > 0.25 && distance(at(j), p) > 0.5).length > 1) continue;
-    if (within(p, 1.5, (h) => h > 1.3).length) continue;
+    if (within(p, 1.5, (h, j) => h > 0.25 && distance(at(j), p) > 0.5).length > H.maxRingReturns) continue;
+    if (within(p, 1.5, (h) => h > H.clearAboveM).length) continue;
     if (nearWall(p, 1.5) || byBuilding(p) || insideBuilding(p)) continue;
     // Beside a street or drive centreline, or at the edge of a paved lot.
     const road = roadLines.length ? nearestOnLines(p, roadLines).distance : Infinity;
     const edge = paved.length ? nearestOnLines(p, paved).distance : Infinity;
-    if (road > 12 && edge > 4) continue;
-    if (open(p, 1.5) < 0.5 * groundDensity * Math.PI * 2.25) continue;
+    if (road > H.maxRoadM && edge > H.maxPavedEdgeM) continue;
+    if (open(p, 1.5) < H.minOpenShare * groundDensity * Math.PI * 2.25) continue;
     const centre: Point = [median(body.map((j) => xs[j]!))!, median(body.map((j) => ys[j]!))!];
     if (hydrants.some((other) => distance(other.at, centre) < 3)) continue;
     hydrants.push({ at: centre, heightM: h0, returns: body.length, roadM: Math.min(road, edge) });
