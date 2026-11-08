@@ -74,6 +74,8 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
     const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
     return download(toDxf(record, deps.now()), "application/dxf", `${record.site.id}-v${record.version}.dxf`);
   });
+  // The browser's Google 3D view needs the key. This API only answers the local app.
+  app.get("/api/maps-config", (c) => c.json({ key: mapsKey() }));
   app.get(routes.readStreetView.path, async (c) => {
     const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
     return c.json(await streetView(record, deps.fetch, mapsKey()));

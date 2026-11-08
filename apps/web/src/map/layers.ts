@@ -25,15 +25,15 @@ export type LayerKey =
 
 // Legend order, which is also the order things are picked from the top.
 export const LAYERS: { key: LayerKey; label: string }[] = [
-  { key: "equipment", label: "Existing equipment (E)" },
+  { key: "equipment", label: "Electrical equipment" },
   { key: "dimensions", label: "Dimension lines" },
   { key: "buildings", label: "Buildings" },
-  { key: "lot", label: "Lot, not surveyed" },
+  { key: "lot", label: "Lot" },
   { key: "zone_remote", label: "Zone: remote" },
   { key: "zone_near_exposure", label: "Zone: near exposures" },
   { key: "zone_exception", label: "Zone: only with an exception" },
   { key: "zone_excluded", label: "Zone: excluded" },
-  { key: "zone_unknown", label: "Zone: tier not given" },
+  { key: "zone_unknown", label: "Open ground" },
   { key: "utility", label: "Utility lines" },
   { key: "substations", label: "Substations" },
   { key: "fire_stations", label: "Fire stations" },
