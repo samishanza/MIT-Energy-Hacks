@@ -26,6 +26,7 @@ import {
   nearest,
   lineClassOf,
   feederIdOf,
+  plainLabel,
 } from './site-plan-data.ts';
 
 // Sheet units: 100 per inch on a 36 x 24 in sheet.
@@ -135,7 +136,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   const callouts: Callout[] = [];
   callouts.push({
     anchor: lotSheet[Math.floor(lotSheet.length / 3)]!,
-    lines: ['(E) PROPERTY LINE (ASSESSOR PARCEL', `${(printed(record, 'parcel_id') ?? 'ID NOT FOUND')}), NOT SURVEYED`],
+    lines: ['(E) PROPERTY LINE', `PARCEL ${printed(record, 'parcel_id') ?? ''}`.trim()],
   });
   const stories = printed(record, 'building_stories');
   const height = printed(record, 'building_height_ft');
@@ -154,24 +155,24 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     const s = feederSummary(record, id);
     const at = firstInside(linesOf(f).flatMap(sheetLine), view);
     if (!at) continue;
-    callouts.push({ anchor: at, lines: [`(E) ELECTRIC FEEDER ${s.line}`, 'NATIONAL GRID PUBLIC MAP, LOCATION APPROX.', ...(s.capacity ? [s.capacity] : [])], color: UTILITY });
+    callouts.push({ anchor: at, lines: [`(E) ELECTRIC FEEDER ${s.line}`, ...(s.capacity ? [s.capacity] : [])], color: UTILITY });
   }
   const frontage = roads.find((r) => /street in the address/i.test(r.label ?? ''));
   if (frontage) {
     const at = firstInside(linesOf(frontage).flatMap(sheetLine), view, 0.5);
     const side = printed(record, 'road_side');
-    if (at) callouts.push({ anchor: at, lines: [`(E) ${roadName(frontage)}, MAPPED CENTERLINE`, side ? `FRONTAGE ON THE ${side} SIDE` : 'FRONTAGE SIDE NOT FOUND'] });
+    if (at) callouts.push({ anchor: at, lines: [`(E) ${roadName(frontage)}`, ...(side ? [`FRONTAGE, ${side} SIDE`] : [])] });
   }
   for (const w of wetlands) {
     const polys = polygonsOfFeature(w, frame);
     const pts = polys.flatMap((p) => p.outer.map(toSheet));
     const at = firstInside(pts, view);
     if (!at) continue;
-    callouts.push({ anchor: at, lines: [`(E) WETLAND: ${(attributeText(w, 'wetland_type') ?? 'MAPPED').toUpperCase()}`, 'MASSDEP WETLANDS, NOT DELINEATED'], color: WATER });
+    callouts.push({ anchor: at, lines: [`(E) WETLAND: ${(attributeText(w, 'wetland_type') ?? '').toUpperCase()}`.replace(/: $/, '')], color: WATER });
   }
   for (const o of open) {
     const pts = polygonsOfFeature(o, frame).flatMap((p) => p.outer.map(toSheet));
-    if (pts.length) callouts.push({ anchor: centroid(pts), lines: ['OPEN GROUND (NO STRUCTURE MAPPED)', 'NOT A BESS LOCATION OR CODE DETERMINATION'] });
+    if (pts.length) callouts.push({ anchor: centroid(pts), lines: ['OPEN GROUND'] });
   }
 
   const substations = record.features
@@ -183,8 +184,8 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     callouts.push({
       anchor: s.at,
       lines: s.proposed
-        ? [`(F) ${(s.f.label ?? 'PROPOSED SUBSTATION').toUpperCase()}`, 'UTILITY PLAN, NOT BUILT, LOCATION APPROX.']
-        : [`(E) SUBSTATION ${(s.f.label ?? '').toUpperCase()}`, `${type ? `${type}, ` : ''}UTILITY MAP, LOCATION APPROX.`],
+        ? [`(F) ${(s.f.label ?? 'PROPOSED SUBSTATION').toUpperCase()}`]
+        : [`(E) SUBSTATION ${(s.f.label ?? '').toUpperCase()}`, ...(type ? [type] : [])],
       color: UTILITY,
     });
   }
@@ -195,20 +196,17 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
     .filter((e) => inside(e.at, view, 20));
   for (const c of concept) {
-    const words = (c.f.label ?? '').toUpperCase().replace(/, CONCEPT LOCATION, NOT A DESIGN$/, '');
-    callouts.push({ anchor: c.at, lines: [words, 'CONCEPT LOCATION, NOT A DESIGN'], color: NEW });
+    callouts.push({ anchor: c.at, lines: [plainLabel(c.f.label).toUpperCase()], color: NEW });
   }
   for (const t of trenches) {
     const at = firstInside(linesOf(t).flatMap(sheetLine), view, 0.5);
-    if (at) callouts.push({ anchor: at, lines: [`(N) TRENCH ROUTE, ±${attributeText(t, 'distance_ft') ?? '?'} STRAIGHT LINE`, 'CONCEPT, REAL ROUTE IS LONGER'], color: NEW });
+    if (at) callouts.push({ anchor: at, lines: ['(N) TRENCH ROUTE'], color: NEW });
   }
 
   // How the building likely connects: inferred from the nearest mapped line, never field verified.
   for (const e of equipment) {
     if (e.type === 'UTILITY_POLE') continue;
-    const detected = /LIDAR/.test(attributeText(e.f, 'basis') ?? '');
-    const words = (e.f.label ?? '').toUpperCase().replace(/, (INFERRED|DETECTED IN LIDAR), NOT FIELD VERIFIED$/, '');
-    callouts.push({ anchor: e.at, lines: [words, detected ? 'DETECTED IN PUBLIC LIDAR, NOT FIELD VERIFIED' : 'INFERRED FROM PUBLIC DATA, NOT FIELD VERIFIED'], color: UTILITY });
+    callouts.push({ anchor: e.at, lines: [plainLabel(e.f.label).toUpperCase()], color: UTILITY });
   }
   for (const s of servicePaths) {
     const at = firstInside(linesOf(s).flatMap(sheetLine), view, 0.5);
@@ -217,22 +215,22 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
       callouts.push({
         anchor: at,
         lines: drop
-          ? [`(E) OVERHEAD SERVICE DROP, ±${attributeText(s, 'distance_ft') ?? attributeText(s, 'length_ft') ?? '?'}`, 'DETECTED IN PUBLIC LIDAR, NOT FIELD VERIFIED']
-          : [`(E) LIKELY SERVICE PATH, ±${attributeText(s, 'distance_ft') ?? '?'}`, 'INFERRED, NOT FIELD VERIFIED'],
+          ? ['(E) OVERHEAD SERVICE DROP']
+          : ['(E) ELECTRIC SERVICE'],
         color: UTILITY,
       });
   }
   const poles = equipment.filter((e) => e.type === 'UTILITY_POLE');
   if (poles.length) {
     const first = poles[0]!;
-    callouts.push({ anchor: first.at, lines: [`(E) UTILITY POLES (${poles.length}), DETECTED IN LIDAR`, 'NUMBERS AND OWNER NOT PUBLIC, NOT FIELD VERIFIED'], color: UTILITY });
+    callouts.push({ anchor: first.at, lines: [poles.length > 1 ? `(E) UTILITY POLE, TYP. OF ${poles.length}` : '(E) UTILITY POLE'], color: UTILITY });
   }
   const shownTransmission = transmission
     .map((t) => ({ t, at: firstInside(linesOf(t).flatMap(sheetLine), view) }))
     .filter((x): x is { t: MapFeature; at: Pt } => x.at !== null);
   for (const { t, at } of shownTransmission.slice(0, 2)) {
     const kv = attributeText(t, 'line_voltage');
-    callouts.push({ anchor: at, lines: [`(E) ${kv ? `${kv} ` : ''}TRANSMISSION LINE (HIFLD, C. 2015)`, `${attributeText(t, 'line_owner') ?? 'OWNER NOT STATED'}, LOCATION APPROX.`], color: TRANSMISSION });
+    callouts.push({ anchor: at, lines: [`(E) ${kv ? `${kv} ` : ''}TRANSMISSION LINE`, ...(attributeText(t, 'line_owner') ? [attributeText(t, 'line_owner')!] : [])], color: TRANSMISSION });
   }
 
   const placed = placeCallouts(callouts, view);
@@ -253,15 +251,15 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     if (inside(p, view)) return;
     references.push({ target: p, text, color });
   };
-  if (substation && substation.field !== 'proposed_substations_nearby' && !substations.some((s) => s.f === substation)) refFor(substation, `(E) SUBSTATION ${(substation?.label ?? '').toUpperCase()}, ±${attributeText(substation, 'distance_ft') ?? '?'}`, UTILITY);
+  if (substation && substation.field !== 'proposed_substations_nearby' && !substations.some((s) => s.f === substation)) refFor(substation, `(E) SUBSTATION ${(substation?.label ?? '').toUpperCase()}, ${attributeText(substation, 'distance_ft') ?? '?'}`, UTILITY);
   const nearestTransmission = nearest(record, 'utility_line', 'transmission_nearby');
   if (nearestTransmission && shownTransmission.length === 0)
-    refFor(nearestTransmission, `(E) ${attributeText(nearestTransmission, 'line_voltage') ?? ''} TRANSMISSION LINE, ±${attributeText(nearestTransmission, 'distance_ft') ?? '?'}`.replace('  ', ' '), TRANSMISSION);
+    refFor(nearestTransmission, `(E) ${attributeText(nearestTransmission, 'line_voltage') ?? ''} TRANSMISSION LINE, ${attributeText(nearestTransmission, 'distance_ft') ?? '?'}`.replace('  ', ' '), TRANSMISSION);
   const proposed = nearest(record, 'substation', 'proposed_substations_nearby');
   if (proposed && !substations.some((s) => s.f === proposed))
-    refFor(proposed, `(F) ${(proposed.label ?? 'PROPOSED SUBSTATION').toUpperCase()}, NOT BUILT, ±${attributeText(proposed, 'distance_ft') ?? '?'}`, UTILITY);
-  refFor(fire, `NEAREST FIRE STATION: ${(fire?.label ?? '').toUpperCase()}, ±${attributeText(fire, 'distance_ft') ?? '?'}`);
-  refFor(wetlandNear, `NEAREST MAPPED WETLAND, ±${attributeText(wetlandNear, 'distance_ft') ?? '?'}`, WATER);
+    refFor(proposed, `(F) ${(proposed.label ?? 'PROPOSED SUBSTATION').toUpperCase()}, NOT BUILT, ${attributeText(proposed, 'distance_ft') ?? '?'}`, UTILITY);
+  refFor(fire, `NEAREST FIRE STATION: ${(fire?.label ?? '').toUpperCase()}, ${attributeText(fire, 'distance_ft') ?? '?'}`);
+  refFor(wetlandNear, `NEAREST MAPPED WETLAND, ${attributeText(wetlandNear, 'distance_ft') ?? '?'}`, WATER);
 
 
   const fall = fallDirection(record);
@@ -437,7 +435,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
           {servicePaths.map((sp, i) =>
             linesOf(sp).map((line, j) => (
-              <path key={`svc-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={UTILITY} strokeWidth={3.5} strokeDasharray="14 10" />
+              <path key={`svc-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={UTILITY} strokeWidth={3.5} />
             )),
           )}
 
@@ -449,9 +447,9 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             e.type === 'UTILITY_POLE' ? (
               <PoleSymbol key={`eq-${i}`} at={e.at} />
             ) : e.type === 'SERVICE_TAP' || e.type === 'PAD_MOUNT_TRANSFORMER_CANDIDATE' ? (
-              <TransformerSymbol key={`eq-${i}`} at={e.at} inferred />
+              <TransformerSymbol key={`eq-${i}`} at={e.at} />
             ) : (
-              <SwitchgearSymbol key={`eq-${i}`} at={e.at} inferred />
+              <SwitchgearSymbol key={`eq-${i}`} at={e.at} />
             ),
           )}
 
@@ -702,7 +700,7 @@ function FallArrow({ at, degrees, text }: { at: Pt; degrees: number; text: strin
         {text}
       </text>
       <text x={at.x} y={at.y + 146} fontSize={18} textAnchor="middle" fill={INK} stroke="#fff" strokeWidth={6} paintOrder="stroke">
-        LIDAR, ACROSS PARCEL, NOT AT A PAD
+        AVERAGE ACROSS PARCEL
       </text>
     </g>
   );
@@ -860,7 +858,7 @@ function dataTableHeight(rows: ReturnType<typeof siteDataRows>, w: number): numb
     44 +
     rows.reduce((sum, r) => {
       const v = wrap(r.value, w - labelW - 24, 17).length;
-      const s = r.source ? wrap(r.source, w - labelW - 24, 13).length : 0;
+      const s = 0;
       return sum + Math.max(30, v * 21 + s * 16 + 12);
     }, 0)
   );
@@ -872,7 +870,7 @@ function DataTable({ x, y, w, rows }: { x: number; y: number; w: number; rows: R
   let cy = y + 44;
   const body = rows.map((r, i) => {
     const valueLines = wrap(r.value, w - labelW - 24, size);
-    const sourceLines = r.source ? wrap(r.source, w - labelW - 24, 13) : [];
+    const sourceLines: string[] = [];
     const h = Math.max(30, valueLines.length * 21 + sourceLines.length * 16 + 12);
     const top = cy;
     cy += h;
@@ -911,11 +909,11 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
   const rowH = 33;
   const symW = 220;
   const items: { label: string; symbol: (sx: number, sy: number) => ReactNode }[] = [
-    { label: 'PROPERTY LINE (ASSESSOR, NOT SURVEYED)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={INK} strokeWidth={5} strokeDasharray="60 10 10 10 10 10" /> },
+    { label: 'PROPERTY LINE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={INK} strokeWidth={5} strokeDasharray="60 10 10 10 10 10" /> },
     { label: '(E) BUILDING (MAPPED ROOFPRINT)', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 12} width={100} height={24} fill="#fff" stroke={INK} strokeWidth={3} /> },
     { label: 'ROAD CENTERLINE (MAPPED)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={INK} strokeWidth={2.2} strokeDasharray="40 10 10 10" /> },
     {
-      label: '(E) ELECTRIC LINE, APPROX. (UTILITY MAP)',
+      label: '(E) ELECTRIC FEEDER',
       symbol: (sx, sy) => (
         <g>
           <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={2.6} />
@@ -943,19 +941,19 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
         </g>
       ),
     },
-    { label: '(E) TRANSMISSION LINE, KV (HIFLD, C. 2015)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" /> },
-    { label: '(E) LIKELY SERVICE PATH, INFERRED', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} strokeDasharray="14 10" /> },
-    { label: '(N) BESS PAD, CONCEPT LOCATION, NOT A DESIGN', symbol: (sx, sy) => <PadSymbol at={{ x: sx + 90, y: sy }} k={1.6} /> },
-    { label: '(N) TRENCH ROUTE, CONCEPT (STRAIGHT LINE)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" /> },
-    { label: '(E) UTILITY POLE, DETECTED IN LIDAR', symbol: (sx, sy) => <PoleSymbol at={{ x: sx + 90, y: sy }} /> },
-    { label: '(E) TRANSFORMER, DASHED WHERE INFERRED', symbol: (sx, sy) => <TransformerSymbol at={{ x: sx + 90, y: sy + 2 }} inferred /> },
-    { label: '(E) SERVICE ENTRANCE / SWITCHGEAR, DASHED WHERE INFERRED', symbol: (sx, sy) => <SwitchgearSymbol at={{ x: sx + 90, y: sy }} inferred /> },
+    { label: '(E) TRANSMISSION LINE, KV', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" /> },
+    { label: '(E) ELECTRIC SERVICE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} /> },
+    { label: '(N) BESS PAD', symbol: (sx, sy) => <PadSymbol at={{ x: sx + 90, y: sy }} k={1.6} /> },
+    { label: '(N) TRENCH ROUTE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" /> },
+    { label: '(E) UTILITY POLE', symbol: (sx, sy) => <PoleSymbol at={{ x: sx + 90, y: sy }} /> },
+    { label: '(E) PAD-MOUNT TRANSFORMER', symbol: (sx, sy) => <TransformerSymbol at={{ x: sx + 90, y: sy + 2 }} /> },
+    { label: '(E) SERVICE ENTRANCE / SWITCHGEAR', symbol: (sx, sy) => <SwitchgearSymbol at={{ x: sx + 90, y: sy }} /> },
     {
-      label: '(F) PROPOSED SUBSTATION (UTILITY PLAN, NOT BUILT)',
+      label: '(F) PROPOSED SUBSTATION',
       symbol: (sx, sy) => <SubstationSymbol at={{ x: sx + 90, y: sy }} proposed />,
     },
     {
-      label: '(E) SUBSTATION, APPROX. (UTILITY MAP)',
+      label: '(E) SUBSTATION',
       symbol: (sx, sy) => (
         <g>
           <rect x={sx + 72} y={sy - 15} width={30} height={30} fill="#fff" stroke={UTILITY} strokeWidth={3} />
@@ -963,13 +961,13 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
         </g>
       ),
     },
-    { label: 'WETLAND (MASSDEP, NOT DELINEATED)', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 16} width={100} height={32} fill="url(#marsh)" stroke={WATER} strokeWidth={2.5} /> },
+    { label: 'WETLAND', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 16} width={100} height={32} fill="url(#marsh)" stroke={WATER} strokeWidth={2.5} /> },
     ...(inMassachusetts
       ? [{ label: "100' WETLAND BUFFER ZONE (310 CMR 10.02)", symbol: (sx: number, sy: number) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={WATER} strokeWidth={2.5} strokeDasharray="28 14" /> }]
       : []),
-    { label: 'OPEN GROUND (NO STRUCTURE MAPPED)', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" /> },
+    { label: 'OPEN GROUND', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" /> },
     {
-      label: 'DIMENSION, APPROXIMATE',
+      label: 'DIMENSION',
       symbol: (sx, sy) => (
         <g stroke={INK} strokeWidth={3}>
           <line x1={sx + 10} y1={sy} x2={sx + 170} y2={sy} strokeWidth={1.6} />

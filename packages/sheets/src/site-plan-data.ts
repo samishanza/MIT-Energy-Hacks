@@ -147,6 +147,20 @@ export function lineClassOf(f: MapFeature): LineClass {
 export const feederIdOf = (f: MapFeature): string =>
   (f.attributes?.['feeder_id'] as { value?: string } | undefined)?.value ?? (f.label ?? '').replace(/^Nearby line:\s*/i, '');
 
+/**
+ * A feature's name as a drawing writes it: what it is, nothing about how it was found.
+ * How it was collected and why it could be off live in the record and open on selection.
+ */
+export function plainLabel(label: string | undefined): string {
+  return (label ?? '')
+    .replace(/,?\s*(INFERRED|DETECTED IN (PUBLIC )?LIDAR|CONCEPT LOCATION|CONCEPT)(,\s*NOT (FIELD VERIFIED|A DESIGN))?\s*$/i, '')
+    .replace(/,?\s*NOT (FIELD VERIFIED|SURVEYED|A DESIGN)\s*$/i, '')
+    .replace(/\s*\((mapped centerline, )?not surveyed\)/i, '')
+    .replace(/\bLIKELY\s+/i, '')
+    .replace(/,?\s*±\s*[\d,]+\s*FT/i, '')
+    .trim();
+}
+
 /** The site data table, in the order a reviewer reads it. */
 export function siteDataRows(record: RecordVersion): DataRow[] {
   const rows: DataRow[] = [
@@ -175,7 +189,7 @@ export function siteDataRows(record: RecordVersion): DataRow[] {
     const summary = feederSummary(record, feeder.id);
     rows.push({
       label: 'NEAREST MAPPED FEEDER',
-      value: `${summary.line}${feeder.distance ? `, ±${feeder.distance} FROM MAIN BLDG.` : ''}`,
+      value: `${summary.line}${feeder.distance ? `, ${feeder.distance} FROM MAIN BLDG.` : ''}`,
       source: sourceOf(record, 'distance_to_nearest_line_ft'),
     });
     if (summary.capacity) rows.push({ label: 'FEEDER CAPACITY (UTILITY MAP)', value: summary.capacity });
@@ -185,35 +199,35 @@ export function siteDataRows(record: RecordVersion): DataRow[] {
 
   const path = valueOf(record, 'grid_service_path');
   rows.push({
-    label: 'LIKELY SERVICE PATH (INFERRED)',
-    value: path?.current ? `${formatReading(path.current)}. NOT FIELD VERIFIED.` : 'NOT INFERRED: NO MAPPED LINE NEAR THE BUILDING',
+    label: 'ELECTRIC SERVICE',
+    value: path?.current ? (formatReading(path.current) ?? '').replace(/^LIKELY /, '') : NOT_FOUND,
     source: sourceOf(record, 'grid_service_path'),
   });
   const transmission = nearest(record, 'utility_line', 'transmission_nearby');
   rows.push({
     label: 'NEAREST TRANSMISSION LINE',
     value: transmission
-      ? [attributeText(transmission, 'line_voltage'), attributeText(transmission, 'line_owner'), `±${attributeText(transmission, 'distance_ft') ?? '?'}`].filter(Boolean).join(', ')
+      ? [attributeText(transmission, 'line_voltage'), attributeText(transmission, 'line_owner'), `${attributeText(transmission, 'distance_ft') ?? '?'}`].filter(Boolean).join(', ')
       : 'NONE MAPPED NEARBY',
   });
 
   const substation = nearest(record, 'substation', 'substations_nearby') ?? nearest(record, 'substation');
   rows.push({
     label: 'NEAREST SUBSTATION',
-    value: substation ? `${(substation.label ?? '').toUpperCase()}, ±${attributeText(substation, 'distance_ft') ?? '?'}` : NOT_FOUND,
+    value: substation ? `${(substation.label ?? '').toUpperCase()}, ${attributeText(substation, 'distance_ft') ?? '?'}` : NOT_FOUND,
   });
   const fire = nearest(record, 'constraint', 'fire_stations_nearby');
   rows.push({
     label: 'NEAREST FIRE STATION',
-    value: fire ? `${(fire.label ?? '').toUpperCase()}, ±${attributeText(fire, 'distance_ft') ?? '?'}` : NOT_FOUND,
+    value: fire ? `${(fire.label ?? '').toUpperCase()}, ${attributeText(fire, 'distance_ft') ?? '?'}` : NOT_FOUND,
   });
   const wetland = nearest(record, 'constraint', 'wetlands_nearby');
   rows.push({
     label: 'NEAREST MAPPED WETLAND',
-    value: wetland ? `${(attributeText(wetland, 'wetland_type') ?? wetland.label ?? 'WETLAND').toUpperCase()}, ±${attributeText(wetland, 'distance_ft') ?? '?'}` : 'NONE MAPPED NEARBY',
+    value: wetland ? `${(attributeText(wetland, 'wetland_type') ?? wetland.label ?? 'WETLAND').toUpperCase()}, ${attributeText(wetland, 'distance_ft') ?? '?'}` : 'NONE MAPPED NEARBY',
   });
-  rows.push({ label: 'FLOOD ZONE', value: 'NOT CHECKED. A PERSON READS FEMA MSC.' });
-  rows.push({ label: 'BESS CONFIGURATION', value: 'BY ENGINEER. NOT PROPOSED ON THIS SHEET.' });
+  rows.push({ label: 'FLOOD ZONE', value: 'SEE FEMA FIRM' });
+  rows.push({ label: 'BESS CONFIGURATION', value: 'BY ENGINEER' });
   return rows;
 }
 
@@ -232,10 +246,9 @@ export function sheetNotes(record: RecordVersion): string[] {
   const imagery = record.baseMap ? `${record.baseMap.attribution.toUpperCase()}${record.baseMap.sourceDate ? ` (${record.baseMap.sourceDate})` : ''}` : 'NONE';
   return [
     'DIMENSIONS SHOWN ARE BASED ON AERIAL IMAGERY AND PUBLICLY AVAILABLE PROPERTY BOUNDARY DATA ONLY. FOR REFERENCE ONLY. NOT SURVEYED.',
-    'CONCEPT-GRADE. NOT A CONSTRUCTION DOCUMENT. NO EQUIPMENT LOCATION IS PROPOSED ON THIS SHEET.',
-    `EXISTING ELECTRIC LINES ARE FROM ${utility ?? 'THE UTILITY'}'S PUBLIC SYSTEM DATA MAP. LOCATIONS ARE APPROXIMATE. CALL 811 BEFORE ANY EXCAVATION.`,
-    `AERIAL UNDERLAY: ${imagery}. ROAD LINES ARE MAPPED CENTERLINES, NOT SURVEYED.`,
-    `EVERY VALUE ON THIS SHEET IS TRACED TO ITS SOURCE IN RECORD ${record.id.toUpperCase()}.`,
+    `EXISTING ELECTRIC LINES PER ${utility ?? 'THE UTILITY'} SYSTEM DATA. CALL 811 BEFORE ANY EXCAVATION.`,
+    `AERIAL UNDERLAY: ${imagery}.`,
+    `SOURCE AND BASIS OF EACH ITEM: RECORD ${record.id.toUpperCase()}.`,
   ];
 }
 
@@ -250,7 +263,7 @@ export function chooseScale(widthFt: number, heightFt: number, viewWidthIn: numb
 /** "1,571 ft (fitted)" as a drawing writes it: 1,571' ±. */
 export function dimensionText(label: string): string {
   const m = /([\d,.]+)\s*ft/i.exec(label);
-  return m ? `${m[1]}' ±` : label.toUpperCase();
+  return m ? `${m[1]}'` : label.toUpperCase();
 }
 
 /** The street name from a road feature's label. */
@@ -270,7 +283,7 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
   for (const f of record.features) {
     switch (f.kind) {
       case 'property_line':
-        labels[f.id] = `(E) PROPERTY LINE${lot ? `, ${lot}` : ''}, NOT SURVEYED`;
+        labels[f.id] = `(E) PROPERTY LINE${lot ? `, ${lot}` : ''}`;
         break;
       case 'building_outline':
         labels[f.id] = `(E) BUILDING${buildings.length > 1 ? ` ${buildings.indexOf(f) + 1}` : ''}${buildings.indexOf(f) === 0 && stories ? `, ${stories}` : ''}`;
@@ -285,11 +298,11 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
         } else if (cls === 'transmission') {
           labels[f.id] = `(E) ${attributeText(f, 'line_voltage') ?? ''} TRANSMISSION`.replace('  ', ' ');
         } else if (cls === 'service') {
-          labels[f.id] = attributeText(f, 'line_class') === 'DETECTED SERVICE DROP' ? '(E) SERVICE DROP, DETECTED IN LIDAR' : '(E) LIKELY SERVICE PATH, INFERRED';
+          labels[f.id] = attributeText(f, 'line_class') === 'DETECTED SERVICE DROP' ? '(E) OVERHEAD SERVICE DROP' : '(E) ELECTRIC SERVICE';
         } else if (cls === 'detected') {
-          labels[f.id] = '(E) OVERHEAD LINE, DETECTED IN LIDAR';
+          labels[f.id] = '(E) OVERHEAD LINE';
         } else if (attributeText(f, 'basis') === 'CONCEPT') {
-          labels[f.id] = `(N) TRENCH ROUTE, CONCEPT, ±${attributeText(f, 'distance_ft') ?? '?'}`;
+          labels[f.id] = '(N) TRENCH ROUTE';
         }
         break;
       }
@@ -300,7 +313,7 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
         if (f.field === 'wetlands_nearby') labels[f.id] = `(E) WETLAND: ${attributeText(f, 'wetland_type') ?? 'MAPPED'}`;
         break;
       case 'candidate_area':
-        labels[f.id] = 'OPEN GROUND, NOT A BESS LOCATION';
+        labels[f.id] = 'OPEN GROUND';
         break;
       default:
         break;
