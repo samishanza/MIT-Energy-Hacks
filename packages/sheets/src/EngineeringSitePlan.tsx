@@ -130,7 +130,9 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
     .filter((e) => inside(e.at, view, 20));
   const wetlands = record.features.filter((f) => f.kind === 'constraint' && f.field === 'wetlands_nearby' && f.geometry.type !== 'Point');
-  const open = record.features.filter((f) => f.kind === 'candidate_area');
+  const isFeasible = (f: MapFeature) => attributeText(f, 'zone_kind') === 'FEASIBLE_BESS';
+  const feasible = record.features.filter((f) => f.kind === 'candidate_area' && isFeasible(f));
+  const open = record.features.filter((f) => f.kind === 'candidate_area' && !isFeasible(f));
   const dims = record.features.filter((f) => f.kind === 'dimension_line');
   const inMassachusetts = /massachusetts/i.test(record.site.region);
 
@@ -175,6 +177,11 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   for (const o of open) {
     const pts = polygonsOfFeature(o, frame).flatMap((p) => p.outer.map(toSheet));
     if (pts.length) callouts.push({ anchor: centroid(pts), lines: ['OPEN GROUND'] });
+  }
+  for (const z of feasible) {
+    const pts = polygonsOfFeature(z, frame).flatMap((p) => p.outer.map(toSheet));
+    const at = firstInside(pts, view, 0.2);
+    if (at) callouts.push({ anchor: at, lines: ['(N) FEASIBLE BESS ZONE', `WITHIN ${attributeText(z, 'max_run_ft') ?? "150'"} OF THE SERVICE`.replace("150 FT'", "150'")], color: NEW });
   }
 
   const substations = record.features
@@ -287,6 +294,10 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
               <line x1="27" y1="30" x2="36" y2="17" />
             </g>
           </pattern>
+          <pattern id="feasibleHatch" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="22" height="22" fill="#0b5cad" opacity="0.08" />
+            <line x1="0" y1="0" x2="0" y2="22" stroke="#0b5cad" strokeWidth="2" opacity="0.45" />
+          </pattern>
           <pattern id="openGround" width="26" height="26" patternUnits="userSpaceOnUse">
             <circle cx="13" cy="13" r="2.2" fill="#2e6b3f" opacity="0.55" />
           </pattern>
@@ -312,6 +323,17 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
           {open.flatMap((o) => polygonsOfFeature(o, frame)).map((p, i) => (
             <path key={`open-${i}`} d={path(p.outer.map(toSheet))} fill="url(#openGround)" stroke="#2e6b3f" strokeWidth={1.5} strokeDasharray="10 8" opacity={0.9} />
+          ))}
+
+          {feasible.flatMap((z) => polygonsOfFeature(z, frame)).map((p, i) => (
+            <path
+              key={`feasible-${i}`}
+              d={[p.outer, ...(p.holes ?? [])].map((ring) => path(ring.map(toSheet))).join(' ')}
+              fillRule="evenodd"
+              fill="url(#feasibleHatch)"
+              stroke={NEW}
+              strokeWidth={3}
+            />
           ))}
 
           {wetlands.map((w, i) => {
@@ -951,6 +973,7 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
     },
     { label: '(E) TRANSMISSION LINE, KV', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" /> },
     { label: '(E) ELECTRIC SERVICE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} /> },
+    { label: '(N) FEASIBLE BESS ZONE', symbol: (sx, sy) => <rect x={sx + 40} y={sy - 14} width={100} height={28} fill="url(#feasibleHatch)" stroke={NEW} strokeWidth={3} /> },
     { label: '(N) BESS PAD', symbol: (sx, sy) => <PadSymbol at={{ x: sx + 90, y: sy }} k={1.6} /> },
     { label: '(N) TRENCH ROUTE', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={NEW} strokeWidth={4} strokeDasharray="22 8 4 8" /> },
     { label: '(E) UTILITY POLE', symbol: (sx, sy) => <PoleSymbol at={{ x: sx + 90, y: sy }} /> },

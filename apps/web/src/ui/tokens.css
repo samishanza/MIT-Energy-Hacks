@@ -1489,3 +1489,4 @@ legend {
 .equipment-basis dl { margin: 6px 0 0; }
 .equipment-basis dt { font-weight: 600; text-transform: capitalize; }
 .equipment-basis dd { margin: 0 0 6px; color: var(--ink-soft); }
+.key-feasible { background: rgba(11, 92, 173, 0.25); border: 2px solid #0b5cad; }

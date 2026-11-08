@@ -21,10 +21,12 @@ export type LayerKey =
   | "fire_stations"
   | "wetlands"
   | "constraints"
-  | "roads";
+  | "roads"
+  | "feasible";
 
 // Legend order, which is also the order things are picked from the top.
 export const LAYERS: { key: LayerKey; label: string }[] = [
+  { key: "feasible", label: "Feasible battery zone" },
   { key: "equipment", label: "Electrical equipment" },
   { key: "dimensions", label: "Dimension lines" },
   { key: "buildings", label: "Buildings" },
@@ -75,6 +77,7 @@ export function layerOf(feature: MapFeature): LayerKey {
     case "property_line":
       return "lot";
     case "candidate_area":
+      if ((feature.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value === "feasible_bess") return "feasible";
       return `zone_${zoneTier(feature)}`;
     case "utility_line":
       return "utility";
@@ -252,17 +255,31 @@ export const FEATURE_LAYERS = [
     paint: { "line-color": ["case", selected, SELECTION_COLOR, "#1f5a66"], "line-width": 1.2 },
   },
   {
+    id: "feasible-fill",
+    type: "fill",
+    source: FEATURE_SOURCE,
+    filter: ["==", ["get", "layer"], "feasible"],
+    paint: { "fill-color": ["case", selected, SELECTION_COLOR, "#0b5cad"], "fill-opacity": 0.2 },
+  },
+  {
+    id: "feasible-outline",
+    type: "line",
+    source: FEATURE_SOURCE,
+    filter: ["==", ["get", "layer"], "feasible"],
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#0b5cad"], "line-width": 2.5 },
+  },
+  {
     id: "zone-fill",
     type: "fill",
     source: FEATURE_SOURCE,
-    filter: ["==", ["get", "kind"], "candidate_area"],
+    filter: ["all", ["==", ["get", "kind"], "candidate_area"], ["!=", ["get", "layer"], "feasible"]],
     paint: { "fill-color": ["case", selected, SELECTION_COLOR, ZONE_COLOR], "fill-opacity": 0.22 },
   },
   {
     id: "zone-outline",
     type: "line",
     source: FEATURE_SOURCE,
-    filter: ["==", ["get", "kind"], "candidate_area"],
+    filter: ["all", ["==", ["get", "kind"], "candidate_area"], ["!=", ["get", "layer"], "feasible"]],
     paint: { "line-color": ["case", selected, SELECTION_COLOR, ZONE_COLOR], "line-width": 1.5, "line-dasharray": [3, 2] },
   },
   {
@@ -326,6 +343,7 @@ export const HIT_LAYERS = [
   "dimension-line",
   "utility-line",
   "building-fill",
+  "feasible-fill",
   "zone-fill",
   "wetland-fill",
   "constraint-fill",

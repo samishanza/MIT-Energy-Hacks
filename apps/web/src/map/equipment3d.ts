@@ -133,11 +133,15 @@ export function equipmentSolids(all: MapFeature[]): Solid[] {
         case "service_entrance":
           add(f, "gear", { color: "#9aa3ab", base: 0, top: 2.3, ring: box(at, 2.4, 0.7) });
           break;
-        case "bess_pad":
-          add(f, "pad", { color: "#c8c4bb", base: 0, top: 0.15, ring: box(at, 14 * FT, 11.5 * FT) });
-          add(f, "battery", { color: "#f4f4f2", base: 0.15, top: 0.15 + 8.2 * FT, ring: box(offset(at, -0.8, 0), 7.88 * FT, 4.59 * FT) });
-          add(f, "xfmr", { color: "#2f6b45", base: 0.15, top: 1.8, ring: box(offset(at, 1.25, 0.3), 1.2, 1.1) });
+        case "bess_pad": {
+          const turn = Number(attr(f, "rotation_deg")) || 0;
+          const r = (turn * Math.PI) / 180;
+          const along = (east: number, north: number) => offset(at, east * Math.cos(r) - north * Math.sin(r), east * Math.sin(r) + north * Math.cos(r));
+          add(f, "pad", { color: "#c8c4bb", base: 0, top: 0.15, ring: box(at, (Number(attr(f, "depth_ft")) || 14) * FT, (Number(attr(f, "width_ft")) || 11.5) * FT, turn) });
+          add(f, "battery", { color: "#f4f4f2", base: 0.15, top: 0.15 + 8.2 * FT, ring: box(along(-0.8, 0), 7.88 * FT, 4.59 * FT, turn) });
+          add(f, "xfmr", { color: "#2f6b45", base: 0.15, top: 1.8, ring: box(along(1.25, 0.3), 1.2, 1.1, turn) });
           break;
+        }
         case "ac_disconnect":
           add(f, "disc", { color: "#9aa3ab", base: 0.6, top: 1.6, ring: box(offset(at, 1.9, -1.2), 0.5, 0.3) });
           break;

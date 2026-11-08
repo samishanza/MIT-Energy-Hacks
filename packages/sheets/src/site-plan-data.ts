@@ -313,7 +313,7 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
         if (f.field === 'wetlands_nearby') labels[f.id] = `(E) WETLAND: ${attributeText(f, 'wetland_type') ?? 'MAPPED'}`;
         break;
       case 'candidate_area':
-        labels[f.id] = 'OPEN GROUND';
+        labels[f.id] = (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value === 'feasible_bess' ? '(N) FEASIBLE BESS ZONE' : 'OPEN GROUND';
         break;
       default:
         break;
