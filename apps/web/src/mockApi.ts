@@ -249,6 +249,9 @@ export function createMockApi({ runMs = RUN_MS }: { runMs?: number } = {}): Engi
       if (runStarted === null) return null;
       return progressAt(record, Math.min(1, (Date.now() - runStarted) / runMs));
     },
+    async readStreetView() {
+      return { status: "unavailable" as const, reason: "The mock API has no Street View. Run the real API with a Google Maps key.", markers: [] };
+    },
     async exportFile() {
       return null;
     },

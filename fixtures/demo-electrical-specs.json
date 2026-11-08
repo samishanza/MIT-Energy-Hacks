@@ -1,0 +1,453 @@
+[
+  {
+    "address": "125 Sixth St, Cambridge, MA 02142",
+    "building_type": "Municipal: police headquarters (permit 263778 text says 'Cambridge Police Headquaters')",
+    "values": {
+      "service_voltage": "480",
+      "main_breaker_a": null,
+      "bus_rating_a": null,
+      "transformer_kva": null,
+      "meter_number": null,
+      "fault_current_a": null,
+      "service_rating_a": 2000,
+      "phases": null,
+      "service_entry": "underground",
+      "meter_count": 1
+    },
+    "conflicts": [
+      {
+        "field": "service_rating_a",
+        "values": [
+          2000,
+          4000
+        ],
+        "note": "Permit 1209035 (2026-05-05) records 2000 A existing; permit 54091 (2019-08-28) records 4000 A existing. Left for a person to resolve."
+      }
+    ],
+    "other_services": [
+      {
+        "description": "Separate new 200 A, 208 V underground service for two EV chargers",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=263778",
+        "date": "2024-04-02"
+      }
+    ],
+    "sources": [
+      {
+        "field": "service_voltage",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=1209035",
+        "date": "2026-05-05",
+        "note": "volts_existing_service = '480'. Phase count and wye/delta are not fields in this dataset."
+      },
+      {
+        "field": "service_rating_a",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=1209035",
+        "date": "2026-05-05",
+        "note": "amps_existing_service = '2000'. Service size, not explicitly the main breaker rating."
+      },
+      {
+        "field": "service_rating_a",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=54091",
+        "date": "2019-08-28",
+        "note": "amps_existing_service = '4000' (conflicts with the 2026 permit). Same permit: ampacity '800' for a new 800 A ATS and panelboard."
+      },
+      {
+        "field": "service_entry",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=1209035",
+        "date": "2026-05-05",
+        "note": "underground_existing = true; count_of_meters_existing = '1'."
+      },
+      {
+        "field": "other",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=1209035",
+        "date": "2026-05-05",
+        "note": "kva = '160' belongs to the permitted work (2 x 80 kW UPS replacement), not the utility transformer."
+      }
+    ],
+    "synthetic": false
+  },
+  {
+    "address": "147 Hampshire St, Cambridge, MA 02139",
+    "building_type": "Municipal: Simard and Frazier buildings (permit text), on the City of Cambridge DPW campus per the city project page",
+    "values": {
+      "service_voltage": "208",
+      "main_breaker_a": null,
+      "bus_rating_a": null,
+      "transformer_kva": null,
+      "meter_number": null,
+      "fault_current_a": null,
+      "service_rating_a": 1200,
+      "phases": null,
+      "service_entry": "underground",
+      "meter_count": 1
+    },
+    "other_services": [
+      {
+        "description": "Separate new 200 A, 480 V underground service for two EV chargers",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=260040",
+        "date": "2024-03-04"
+      }
+    ],
+    "existing_der": [
+      {
+        "description": "86.4 kW DC / 84.6 kW AC rooftop PV, 192 panels",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=213772",
+        "date": "2023-03-10"
+      }
+    ],
+    "sources": [
+      {
+        "field": "service_voltage",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=213772",
+        "date": "2023-03-10",
+        "note": "volts_existing_service = '208'. Phase count not a field; 208 V implies 3-phase wye (inferred)."
+      },
+      {
+        "field": "service_rating_a",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=213772",
+        "date": "2023-03-10",
+        "note": "amps_existing_service = '1200'; underground_existing = true; count_of_meters_existing = '1'."
+      },
+      {
+        "field": "service_rating_a",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=187174",
+        "date": "2022-08-02",
+        "note": "New service: amps_new_service = '1200', volts_new_service = '208', underground; 'Renovations to the Simard and Frazier Buildings'."
+      },
+      {
+        "field": "building_type",
+        "url": "https://www.cambridgema.gov/departments/publicworks/cityprojects/2022/simardbuildingreconstructionproject",
+        "date": "2022",
+        "note": "City project page (seen in search results only) places the Simard building on the DPW campus at 147 Hampshire St."
+      }
+    ],
+    "synthetic": false
+  },
+  {
+    "address": "491 Broadway, Cambridge, MA 02138",
+    "building_type": "Municipal: fire department headquarters (under reconstruction; city updates through June 2026)",
+    "values": {
+      "service_voltage": "208",
+      "main_breaker_a": null,
+      "bus_rating_a": null,
+      "transformer_kva": null,
+      "meter_number": null,
+      "fault_current_a": null,
+      "service_rating_a": 3000,
+      "phases": null,
+      "service_entry": "underground",
+      "meter_count": 1
+    },
+    "conflicts": [
+      {
+        "field": "service_rating_a",
+        "values": [
+          400,
+          3000
+        ],
+        "note": "400 A / 208 V / 2 meters was the pre-renovation existing service (2024-01-19); 3000 A / 208 V / 1 meter is the new service permitted 2025-11-20. Completion of the new service is not confirmed."
+      }
+    ],
+    "sources": [
+      {
+        "field": "service_rating_a",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=275471",
+        "date": "2025-11-20",
+        "note": "New service: amps_new_service = '3000', volts_new_service = '208', underground, 1 meter. Permit also lists 85 PV panels, 1 generator, 5 EV stations, and kva = '200' (meaning unclear; not mapped to transformer)."
+      },
+      {
+        "field": "service_rating_a",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=254693",
+        "date": "2024-01-19",
+        "note": "Existing before renovation: amps_existing_service = '400', volts_existing_service = '208', count_of_meters_existing = '2', underground."
+      },
+      {
+        "field": "building_type",
+        "url": "https://www.cambridgema.gov/cfd/News/2026/06/fireheadquartersreconstructionupdatejune8,2026",
+        "date": "2026-06-08",
+        "note": "City update (seen in search results only) says an electric substation has been installed."
+      }
+    ],
+    "synthetic": false
+  },
+  {
+    "address": "1100 Massachusetts Ave, Cambridge, MA 02138",
+    "building_type": "Commercial (permit building_use 'Mixed Use / Commercial')",
+    "values": {
+      "service_voltage": "480Y/277",
+      "main_breaker_a": null,
+      "bus_rating_a": null,
+      "transformer_kva": null,
+      "meter_number": null,
+      "fault_current_a": null,
+      "service_rating_a": 1600,
+      "phases": null,
+      "service_entry": "underground",
+      "meter_count": 2
+    },
+    "sources": [
+      {
+        "field": "service_voltage",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=1214957",
+        "date": "2026-06-11",
+        "note": "volts_existing_service recorded as '480277', read as 480/277 V. The 'Y' notation is inferred."
+      },
+      {
+        "field": "service_rating_a",
+        "url": "https://data.cambridgema.gov/resource/hvtc-3ab9.json?id=1214957",
+        "date": "2026-06-11",
+        "note": "amps_existing_service = '1600'; count_of_meters_existing = '2'; underground; work 'ADDING (2) METERS'. utility_authorization_number = '27075623' is not a meter number."
+      }
+    ],
+    "synthetic": false
+  },
+  {
+    "address": "24 Dane St, Somerville, MA",
+    "building_type": "Commercial (permit subtype 'Commercial'; other permits at the address wire 480 V 100 to 150 hp motors)",
+    "values": {
+      "service_voltage": "480Y/277",
+      "main_breaker_a": null,
+      "bus_rating_a": null,
+      "transformer_kva": 1500,
+      "meter_number": null,
+      "fault_current_a": null,
+      "service_rating_a": 1200,
+      "phases": 3,
+      "service_entry": null,
+      "meter_count": null
+    },
+    "sources": [
+      {
+        "field": "service_voltage",
+        "url": "https://data.somervillema.gov/resource/nneb-s3f7.json?application_number=E15-000414",
+        "date": "2015-04-15",
+        "note": "'Install new 1200 amp 277/480 volt 3 phase Electrical Service from existing transformer pad'. The 'Y' notation is inferred from 277/480."
+      },
+      {
+        "field": "transformer_kva",
+        "url": "https://data.somervillema.gov/resource/nneb-s3f7.json?application_number=E15-000414",
+        "date": "2015-04-15",
+        "note": "'Eversource to upgrade transformer to 1500 KVA'. Planned in 2015; the installed size today is not confirmed."
+      },
+      {
+        "field": "other",
+        "url": "https://data.somervillema.gov/resource/nneb-s3f7.json?application_number=E15-000649",
+        "date": "2015-05-27",
+        "note": "'Installation of 277/480 volt 800 amp sub panel in tenet space'."
+      },
+      {
+        "field": "license",
+        "url": "https://data.somervillema.gov/d/nneb-s3f7",
+        "date": "2026-11-07",
+        "note": "Somerville data is ODbL: attribute the City of Somerville (SomerStat)."
+      }
+    ],
+    "synthetic": false
+  },
+  {
+    "address": "22 Kent St, Somerville, MA 02143",
+    "building_type": "Commercial with lab space (sheet-metal permit SM25-000269 mentions a lab fume hood)",
+    "values": {
+      "service_voltage": "480Y/277",
+      "main_breaker_a": 2500,
+      "bus_rating_a": 2500,
+      "transformer_kva": null,
+      "meter_number": null,
+      "fault_current_a": null,
+      "service_rating_a": null,
+      "phases": null,
+      "service_entry": null,
+      "meter_count": null
+    },
+    "sources": [
+      {
+        "field": "main_breaker_a",
+        "url": "https://data.somervillema.gov/resource/nneb-s3f7.json?application_number=E26-001231",
+        "date": "2026-08-19",
+        "note": "'Furnish and install new 2500A 277/480V main breaker & meter section with 2500A distribution panel, 600A panelboard, (1) 225A 120/208V panel with (2) 75KVA step down transformers'. Issued 2026-09-08; completion not confirmed."
+      },
+      {
+        "field": "bus_rating_a",
+        "url": "https://data.somervillema.gov/resource/nneb-s3f7.json?application_number=E26-001231",
+        "date": "2026-08-19",
+        "note": "Inferred from '2500A distribution panel'; the permit does not say 'bus rating'."
+      },
+      {
+        "field": "other",
+        "url": "https://data.somervillema.gov/resource/nneb-s3f7.json?application_number=B26-001237",
+        "date": "2026-07-31",
+        "note": "Related building permit to enlarge the electrical room."
+      }
+    ],
+    "synthetic": false
+  },
+  {
+    "address": "779 McGrath Hwy, Somerville, MA 02145",
+    "building_type": "Commercial: EV fast-charging site (8 dispensers per permit)",
+    "values": {
+      "service_voltage": "480",
+      "main_breaker_a": null,
+      "bus_rating_a": 1200,
+      "transformer_kva": null,
+      "meter_number": null,
+      "fault_current_a": null,
+      "service_rating_a": 1200,
+      "phases": null,
+      "service_entry": null,
+      "meter_count": null
+    },
+    "sources": [
+      {
+        "field": "service_rating_a",
+        "url": "https://data.somervillema.gov/resource/nneb-s3f7.json?application_number=E21-001155",
+        "date": "2021-08-17",
+        "note": "'Install 1200 480 volt service prom pole to transformer. Transformer to feed 1200 Amp switchgear and then the switchgear will feed (2) 400 amp Charging cabinets'."
+      },
+      {
+        "field": "bus_rating_a",
+        "url": "https://data.somervillema.gov/resource/nneb-s3f7.json?application_number=E21-001155",
+        "date": "2021-08-17",
+        "note": "Switchgear rating 1200 A taken as the bus rating (inferred)."
+      }
+    ],
+    "synthetic": false
+  },
+  {
+    "address": "120 Broad Meadow Rd, Needham, MA 02492",
+    "building_type": "Public school: Broadmeadow Elementary School",
+    "values": {
+      "service_voltage": "480Y/277",
+      "main_breaker_a": null,
+      "bus_rating_a": null,
+      "transformer_kva": null,
+      "meter_number": "08503030",
+      "fault_current_a": null,
+      "service_rating_a": 2000,
+      "phases": 3,
+      "service_entry": "underground to pad-mounted transformer",
+      "meter_count": 1
+    },
+    "conflicts": [
+      {
+        "field": "transformer_type",
+        "values": [
+          "Delta",
+          "480/277 V 4-wire"
+        ],
+        "note": "The PDF p.18 table lists transformer type 'Delta', primary 480 V, secondary 277 V; the p.17 text says a 480/277 V 4-wire service. The table is internally inconsistent; the text is taken as the service."
+      }
+    ],
+    "sources": [
+      {
+        "field": "service_voltage",
+        "url": "https://needhamma.gov/DocumentCenter/View/7775",
+        "date": "2012-02-12",
+        "note": "EMG energy audit, section 5.7, PDF p.17: 'The main electrical service size is 2,000 amps, 480/277-volt, three-phase, four-wire alternating current (AC).'"
+      },
+      {
+        "field": "service_rating_a",
+        "url": "https://needhamma.gov/DocumentCenter/View/7775",
+        "date": "2012-02-12",
+        "note": "Same sentence, PDF p.17. 'The facility is master-metered for electricity.'"
+      },
+      {
+        "field": "meter_number",
+        "url": "https://needhamma.gov/DocumentCenter/View/7775",
+        "date": "2012-02-12",
+        "note": "PDF p.18 table: 'Main meter number 08503030', meter in the Electric Room. A 2012 value; the meter may have been replaced."
+      },
+      {
+        "field": "other",
+        "url": "https://needhamma.gov/DocumentCenter/View/7775",
+        "date": "2012-02-12",
+        "note": "PDF p.18: 750 kVA natural-gas emergency generator. The PDF p.41 photo caption says 'Kohler diesel generator' (conflict)."
+      },
+      {
+        "field": "photo",
+        "url": "https://needhamma.gov/DocumentCenter/View/7775",
+        "date": "2012-02-12",
+        "note": "PDF p.41: photo #13 electrical room main panels, #14 main electric meter, #17 pad-mounted transformer."
+      }
+    ],
+    "synthetic": false
+  },
+  {
+    "address": "39 Crocker Ave, Turners Falls (Montague), MA",
+    "building_type": "Public school: Sheffield Gymnasium/Auditorium; the main switchboard is in the adjacent Sheffield Elementary School",
+    "values": {
+      "service_voltage": "208Y/120",
+      "main_breaker_a": null,
+      "bus_rating_a": 1200,
+      "transformer_kva": null,
+      "meter_number": null,
+      "fault_current_a": null,
+      "service_rating_a": null,
+      "phases": 3,
+      "service_entry": null,
+      "meter_count": null
+    },
+    "sources": [
+      {
+        "field": "service_voltage",
+        "url": "https://montague-ma.gov/files/Sheffield_Gym-Auditorium_Final_PCA_-_110520.pdf",
+        "date": "2020-10-21",
+        "note": "Property Condition Assessment, p.3 and section 5.11 p.22: 'The main switchboard is a 1,200 amp, 208Y/120 volt, three phase, 4 wire panel manufactured by Siemens', fed by an Eversource surface-mounted transformer at the southwest corner of the site."
+      },
+      {
+        "field": "bus_rating_a",
+        "url": "https://montague-ma.gov/files/Sheffield_Gym-Auditorium_Final_PCA_-_110520.pdf",
+        "date": "2020-10-21",
+        "note": "Switchboard rating 1200 A taken as the bus rating (inferred). Main breaker rating not stated; p.23 says the main breaker is in the main switchboard, which is 32 years old."
+      },
+      {
+        "field": "other",
+        "url": "https://montague-ma.gov/files/Sheffield_Gym-Auditorium_Final_PCA_-_110520.pdf",
+        "date": "2020-10-21",
+        "note": "A 400 A breaker in the main switchboard feeds the gym/auditorium building."
+      },
+      {
+        "field": "photo",
+        "url": "https://montague-ma.gov/files/Sheffield_Gym-Auditorium_Final_PCA_-_110520.pdf",
+        "date": "2020-10-21",
+        "note": "Photo section '5.11 Electrical Systems', report p.37. Image content not viewed."
+      }
+    ],
+    "synthetic": false
+  },
+  {
+    "address": "58 Beacon St, Andover, MA",
+    "building_type": "Public school: West Elementary School",
+    "values": {
+      "service_voltage": "480Y/277",
+      "main_breaker_a": null,
+      "bus_rating_a": 1200,
+      "transformer_kva": null,
+      "meter_number": null,
+      "fault_current_a": null,
+      "service_rating_a": 1200,
+      "phases": 3,
+      "service_entry": null,
+      "meter_count": null
+    },
+    "sources": [
+      {
+        "field": "service_voltage",
+        "url": "https://files-backend.assets.thrillshare.com/documents/asset/uploaded_file/4617/Aps/457a15b6-3143-423a-8e91-62d1cbe4866f/Revised_Preferred_Schematic_Report__no_mechani.pdf?disposition=inline",
+        "date": "2020-07-09",
+        "note": "SMMA Preferred Schematic Report for MSBA, PDF p.22: 'The existing 1200-amp, 277/480 volt, 3 phase, 4W electrical service ... The 1200-amp, 277/480 volt, 3 phase, 4W main switchboard (MSB) ... were replaced approximately 10 years ago'."
+      },
+      {
+        "field": "main_breaker_a",
+        "url": "https://files-backend.assets.thrillshare.com/documents/asset/uploaded_file/4617/Aps/457a15b6-3143-423a-8e91-62d1cbe4866f/Revised_Preferred_Schematic_Report__no_mechani.pdf?disposition=inline",
+        "date": "2020-07-09",
+        "note": "PDF p.23: the MSB main breaker needs replacing with one that has ground-fault protection; its rating is not stated."
+      },
+      {
+        "field": "other",
+        "url": "https://files-backend.assets.thrillshare.com/documents/asset/uploaded_file/4617/Aps/457a15b6-3143-423a-8e91-62d1cbe4866f/Revised_Preferred_Schematic_Report__no_mechani.pdf?disposition=inline",
+        "date": "2020-07-09",
+        "note": "PDF p.35: proposal to replace it with a new 2500 A, 277/480 V service and a new utility pad-mounted transformer. Whether that was built is not confirmed; check before the demo."
+      }
+    ],
+    "synthetic": false
+  }
+]

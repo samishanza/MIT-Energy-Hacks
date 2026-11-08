@@ -1,6 +1,8 @@
 import type { RecordVersion } from "@eqore/contract";
 import { designFromRecord, singleLineSvg, type Calculation, type ElectricalDesign } from "@eqore/electrical";
 import { useMemo, useState } from "react";
+import type { EngineerApi } from "../api";
+import { ElectricalSpecsForm, type SpecsPrefill } from "./ElectricalSpecsForm";
 
 const STATUS_WORDS: Record<Calculation["status"], string> = {
   passes: "Passes",
@@ -17,7 +19,16 @@ const STATE_WORDS: Record<string, string> = {
 };
 
 /** The single-line, schedule, and calculations the electrical package derives from the record. */
-export function ElectricalSheet({ record }: { record: RecordVersion }) {
+export interface ElectricalSheetProps {
+  record: RecordVersion;
+  api?: EngineerApi;
+  actorName?: string;
+  onActorName?: (name: string) => void;
+  onRecord?: (next: RecordVersion) => void;
+  prefill?: SpecsPrefill | null;
+}
+
+export function ElectricalSheet({ record, api, actorName = "", onActorName = () => {}, onRecord = () => {}, prefill = null }: ElectricalSheetProps) {
   const design: ElectricalDesign = useMemo(() => designFromRecord(record), [record]);
   const [index, setIndex] = useState(0);
   const service = design.designs[index] ?? design.designs[0];
@@ -28,6 +39,7 @@ export function ElectricalSheet({ record }: { record: RecordVersion }) {
   return (
     <figure className="sheet sheet--electrical" aria-label="Single-line diagram and calculations">
       <p className="electrical-note">{design.note}</p>
+      {api ? <ElectricalSpecsForm api={api} record={record} actorName={actorName} onActorName={onActorName} onRecord={onRecord} prefill={prefill} /> : null}
       <p className="note">
         Configuration: {design.configuration.name}. {design.configuration.provenance}
       </p>

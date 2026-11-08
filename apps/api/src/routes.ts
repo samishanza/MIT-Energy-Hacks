@@ -1,3 +1,4 @@
+import { mapsKey, streetView, streetViewImage } from "./street-view.ts";
 import { Hono, type MiddlewareHandler } from "hono";
 import { ENGINEER_PORT, WEB_PORT, routes } from "@eqore/contract";
 import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps } from "./capture.ts";
@@ -72,6 +73,17 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
   app.get(routes.exportDxf.path, (c) => {
     const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
     return download(toDxf(record, deps.now()), "application/dxf", `${record.site.id}-v${record.version}.dxf`);
+  });
+  app.get(routes.readStreetView.path, async (c) => {
+    const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);
+    return c.json(await streetView(record, deps.fetch, mapsKey()));
+  });
+  app.get(routes.streetViewImage.path, async (c) => {
+    const key = mapsKey();
+    if (!key) return c.text("No Google Maps key is configured.", 404);
+    const q = { lat: c.req.query("lat") ?? "", lng: c.req.query("lng") ?? "", heading: c.req.query("heading") ?? "0", pitch: c.req.query("pitch") ?? "0" };
+    if (![q.lat, q.lng, q.heading, q.pitch].every((v) => v !== "" && Number.isFinite(Number(v)))) return c.text("lat, lng, heading, and pitch must be numbers.", 400);
+    return streetViewImage(deps.fetch, key, q);
   });
   app.get(routes.exportKml.path, (c) => {
     const record = requestedVersion(c.req.param("siteId")!, c.req.param("version")!);

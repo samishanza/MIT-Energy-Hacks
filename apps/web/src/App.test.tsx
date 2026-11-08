@@ -20,6 +20,7 @@ function fakeApi(overrides: Partial<EngineerApi> = {}): EngineerApi {
     runSite: vi.fn().mockResolvedValue({ status: "ok", record: sampleRecord() }),
     readRunProgress: vi.fn().mockResolvedValue(null),
     exportFile: vi.fn().mockResolvedValue(null),
+    readStreetView: vi.fn().mockResolvedValue({ status: "unavailable", reason: "No key in tests.", markers: [] }),
     readVersion: vi.fn().mockResolvedValue(sampleRecord()),
     readReadiness: vi.fn().mockResolvedValue(sampleReport()),
     confirmValue: vi.fn(),

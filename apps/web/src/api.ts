@@ -6,6 +6,8 @@ import {
   routes,
   RunProgressSchema,
   RunSiteResponseSchema,
+  StreetViewSchema,
+  type StreetView,
   type CaptureLink,
   type CaptureMetadata,
   type CaptureResult,
@@ -38,6 +40,7 @@ export interface EngineerApi {
   readRunProgress(address: string): Promise<RunProgress | null>;
   // Null when the server doesn't offer the file, so the screen can say so instead of failing.
   exportFile(siteId: string, version: number, format: ExportFormat): Promise<Blob | null>;
+  readStreetView(siteId: string, version: number): Promise<StreetView>;
   readVersion(siteId: string, version: number | "latest"): Promise<RecordVersion>;
   readReadiness(siteId: string, version: number | "latest"): Promise<ReadinessReport>;
   confirmValue(siteId: string, field: string, request: Actor & { expectedObservationId: string }): Promise<RecordVersion>;
@@ -74,6 +77,7 @@ export const httpApi: EngineerApi = {
       throw error;
     }
   },
+  readStreetView: (siteId, version) => send(StreetViewSchema, fill(routes.readStreetView.path, { siteId, version })),
   exportFile: async (siteId, version, format) => {
     const route = format === "dxf" ? routes.exportDxf : routes.exportKml;
     let response: Response;
