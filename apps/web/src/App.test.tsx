@@ -225,6 +225,15 @@ describe("the site view", () => {
     await runAddress(fakeApi());
     expect(await screen.findByRole("tab", { name: "Site plan" })).toBeTruthy();
   });
+
+  it("shows the single line with its calculations, marked for the engineer of record to verify", async () => {
+    await runAddress(fakeApi());
+    fireEvent.click(await screen.findByRole("tab", { name: "Single line" }));
+    const calcs = await screen.findByRole("region", { name: "Calculations" });
+    expect(within(calcs).getAllByRole("listitem").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/THE ENGINEER OF RECORD VERIFIES/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "Site inputs" })).toBeTruthy();
+  });
 });
 
 describe("placing equipment", () => {

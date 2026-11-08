@@ -4,6 +4,7 @@ import type { EngineerApi, ExportFormat, RunSiteRequest, RunSiteResponse } from 
 import { attentionItems, factsFound } from "./app/facts";
 import { SiteMap } from "./map/SiteMap";
 import { AttentionList } from "./panels/AttentionList";
+import { ElectricalSheet } from "./panels/ElectricalSheet";
 import { EvidencePanel } from "./panels/EvidencePanel";
 import { FactsPanel } from "./panels/FactsPanel";
 import { EngineeringSitePlan, featureLabels } from "@eqore/sheets";
@@ -103,7 +104,7 @@ export function App({ api }: { api: EngineerApi }) {
   const [focusField, setFocusField] = useState<string | null>(null);
   // The map answers "where is it"; the sheet answers "what can we build". Different
   // instruments, so they get their own view rather than layers on one canvas.
-  const [view, setView] = useState<"map" | "sheet">("map");
+  const [view, setView] = useState<"map" | "sheet" | "electrical">("map");
   const [change, setChange] = useState<string | null>(null);
   const [exportNote, setExportNote] = useState<string | null>(null);
   const current = useRef<{ record: RecordVersion | null; report: ReadinessReport | null }>({ record, report });
@@ -360,8 +361,13 @@ export function App({ api }: { api: EngineerApi }) {
               <button type="button" role="tab" aria-selected={view === "sheet"} className={view === "sheet" ? "on" : ""} disabled={!record || Boolean(live)} onClick={() => setView("sheet")}>
                 Site plan
               </button>
+              <button type="button" role="tab" aria-selected={view === "electrical"} className={view === "electrical" ? "on" : ""} disabled={!record || Boolean(live)} onClick={() => setView("electrical")}>
+                Single line
+              </button>
             </div>
-            {view === "sheet" && record && !live ? (
+            {view === "electrical" && record && !live ? (
+              <ElectricalSheet record={record} />
+            ) : view === "sheet" && record && !live ? (
               <EngineeringSitePlan record={record} />
             ) : (
               <SiteMap
