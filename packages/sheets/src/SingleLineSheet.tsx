@@ -353,7 +353,7 @@ export function deviceSpecs(design: ElectricalDesign, service: ServiceDesign): {
       rows: [
         ['UTILITY', inputs.utility.value?.toUpperCase() ?? BY_UTILITY],
         ['FEEDER', inputs.feeder.value?.toUpperCase() ?? BY_UTILITY],
-        ['TRANSFORMER KVA', BY_UTILITY],
+        ['TRANSFORMER KVA', inputs.transformerKva.value !== null ? `${inputs.transformerKva.value} KVA` : BY_UTILITY],
         ['TRANSFORMER IMPEDANCE', BY_UTILITY],
         ['AVAILABLE FAULT CURRENT', fault],
         ['UTILITY METER NO.', inputs.meterNumber.value?.toUpperCase() ?? BY_UTILITY],
@@ -680,7 +680,7 @@ function Diagram({ design, service, selected, onSelect }: { design: ElectricalDe
         <line x1={570} y1={busY + 40} x2={570} y2={busY + 60} stroke={EXISTING} strokeWidth={2.5} />
         <GroundSymbol x={570} y={busY + 60} color={EXISTING} />
         <text x={570} y={busY + 140} fontSize={18} textAnchor="middle" fill={EXISTING}>
-          KVA BY UTILITY
+          {design.inputs.transformerKva.value !== null ? `${design.inputs.transformerKva.value} KVA` : 'KVA BY UTILITY'}
         </text>
       </Device>
 
