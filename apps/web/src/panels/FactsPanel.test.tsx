@@ -92,10 +92,11 @@ describe("needs your attention", () => {
 });
 
 describe("status strip", () => {
-  it("keeps to one line: the note and the data labels", () => {
+  it("keeps to one line: the data labels, with no banner", () => {
     render(<StatusStrip record={worcesterRecord()} progress={null} running={false} />);
     const text = screen.getByRole("region", { name: "Site status" }).textContent ?? "";
-    expect(text).toMatch(/^Concept-grade\. Not surveyed\. Not a construction document\..*Real public data/);
+    expect(text).toMatch(/^Real public data/);
+    expect(text).not.toMatch(/Concept-grade/);
     expect(text).not.toMatch(/Unverified|public facts found|Grid connection request/);
   });
 

@@ -454,10 +454,6 @@ input:not([type="radio"], [type="checkbox"]) {
   font-size: 12px;
 }
 
-.concept-note {
-  font-weight: 700;
-}
-
 .legend-list li {
   display: flex;
   align-items: center;
