@@ -97,6 +97,20 @@ function saveFile(blob: Blob, name: string) {
 // stays where public data drew it.
 function withVerifiedDimensions(record: RecordVersion) {
   return record.features.map((feature) => {
+    // A main switchboard a person placed is drawn as the existing switchboard it is.
+    if (feature.kind === "capture_pin" && feature.field === "switchboard_location" && feature.geometry.type === "Point") {
+      return {
+        ...feature,
+        kind: "existing_equipment" as const,
+        label: "(E) MAIN SWITCHBOARD",
+        attributes: {
+          ...feature.attributes,
+          equipment_type: { type: "text" as const, value: "service_entrance" },
+          basis: { type: "text" as const, value: "placed by a person" },
+          confidence_reason: { type: "text" as const, value: "Placed by hand from a document or a site visit; the record's switchboard location value carries the source." },
+        },
+      };
+    }
     if (feature.kind !== "dimension_line") return feature;
     const value = record.values.find((v) => v.field === feature.field);
     if (value?.state !== "verified" || value.current?.type !== "quantity" || value.current.unit !== "ft") return feature;

@@ -258,9 +258,7 @@ export function SiteMap(props: SiteMapProps) {
     if (!bounds) return;
     fitted.current = frameKey;
     map.current?.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 20 });
-    // The tilted view shows more ground than the box it was fitted to, so step in to match.
-    const zoom = map.current?.getZoom?.();
-    if (area && zoom !== undefined) map.current?.setZoom?.(Math.min(zoom + 0.5, 20.5));
+    // The work area is already tight (zone, building, and nearby service), so no extra step in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameKey, loaded]);
 
