@@ -28,7 +28,9 @@ export type Road = { name: string; line: Point[]; onAddress: boolean; street?: b
 // either side and a column in a crown place it.
 export type Pole = { at: Point; heightM: number; roadFeet: number; road: string; inCanopy: boolean; detection: "measured" | "inferred" };
 export type Span = { from: Point; to: Point; returns: number; coverage: number; heightM: number; lengthM: number };
-export type PadMount = { at: Point; widthM: number; depthM: number; heightM: number; wallM: number };
+// A box found by shape. 3DEP often labels low equipment as low or medium vegetation, so the class doesn't decide;
+// solidity, a flat top, and a filled rectangle do, and the tests it passed are kept.
+export type PadMount = { at: Point; widthM: number; depthM: number; heightM: number; wallM: number; fill: number; singleReturns: number; topSpreadM: number; labelledVegetation: boolean };
 export type Detection = { poles: Pole[]; conductors: Span[]; drop: (Span & { pole: Pole; wall: Point; roofM: number | null }) | null; padMounts: PadMount[] };
 
 // High noise (18) is kept, because 3DEP projects often put wire returns there, but it is read only as wire evidence.
@@ -400,20 +402,23 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
     }
   }
 
-  // Equipment boxes: solid and flat-topped, not vegetation, nothing overhanging, away from walls and roads.
+  // Equipment boxes: solid, flat-topped, and filled out to a rectangle, with nothing overhanging, away from walls
+  // and roads. Low and medium vegetation classes are allowed, since 3DEP gives them to transformers and
+  // generators; tall vegetation isn't.
   const size = 0.5;
   const cellOf = (x: number, y: number) => Grid.key(Math.floor(x / size), Math.floor(y / size));
   const overhang = new Set<number>();
-  const low = new Map<number, { i: number; j: number; tops: number; single: number; count: number }>();
+  const low = new Map<number, { i: number; j: number; tops: number; single: number; count: number; vegetation: number }>();
   kept.forEach((p, index) => {
     if (noise[index]) return;
     const h = hs[index]!;
     if (h > 2.8) overhang.add(cellOf(p.x, p.y));
-    if (h < 0.6 || h > 2.6 || VEGETATION.has(p.classification)) return;
+    if (h < 0.6 || h > 2.6 || p.classification === 5) return;
     const key = cellOf(p.x, p.y);
-    const cell = low.get(key) ?? { i: Math.floor(p.x / size), j: Math.floor(p.y / size), tops: 0, single: 0, count: 0 };
+    const cell = low.get(key) ?? { i: Math.floor(p.x / size), j: Math.floor(p.y / size), tops: 0, single: 0, count: 0, vegetation: 0 };
     cell.tops = Math.max(cell.tops, h);
     cell.count++;
+    if (VEGETATION.has(p.classification)) cell.vegetation++;
     if ((p.returns ?? 1) === 1) cell.single++;
     low.set(key, cell);
   });
@@ -427,7 +432,8 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
       for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
         const next = Grid.key(group[k]!.i + di, group[k]!.j + dj);
         const cell = low.get(next);
-        if (cell && !seen.has(next)) { seen.add(next); group.push(cell); }
+        // Only cells at about the same height join, so a cabinet stands apart from a taller generator or fence.
+        if (cell && !seen.has(next) && Math.abs(cell.tops - group[k]!.tops) <= 0.35) { seen.add(next); group.push(cell); }
       }
     }
     if (group.length < 4) continue;
@@ -439,15 +445,19 @@ export function detectEquipment(points: LidarPoint[], buildings: Point[][], road
     const heightM = tops[Math.floor(tops.length / 2)]!;
     const mean = tops.reduce((sum, t) => sum + t, 0) / tops.length;
     const spread = Math.sqrt(tops.reduce((sum, t) => sum + (t - mean) ** 2, 0) / tops.length);
-    if (heightM < 1 || heightM > 2.4 || spread > 0.3) continue;
-    const single = group.reduce((sum, cell) => sum + cell.single, 0) / group.reduce((sum, cell) => sum + cell.count, 0);
-    if (single < 0.8) continue;
+    if (heightM < 0.9 || heightM > 2.4 || spread > 0.15) continue;
+    const fill = group.length / ((Math.max(...is) - Math.min(...is) + 1) * (Math.max(...js) - Math.min(...js) + 1));
+    if (fill < 0.6) continue;
+    const returns = group.reduce((sum, cell) => sum + cell.count, 0);
+    const single = group.reduce((sum, cell) => sum + cell.single, 0) / returns;
+    if (single < 0.7) continue;
+    const labelledVegetation = group.reduce((sum, cell) => sum + cell.vegetation, 0) / returns > 0.5;
     if (group.some((cell) => { for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) if (overhang.has(Grid.key(cell.i + di, cell.j + dj))) return true; return false; })) continue;
     const middle: Point = [((Math.min(...is) + Math.max(...is) + 1) / 2) * size, ((Math.min(...js) + Math.max(...js) + 1) / 2) * size];
     const wall = buildings.length ? nearestOnLines(middle, buildings).distance : Infinity;
-    if (wall < 3 || wall > 40) continue;
+    if (wall < 2 || wall > 40) continue;
     if (roadLines.length && nearestOnLines(middle, roadLines).distance < 5) continue;
-    padMounts.push({ at: middle, widthM, depthM, heightM, wallM: wall });
+    padMounts.push({ at: middle, widthM, depthM, heightM, wallM: wall, fill, singleReturns: single, topSpreadM: spread, labelledVegetation });
   }
   return { poles, conductors, drop, padMounts: padMounts.sort((a, b) => a.wallM - b.wallM).slice(0, 5) };
 }
