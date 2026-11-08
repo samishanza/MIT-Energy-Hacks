@@ -5,6 +5,7 @@ import { ENGINEER_PORT, WEB_PORT, routes } from "@eqore/contract";
 import { createCaptureLink, readEvidenceFile, uploadEvidence, type CaptureDeps } from "./capture.ts";
 import { checkReadiness } from "./readiness.ts";
 import { toSiteMap } from "./site-map.ts";
+import { decideProposal, listProposals, reviewSite } from "./site-agent.ts";
 import { toDxf, toKml } from "./export-files.ts";
 import { ApiFailure, runProgressKey, confirmValue, correctValue, movePin, resolveConflict, runSite } from "./run.ts";
 
@@ -118,6 +119,13 @@ export function createEngineerApp(deps: CaptureDeps): Hono {
     c.json(resolveConflict(deps, c.req.param("siteId")!, c.req.param("field")!, await jsonBody(c.req.raw))),
   );
   app.post(routes.movePin.path, async (c) => c.json(movePin(deps, c.req.param("siteId")!, await jsonBody(c.req.raw))));
+
+  // The site review agent (not in the shared contract yet): run a review, list its proposals, and record a
+  // person's decision on one. Without ANTHROPIC_API_KEY a review reports itself unavailable.
+  app.post("/api/sites/:siteId/agent-review", async (c) => c.json(await reviewSite(deps, c.req.param("siteId")!)));
+  app.get("/api/sites/:siteId/agent-proposals", (c) => c.json(listProposals(deps, { siteId: c.req.param("siteId")! })));
+  app.post("/api/agent-proposals/:proposalId/accept", async (c) => c.json(decideProposal(deps, c.req.param("proposalId")!, "accepted", await jsonBody(c.req.raw))));
+  app.post("/api/agent-proposals/:proposalId/reject", async (c) => c.json(decideProposal(deps, c.req.param("proposalId")!, "rejected", await jsonBody(c.req.raw))));
 
   app.post(routes.createCaptureLink.path, async (c) => c.json(createCaptureLink(deps, c.req.param("siteId")!, await jsonBody(c.req.raw))));
   app.post(routes.uploadEvidence.path, async (c) =>

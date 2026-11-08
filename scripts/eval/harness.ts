@@ -20,14 +20,23 @@ const SOURCE_API = (process.env.SOURCE_API ?? "http://127.0.0.1:8787").replace(/
 const BASES = ["MA_CentralEastern_1_2021", "MA_CentralEastern_2_2021", "MA_Western_1_B24"].map((name) => `https://usgs-lidar-public.s3.amazonaws.com/${name}`);
 const KINDS: Kind[] = ["utility_pole", "light_pole", "hydrant", "transformer"];
 
-export type SiteEntry = { siteId: string; truth: string; drawn?: Kind[]; split?: "train" | "holdout" };
+export type SiteEntry = { siteId: string; truth?: string; drawn?: Kind[]; split?: "train" | "holdout" };
 type Geo = { centre: Point; half: number; buildings: Point[][]; roads: Road[]; paved: Point[][]; base: string };
 type Feature = { geometry: { type: string; coordinates: unknown }; properties?: Record<string, unknown>; kind?: string; field?: string; label?: string };
 
+type Label = { siteId: string; kind: Kind; longitude: number; latitude: number };
+const labels = (): Label[] => (existsSync(join(EVAL_DIR, "labels.json")) ? (JSON.parse(readFileSync(join(EVAL_DIR, "labels.json"), "utf8")) as Label[]) : []);
+
+// The traced drawing sets, plus every site where a person confirmed a transformer (labels.json, written when a
+// review agent's pin is accepted), so the detector is scored on more sites as people review more.
 export function loadManifest(): SiteEntry[] {
   const path = join(EVAL_DIR, "sites.json");
-  if (!existsSync(path)) throw new Error(`No manifest at ${path}. See the comment at the top of scripts/eval/harness.ts.`);
-  return (JSON.parse(readFileSync(path, "utf8")) as { sites: SiteEntry[] }).sites;
+  const sites = existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as { sites: SiteEntry[] }).sites : [];
+  for (const label of labels()) {
+    if (!sites.some((s) => s.siteId === label.siteId)) sites.push({ siteId: label.siteId, drawn: [label.kind], split: "train" });
+  }
+  if (!sites.length) throw new Error(`No sites at ${path} or in labels.json. See the comment at the top of scripts/eval/harness.ts.`);
+  return sites;
 }
 
 const ringsOf = (g: Feature["geometry"]): [number, number][][] =>
@@ -101,13 +110,17 @@ export async function prepare(entry: SiteEntry): Promise<Prepared> {
   if (shift.applied) points = points.map((p) => ({ ...p, x: p.x - shift.dx, y: p.y - shift.dy }));
 
   const local = frame(lonLatCentre);
-  const features = (JSON.parse(readFileSync(entry.truth, "utf8")) as { features: Feature[] }).features;
+  const features = entry.truth ? (JSON.parse(readFileSync(entry.truth, "utf8")) as { features: Feature[] }).features : [];
   const truth: Partial<Record<Kind, Point[]>> = {};
   for (const f of features) {
     const kind = f.properties?.type as Kind;
     if (KINDS.includes(kind) && f.geometry.type === "Point") (truth[kind] ??= []).push(local(f.geometry.coordinates as [number, number]));
   }
-  const coverage = features.flatMap((f) => verticesOf(f.geometry)).map(local);
+  // A confirmed label stands in where the drawing shows none of its kind.
+  for (const label of labels().filter((l) => l.siteId === entry.siteId)) {
+    if (!(truth[label.kind] ?? []).length) truth[label.kind] = [local([label.longitude, label.latitude])];
+  }
+  const coverage = [...features.flatMap((f) => verticesOf(f.geometry)).map(local), ...Object.values(truth).flat()];
   const drawn = entry.drawn ?? KINDS.filter((kind) => (truth[kind] ?? []).length);
   return { entry, points, geo, truth, coverage, drawn };
 }
