@@ -1926,3 +1926,7 @@ input:not([type="radio"], [type="checkbox"], [type="range"]) { border: 1px solid
 .review-agent__sev--medium { background: #b26a00; }
 .review-agent__sev--low { background: #5f6368; }
 .review-agent__fix { font-weight: 600; }
+.customer-docs { display: flex; flex-direction: column; gap: 8px; min-width: 320px; max-width: 420px; padding: 4px; }
+.customer-docs__link input { width: 100%; font-family: monospace; font-size: 12px; }
+.customer-docs h4 { margin: 6px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.customer-docs__list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
