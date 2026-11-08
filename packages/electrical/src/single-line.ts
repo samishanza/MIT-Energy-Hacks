@@ -141,7 +141,8 @@ export function singleLineSvg(design: ElectricalDesign, index = 0): string {
     design.note,
     "(E) EXISTING, (N) NEW. DASHED: INFERRED OR UNKNOWN, NOT FIELD VERIFIED.",
     `CONFIGURATION: ${design.configuration.name.toUpperCase()}. ${design.configuration.provenance.toUpperCase()}`,
-    "EQUIPMENT RATINGS ARE THE MANUFACTURERS' PUBLISHED VALUES. NEC REFERENCES ARE TO THE 2023 EDITION.",
+    `EQUIPMENT RATINGS ARE THE MANUFACTURERS' PUBLISHED VALUES. ${(design.jurisdiction.calculationNote ?? "NEC references are to the 2023 edition.").toUpperCase()}`,
+    ...(design.jurisdiction.ahj ? [`AHJ: ${design.jurisdiction.ahj.toUpperCase()}. CODES: ${design.jurisdiction.codes.map((entry) => entry.short).join("; ").toUpperCase()}.`] : []),
   ];
   let y = 930;
   parts.push(`<line x1="20" y1="${y - 22}" x2="${WIDTH - 20}" y2="${y - 22}" stroke="${INK}" stroke-width="2"/>`, text(70, y, "NOTES", 13, "bold"));

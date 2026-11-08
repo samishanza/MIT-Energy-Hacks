@@ -71,10 +71,10 @@ describe("utility-side collection", () => {
     expect(feeder.current).toBeNull();
   });
 
-  it("leaves Holliston's feeder missing, and its utility among candidates with none asserted", async () => {
+  it("leaves Holliston's feeder missing, and names Eversource from the densest territory", async () => {
     const { value } = await values("11 Bartzak Dr, Holliston, MA", massachusetts);
     expect(value("feeder").state).toBe("missing");
-    expect(value("serving_utility")).toMatchObject({ state: "conflicting", current: null });
+    expect(value("serving_utility")).toMatchObject({ state: "inferred", current: { type: "text", value: "Eversource" } });
   });
 
   it("converts kW to MW before storing a PG&E capacity, and refuses a pair it can't convert", async () => {

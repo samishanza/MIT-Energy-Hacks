@@ -1,5 +1,6 @@
 import type { RecordVersion, Value } from "@eqore/contract";
 import { PLAN_SET_250KW_760KWH, type Configuration } from "./catalog.ts";
+import { jurisdictionFor, type Jurisdiction } from "./codes.ts";
 import { shortestRun } from "./layout.ts";
 import { BUSBAR_FACTOR, CONTINUOUS_FACTOR, SIZES, ampacity, groundingConductor, label, nextStandardOcpd, resistancePerKft, type Material, type Size } from "./nec.ts";
 
@@ -34,8 +35,9 @@ export type ServiceDesign = {
 
 export type ElectricalDesign = {
   note: string;
-  configuration: { name: string; provenance: string };
+  configuration: { id: string; name: string; provenance: string };
   site: { address: string; recordVersionId: string; version: number };
+  jurisdiction: Jurisdiction;
   inputs: {
     utility: SiteInput<string>;
     feeder: SiteInput<string>;
@@ -130,38 +132,61 @@ function parallelConductors(required: number, material: Material, temperatureC: 
 
 function designFor(service: { volts: number; label: string }, state: InputState, inputs: ElectricalDesign["inputs"], config: Configuration): ServiceDesign {
   const { battery, dcCable, inverter, isolationTransformer, disconnect, breaker, auxDisconnect } = config;
+  const unit = inverter.model.ac!;
+  const cell = battery.model.dc!;
+  const window = inverter.model.dc!;
+  // The AC circuit carries the larger of what the inverter sends out and what it draws from the grid.
+  const designA = Math.max(unit.ratedA, unit.maxInputA ?? 0);
+  const designBasis = unit.maxInputA && unit.maxInputA > unit.ratedA ? `${unit.maxInputA} A maximum AC input, above the ${unit.ratedA} A rated output` : `${unit.ratedA} A rated output`;
   const calculations: Calculation[] = [];
   const schedule: ScheduleRow[] = [];
   const voltageNote = state === "verified" ? "" : ` Assumes a ${service.label.toLowerCase()} service, which the record doesn't confirm.`;
 
+  // 0. The battery's DC range must sit inside the inverter's.
+  const fits = cell.vMin >= window.vMin && cell.vMax <= window.vMax;
+  calculations.push({
+    id: "dc-window",
+    title: "0. BATTERY AND INVERTER DC VOLTAGE",
+    citation: `Manufacturers' published ranges (${inverter.model.source.document}, ${inverter.model.source.revision})`,
+    steps: [`${battery.model.manufacturer} ${battery.model.model}: ${cell.vMin}-${cell.vMax} VDC`, `${inverter.model.manufacturer} ${inverter.model.model}: ${window.vMin}-${window.vMax} VDC`],
+    result: fits ? `${cell.vMin}-${cell.vMax} V is within ${window.vMin}-${window.vMax} V` : `${cell.vMin}-${cell.vMax} V is outside ${window.vMin}-${window.vMax} V; this inverter needs a different battery`,
+    status: fits ? "passes" : "fails",
+  });
+
   // 1. Battery to inverters, DC.
-  const dcAmps = (battery.outputKw * 1000) / battery.dcMinV;
+  const dcAmps = (battery.outputKw * 1000) / cell.vMin;
   calculations.push({
     id: "dc",
     title: "1. BESS TO INVERTERS (DC)",
     citation: "Manufacturer's cable rating; sized at the battery's minimum DC voltage",
-    steps: [`${battery.outputKw} kW per output ÷ ${battery.dcMinV} V minimum = ${amps(dcAmps)} per output`, `${dcCable.name}: ${dcCable.ampacity} A (${dcCable.ratingNote})`],
+    steps: [`${battery.outputKw} kW per output ÷ ${cell.vMin} V minimum = ${amps(dcAmps)} per output`, `${dcCable.name}: ${dcCable.ampacity} A (${dcCable.ratingNote})`],
     result: `${dcCable.ampacity} A ≥ ${amps(dcAmps)}, margin ${round(dcCable.ampacity / dcAmps, 2)}`,
     status: dcCable.ampacity >= dcAmps ? "passes" : "fails",
   });
   schedule.push({ tag: 1, from: battery.tag, to: inverter.tag, conductors: `${battery.outputs} × ${dcCable.name}, + AND −`, ground: "PER MANUFACTURER", conduit: "BY ENGINEER" });
 
   // 2. Each inverter to the isolation transformer, AC at 480 V.
-  const perInverter = inverter.maxAcA * CONTINUOUS_FACTOR;
+  const perInverter = designA * CONTINUOUS_FACTOR;
   const inverterConductor = parallelConductors(perInverter, "Cu", inverter.conductorTempC, 1, "6");
-  const withinTerminal = inverterConductor && SIZES.indexOf(inverterConductor.size) <= SIZES.indexOf(inverter.maxConductor);
+  const withinTerminal = inverterConductor && (inverter.maxConductor === null || SIZES.indexOf(inverterConductor.size) <= SIZES.indexOf(inverter.maxConductor));
   calculations.push({
     id: "inverter-ac",
     title: "2. EACH INVERTER TO THE ISOLATION TRANSFORMER (AC)",
-    citation: "2023 NEC 210.19(A)(1), Table 310.16 (Cu, 90 °C, as the manual allows)",
-    steps: [`${inverter.maxAcA} A maximum per unit × ${CONTINUOUS_FACTOR} = ${amps(perInverter)}`, inverterConductor ? `${label(inverterConductor.size)} Cu at 90 °C = ${inverterConductor.ampacity} A` : "No single conductor in the table carries it"],
-    result: inverterConductor && withinTerminal ? `${label(inverterConductor.size)} Cu, ${inverterConductor.ampacity} A ≥ ${amps(perInverter)}` : `Needs more than the ${label(inverter.maxConductor)} the terminals accept`,
+    citation: `2023 NEC 210.19(A)(1), Table 310.16 (Cu, ${inverter.conductorTempC} °C${inverter.maxConductor ? ", as the manual allows" : ""})`,
+    steps: [`${designBasis} per unit × ${CONTINUOUS_FACTOR} = ${amps(perInverter)}`, inverterConductor ? `${label(inverterConductor.size)} Cu at ${inverter.conductorTempC} °C = ${inverterConductor.ampacity} A` : "No single conductor in the table carries it"],
+    result:
+      inverterConductor && withinTerminal
+        ? `${label(inverterConductor.size)} Cu, ${inverterConductor.ampacity} A ≥ ${amps(perInverter)}`
+        : inverterConductor
+          ? `Needs more than the ${label(inverter.maxConductor!)} the terminals accept`
+          : "Engineer selects the conductors",
+    note: inverter.maxConductor === null ? "The terminals' largest conductor isn't on hand; the manual confirms it." : undefined,
     status: inverterConductor && withinTerminal ? "passes" : "fails",
   });
   schedule.push({ tag: 2, from: inverter.tag, to: isolationTransformer.tag, conductors: inverterConductor ? `3 × ${label(inverterConductor.size)} CU 90 °C PER INVERTER` : "BY ENGINEER", ground: "3 AWG CU (PER MANUFACTURER)", conduit: "BY ENGINEER" });
 
   // 3 and 4. Transformer to disconnect, and disconnect to the new breaker, at the service voltage.
-  const continuous = inverter.count * inverter.maxAcA * (inverter.voltage / service.volts);
+  const continuous = inverter.count * designA * (unit.nominalV / service.volts);
   const required = continuous * CONTINUOUS_FACTOR;
   const ocpd = nextStandardOcpd(required);
   // 2023 NEC 240.4(B) lets the next standard size protect conductors up to 800 A. Above that, 240.4(C) needs the full rating.
@@ -178,7 +203,7 @@ function designFor(service: { volts: number; label: string }, state: InputState,
       title,
       citation: "2023 NEC 215.2(A)(1), 240.4, 240.6(A), Table 310.16 (Al, 75 °C), Table 250.122",
       steps: [
-        `${inverter.count} × ${inverter.maxAcA} A at ${inverter.voltage} V = ${amps(continuous)} at ${service.volts} V`,
+        `${inverter.count} × ${designA} A at ${unit.nominalV} V = ${amps(continuous)} at ${service.volts} V`,
         `${amps(continuous)} × ${CONTINUOUS_FACTOR} = ${amps(required)}; next standard overcurrent device ${ocpd ?? "none"} A`,
         feeder ? `${feeder.sets} sets × ${label(feeder.size)} Al at 75 °C = ${feeder.ampacity} A` : "No parallel set up to 6 × 600 kcmil carries it",
         ground ? `Equipment ground at ${ocpd} A: ${label(ground)} Al (Table 250.122)` : "Equipment ground beyond the transcribed rows",
@@ -198,12 +223,12 @@ function designFor(service: { volts: number; label: string }, state: InputState,
   }
 
   // The isolation transformer carries the inverters' output.
-  const kva = inverter.count * inverter.kw;
+  const kva = inverter.count * unit.kva;
   calculations.push({
     id: "xfmr",
     title: "5. ISOLATION TRANSFORMER RATING",
     citation: "Manufacturer ratings",
-    steps: [`${inverter.count} × ${inverter.kw} kW = ${kva} kW at unity power factor`, `${isolationTransformer.kva} kVA, ${isolationTransformer.primary} to ${service.label}`],
+    steps: [`${inverter.count} × ${unit.kva} kVA maximum apparent power = ${kva} kVA`, `${isolationTransformer.kva} kVA, ${isolationTransformer.primary} to ${service.label}`],
     result: `${isolationTransformer.kva} kVA ≥ ${kva} kVA`,
     status: isolationTransformer.kva >= kva ? "passes" : "fails",
   });
@@ -211,14 +236,16 @@ function designFor(service: { volts: number; label: string }, state: InputState,
   // The 120% busbar check, which most often decides how the battery connects.
   const main = inputs.mainBreakerA.value;
   const bus = inputs.busRatingA.value;
-  const backfeed = continuous * CONTINUOUS_FACTOR;
+  // Backfeed is what the inverters send out, their rated output, not what they draw.
+  const output = inverter.count * unit.ratedA * (unit.nominalV / service.volts);
+  const backfeed = output * CONTINUOUS_FACTOR;
   if (main === null || bus === null) {
     calculations.push({
       id: "busbar",
       title: "6. MAIN DISTRIBUTION PANEL BUSBAR (120% RULE)",
       citation: "2023 NEC 705.12(B)(3)(2)",
       steps: [
-        `Source output ${amps(continuous)} × ${CONTINUOUS_FACTOR} = ${amps(backfeed)}`,
+        `Source output ${amps(output)} × ${CONTINUOUS_FACTOR} = ${amps(backfeed)}`,
         `Needs ${[main === null && "the main breaker rating", bus === null && "the busbar rating"].filter(Boolean).join(" and ")}, from the panel nameplate.`,
         `With a main breaker equal to the bus, the bus must be at least ${Math.ceil(round(backfeed / (BUSBAR_FACTOR - 1), 6))} A.`,
       ],
@@ -301,8 +328,8 @@ function designFor(service: { volts: number; label: string }, state: InputState,
     { id: "breaker", status: "N", title: breaker.name, lines: standardParts ? [breaker.model, `${breaker.amps} A, 3-POLE`] : [`${ocpd ?? "?"} A, 3-POLE`, "MODEL BY ENGINEER"], known: true },
     { id: "disconnect", status: "N", title: disconnect.name, lines: standardParts ? [disconnect.model, `${disconnect.amps} A, ${disconnect.volts} V`] : [`${ocpd ?? "?"} A`, "MODEL BY ENGINEER"], known: true },
     { id: "isolation-transformer", status: "N", title: isolationTransformer.name, lines: [`${isolationTransformer.kva} KVA`, `${isolationTransformer.primary} TO ${service.label}`], known: true },
-    { id: "inverters", status: "N", title: `${inverter.count} × ${inverter.name}`, lines: [inverter.model, `${inverter.kw} KW EACH, ${inverter.voltage} V, ${inverter.maxAcA} A MAX`], known: true },
-    { id: "bess", status: "N", title: battery.name, lines: [battery.model, `${battery.kwh} KWH, ${battery.dcMinV}-${battery.dcMaxV} VDC`], known: true },
+    { id: "inverters", status: "N", title: `${inverter.count} × ${inverter.name}`, lines: [inverter.label, `${unit.kw} KW EACH, ${unit.nominalV} V, ${unit.ratedA} A RATED`], known: true },
+    { id: "bess", status: "N", title: battery.name, lines: [`${battery.model.manufacturer} ${battery.model.model}`.toUpperCase(), `${battery.model.energyKwh ?? "?"} KWH, ${cell.vMin}-${cell.vMax} VDC`], known: true },
     { id: "aux", status: "N", title: auxDisconnect.name, lines: [`${auxDisconnect.amps} A, 3-POLE${service.volts === 480 ? ", 480 V" : ", VOLTAGE BY ENGINEER"}`], known: true },
   ];
 
@@ -328,8 +355,9 @@ export function designFromRecord(record: RecordVersion, config: Configuration = 
   const services = known === null ? STANDARD_SERVICES : [STANDARD_SERVICES.find((service) => service.volts === known) ?? { volts: known, label: `${known} V, 3-PHASE` }];
   return {
     note: CONCEPT_NOTE,
-    configuration: { name: config.name, provenance: config.provenance },
+    configuration: { id: config.id, name: config.name, provenance: config.provenance },
     site: { address: record.site.address, recordVersionId: record.id, version: record.version },
+    jurisdiction: jurisdictionFor(record),
     inputs,
     designs: services.map((service) => designFor(service, inputs.serviceVoltage.state, inputs, config)),
   };

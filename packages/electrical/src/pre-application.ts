@@ -79,7 +79,7 @@ function feeFor(kw: number): { usd: number; reason: string } {
 export function preApplicationDraft(record: RecordVersion, config: Configuration = PLAN_SET_250KW_760KWH): PreApplicationDraft {
   const values = new Map(record.values.map((value) => [value.field, value]));
   const get = (field: string) => values.get(field);
-  const sizeKw = config.inverter.count * config.inverter.kw;
+  const sizeKw = config.inverter.count * config.inverter.model.ac!.kw;
   const utility = show(get("serving_utility"));
   const candidates = (get("serving_utility")?.candidates ?? []).map((candidate) => (candidate.value.type === "text" ? candidate.value.value : "")).filter(Boolean);
   const formApplies = utility !== null && /national grid|massachusetts electric/i.test(utility);
@@ -110,13 +110,13 @@ export function preApplicationDraft(record: RecordVersion, config: Configuration
     { item: "1) Cross streets", answer: null, state: "needs_input", from: "the customer", reason: "The record names the fronting road only.", who: "customer" },
     { item: "1) Map still picture", answer: null, state: "needs_input", from: "the customer", reason: "The form asks for a Google Map still picture, which a person captures. The site map export can go with it.", who: "customer" },
     { item: "2) Generation type", answer: "Battery energy storage, inverter-based", state: "estimate", from: config.name, reason: config.provenance },
-    { item: "3) Size (AC kW)", answer: `${sizeKw} kW`, state: "estimate", from: config.name, reason: `${config.inverter.count} × ${config.inverter.kw} kW inverters. ${config.provenance}` },
+    { item: "3) Size (AC kW)", answer: `${sizeKw} kW`, state: "estimate", from: config.name, reason: `${config.inverter.count} × ${config.inverter.model.ac!.kw} kW inverters. ${config.provenance}` },
     {
       item: "4) Single or three phase",
       answer: "Three phase",
       state: "estimate",
       from: config.name,
-      reason: `The configuration's inverters are three-phase at ${config.inverter.voltage} V.${phase && /1|single/i.test(phase) ? ` The mapped feeder is ${phase}, so three-phase may not reach the site.` : ""}`,
+      reason: `The configuration's inverters are three-phase at ${config.inverter.model.ac!.nominalV} V.${phase && /1|single/i.test(phase) ? ` The mapped feeder is ${phase}, so three-phase may not reach the site.` : ""}`,
     },
     { item: "5) Stand-alone, with no on-site load?", answer: "No", state: "estimate", from: "the concept layout", reason: "The concept puts the battery behind the building's meter. The engineer confirms.", who: "engineer" },
     fromRecord("6a) Account number", "account_number", "The customer's electric bill shows it.", "customer"),
