@@ -1625,3 +1625,6 @@ legend {
 .dock .attributes div { display: grid; grid-template-columns: minmax(96px, 38%) 1fr; gap: 10px; }
 .dock .attributes dd { text-align: left; }
 .dock .attributes div.attribute-long { grid-template-columns: 1fr; gap: 2px; }
+.equipment-photo { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.equipment-photo .button-like { display: inline-block; cursor: pointer; padding: 6px 10px; border: 1px solid #1c2326; border-radius: 4px; background: #fff; font-weight: 600; font-size: 13px; }
+.equipment-photo .button-like:hover { background: #f0f2f4; }

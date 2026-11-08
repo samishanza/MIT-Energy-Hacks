@@ -2,6 +2,7 @@ import type { MapFeature, RecordVersion } from "@eqore/contract";
 import { CONFIGURATIONS } from "@eqore/electrical";
 import { feederDetails, feederSummary, formatReading, plainLabel, printed } from "@eqore/sheets";
 import { useState } from "react";
+import type { EngineerApi } from "../api";
 
 // What we know about one piece of equipment, as a short specification table. Missing values
 // say who supplies them. How the item was found, and why it could be off, is folded away below.
@@ -55,6 +56,18 @@ export function equipmentSpecs(record: RecordVersion, f: MapFeature): { title: s
       };
     case "pad_mount_transformer_candidate":
       return { title: "(E) Equipment box", rows: [["Size", "About 6 × 6 ft, 5 ft tall"], ["Type", "By photo or site visit"]] };
+    case "pad_mount_transformer":
+      return {
+        title: plainLabel(f.label) || "(E) Pad-mount transformer",
+        rows: [
+          ["Utility", utility],
+          ["Rating", value(record, "transformer_kva") ?? BY_UTILITY],
+          ["Secondary voltage", value(record, "service_voltage") ?? BY_UTILITY],
+          ["Feeder", value(record, "feeder") ?? BY_UTILITY],
+        ],
+      };
+    case "meter":
+      return { title: plainLabel(f.label) || "(E) Utility meter", rows: [["Utility", utility], ["Meter number", value(record, "meter_number") ?? BY_UTILITY]] };
     case "bess_pad": {
       const b = config.battery.model;
       const inv = config.inverter.model;
@@ -101,7 +114,48 @@ const TYPES = [
   ["other", "Something else"],
 ] as const;
 
-export function EquipmentSpecs({ record, feature }: { record: RecordVersion; feature: MapFeature }) {
+// What a photo of each kind of equipment can fill in: the record field the photo answers, and what to shoot.
+const PHOTO_FOR: Record<string, { field: string; ask: string }> = {
+  pad_mount_transformer: { field: "utility_transformer_location", ask: "Photo of the transformer's nameplate or stenciled rating" },
+  pad_mount_transformer_candidate: { field: "utility_transformer_location", ask: "Photo of the box's nameplate, if it's a transformer" },
+  service_tap: { field: "utility_transformer_location", ask: "Photo of the transformer's stenciled rating on the pole" },
+  service_entrance: { field: "main_device_rating", ask: "Photo of the main switchboard's exterior label" },
+  meter: { field: "meter_location", ask: "Photo of the meter face, showing its number" },
+};
+
+function PhotoInput({ record, feature, api, onRecord }: { record: RecordVersion; feature: MapFeature; api: EngineerApi; onRecord: (record: RecordVersion) => void }) {
+  const photo = PHOTO_FOR[typeOf(feature)];
+  const [status, setStatus] = useState<string | null>(null);
+  if (!photo) return null;
+  const [lon, lat] = feature.geometry.type === "Point" ? (feature.geometry.coordinates as [number, number]) : [undefined, undefined];
+  async function send(file: File) {
+    setStatus("Reading the photo…");
+    try {
+      const result = await api.uploadEvidence(record.site.id, photo!.field, file, lat !== undefined && lon !== undefined ? { latitude: lat, longitude: lon } : {});
+      onRecord(await api.readVersion(record.site.id, "latest"));
+      setStatus(
+        result.state === "inferred"
+          ? "Read. Confirm the values below before they're used."
+          : result.state === "extraction_failed"
+            ? "Saved. The photo reader isn't available right now, so enter the values by hand below."
+            : "Saved, but the values couldn't be read from it. Enter them by hand below.",
+      );
+    } catch (failure) {
+      setStatus(failure instanceof Error ? failure.message : "The photo didn't upload.");
+    }
+  }
+  return (
+    <div className="equipment-photo">
+      <label className="button-like">
+        {photo.ask}
+        <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => e.target.files?.[0] && void send(e.target.files[0])} />
+      </label>
+      {status ? <span className="note">{status}</span> : null}
+    </div>
+  );
+}
+
+export function EquipmentSpecs({ record, feature, api, onRecord }: { record: RecordVersion; feature: MapFeature; api?: EngineerApi; onRecord?: (record: RecordVersion) => void }) {
   const { title, rows } = equipmentSpecs(record, feature);
   const [saved, setSaved] = useState<string | null>(null);
   const [actual, setActual] = useState("");
@@ -144,6 +198,7 @@ export function EquipmentSpecs({ record, feature }: { record: RecordVersion; fea
           </tbody>
         </table>
       ) : null}
+      {api && onRecord ? <PhotoInput record={record} feature={feature} api={api} onRecord={onRecord} /> : null}
       {canLabel ? (
         <div className="equipment-label">
           <span>Is this right?</span>

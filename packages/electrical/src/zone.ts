@@ -102,7 +102,7 @@ export type BessZone = {
   // Spots about as good as the best pad, around it: where the battery would realistically go.
   recommended: MapFeature | null;
   pad: BessPad | null;
-  target: "main switchboard" | "service entrance" | "building wall" | "building wall nearest the utility supply";
+  target: "main switchboard" | "service entrance" | "building wall" | "building wall nearest the utility transformer" | "building wall nearest the utility supply";
   // When nothing qualifies, the rule that removed the last cells.
   reason: string | null;
 };
@@ -284,6 +284,29 @@ export function feasibleBessZone(record: RecordVersion, options: { energyKwh?: n
   let entrancePoint = entrance && entrance.geometry.type === "Point" ? turn(entrance.geometry.coordinates as Point) : null;
   // Without a known entrance, the service most likely enters on the wall nearest the utility supply:
   // the closest pole or overhead line. That wall point stands in for the entrance, marked as assumed.
+  // Next best: the utility transformer that feeds the building, placed from a photo or a drawing, or a
+  // pad-mount a drawing shows. The service runs from it, so the wall nearest it is the likely entrance.
+  if (!entrancePoint) {
+    const transformer = record.features.find(
+      (f) =>
+        f.geometry.type === "Point" &&
+        ((f.kind === "capture_pin" && f.field === "utility_transformer_location") ||
+          (f.kind === "existing_equipment" && f.attributes?.equipment_type?.type === "text" && f.attributes.equipment_type.value === "pad_mount_transformer")),
+    );
+    if (transformer) {
+      const at = turn(transformer.geometry.coordinates as Point);
+      let gap = Infinity;
+      for (const polygon of houses) {
+        const q = nearestOnRing(at, polygon[0]!);
+        const d = Math.hypot(q[0] - at[0], q[1] - at[1]);
+        if (d < gap && d <= SUPPLY_SEARCH_FT) {
+          gap = d;
+          entrancePoint = q;
+        }
+      }
+      if (entrancePoint) target = "building wall nearest the utility transformer";
+    }
+  }
   if (!entrancePoint) {
     const supply = record.features
       .filter((f) => isOverhead(f) || isSupplyPole(f))

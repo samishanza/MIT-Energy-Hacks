@@ -126,11 +126,11 @@ function MapLinks({ feature }: { feature: MapFeature }) {
   );
 }
 
-function FeatureFacts({ feature, record }: { feature: MapFeature; record: RecordVersion }) {
+function FeatureFacts({ feature, record, api, onRecord }: { feature: MapFeature; record: RecordVersion; api: EvidencePanelProps["api"]; onRecord: (record: RecordVersion) => void }) {
   if (feature.kind === "existing_equipment" || feature.kind === "utility_line") {
     return (
       <div className="dock-card">
-        <EquipmentSpecs record={record} feature={feature} />
+        <EquipmentSpecs record={record} feature={feature} api={api} onRecord={onRecord} />
         <MapLinks feature={feature} />
       </div>
     );
@@ -282,7 +282,7 @@ export function EvidencePanel(props: EvidencePanelProps) {
         </div>
       </header>
       <div className="dock-body">
-        {feature ? <FeatureFacts feature={feature} record={props.record} /> : null}
+        {feature ? <FeatureFacts feature={feature} record={props.record} api={props.api} onRecord={props.onRecord} /> : null}
         {values.length === 0 ? <p className="note">No value yet.</p> : null}
         {values.map((value) => (
           <ValueEvidence key={value.field} {...props} value={value} titled={Boolean(feature) || values.length > 1} />
