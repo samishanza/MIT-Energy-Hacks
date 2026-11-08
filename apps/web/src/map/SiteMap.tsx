@@ -131,7 +131,8 @@ export function SiteMap(props: SiteMapProps) {
   // A plan-set drawing aligned onto this site, when one was prepared (scripts/plan-overlay.py).
   // It's a customer document, so it lives in a gitignored folder and is absent everywhere else.
   const [planOverlay, setPlanOverlay] = useState<{ image: string; corners: [number, number][]; label: string } | null>(null);
-  const [planShown, setPlanShown] = useState(true);
+  // The plan-set drawing starts off; the map opens on the record itself, and the drawing is one click away.
+  const [planShown, setPlanShown] = useState(false);
   const [planOpacity, setPlanOpacity] = useState(0.85);
 
   useEffect(() => {
