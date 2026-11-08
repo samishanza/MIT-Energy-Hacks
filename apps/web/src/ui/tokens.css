@@ -1458,3 +1458,6 @@ legend {
 .specs-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .specs-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 12px; margin-top: 10px; align-items: end; }
 .specs-form .specs-source { grid-column: span 2; }
+
+.preapp { margin: 0 0 12px; }
+.preapp-text { max-height: 420px; overflow: auto; padding: 10px 12px; background: var(--white); border: 1px solid var(--rule); font: 12px/1.45 var(--mono); white-space: pre-wrap; }

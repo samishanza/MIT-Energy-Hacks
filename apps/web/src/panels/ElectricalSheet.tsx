@@ -1,5 +1,5 @@
 import type { RecordVersion } from "@eqore/contract";
-import { designFromRecord, singleLineSvg, type Calculation, type ElectricalDesign } from "@eqore/electrical";
+import { designFromRecord, preApplicationDraft, preApplicationText, singleLineSvg, type Calculation, type ElectricalDesign } from "@eqore/electrical";
 import { useMemo, useState } from "react";
 import type { EngineerApi } from "../api";
 import { ElectricalSpecsForm, type SpecsPrefill } from "./ElectricalSpecsForm";
@@ -52,6 +52,7 @@ export function ElectricalSheet({ record, api, actorName = "", onActorName = () 
           ))}
         </div>
       ) : null}
+      <PreApplication record={record} />
       <div className="electrical-svg" dangerouslySetInnerHTML={{ __html: svg }} />
 
       <section className="electrical-calcs" aria-label="Calculations">
@@ -93,5 +94,33 @@ export function ElectricalSheet({ record, api, actorName = "", onActorName = () 
         </table>
       </section>
     </figure>
+  );
+}
+
+/** The utility's Pre-Application Report request, drafted from the record for a person to review and send. */
+function PreApplication({ record }: { record: RecordVersion }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const text = useMemo(() => (open ? preApplicationText(preApplicationDraft(record)) : ""), [open, record]);
+  return (
+    <section className="preapp" aria-label="Pre-Application Report request">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((shown) => !shown)}>
+        {open ? "Hide" : "Draft"} the utility's Pre-Application Report request
+      </button>
+      {open ? (
+        <>
+          <p className="note">Drafted from public data for a person to review and send. Customer contacts, the account number, and loads are left for the customer.</p>
+          <pre className="preapp-text">{text}</pre>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard?.writeText(text).then(() => setCopied(true));
+            }}
+          >
+            {copied ? "Copied" : "Copy text"}
+          </button>
+        </>
+      ) : null}
+    </section>
   );
 }
