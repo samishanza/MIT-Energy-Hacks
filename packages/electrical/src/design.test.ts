@@ -77,13 +77,14 @@ describe("the concept electrical design", () => {
     expect(known(800, 1600).designs[0]!.calculations.find((entry) => entry.id === "busbar")).toMatchObject({ status: "passes", result: "1175 A ≤ 1920 A" });
   });
 
-  it("labels the run length and its voltage drop as estimates", () => {
+  it("keeps the run length's estimate state in its input and the voltage drop's steps, not the title", () => {
     const design = designFromRecord(unknownService);
     expect(design.inputs.runLengthFt).toMatchObject({ state: "estimate", source: "shortest plausible run, straight line, open ground to the inferred service entrance" });
     // From the synthetic pad's north edge, 0.0004 degrees of latitude (about 146 ft) south of the entrance, not from its center.
     expect(design.inputs.runLengthFt.value).toBe(146);
     const drop = design.designs[0]!.calculations.find((entry) => entry.id === "voltage-drop")!;
-    expect(drop.title).toContain("(ESTIMATE)");
+    expect(drop.title).toBe("7. VOLTAGE DROP, DISCONNECT TO THE PANEL");
+    expect(drop.steps[0]).toContain("Estimated run 146 ft");
     expect(drop.note).toContain("Estimate");
   });
 
