@@ -12,6 +12,7 @@ const PAD = 3;
 
 export function priorityOf(className: string): number {
   if (/callout-dimension/.test(className)) return 0;
+  if (/callout-feasible/.test(className)) return 1;
   if (/callout-buildings/.test(className)) return 1;
   if (/callout-lot/.test(className)) return 2;
   if (/callout-roads/.test(className)) return 3;
