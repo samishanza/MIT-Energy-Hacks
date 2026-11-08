@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { plainLabel } from "@eqore/sheets";
 import { equipmentSolids, equipmentTag, polePoints, solidsCollection } from "./equipment3d";
 import { Google3DView } from "./Google3DView";
+import { declutter, priorityOf, type PlacedLabel } from "./declutter";
 import { symbolSvg } from "./symbols";
 import {
   BASE_LAYER,
@@ -258,9 +259,34 @@ export function SiteMap(props: SiteMapProps) {
         .map((feature) => mark(feature, feature.label!.replace(/\s*\(fitted\)/i, ""), "callout callout-dimension", centerOf(feature))),
       ...visible
         .filter((feature) => !isPoint(feature) && feature.kind !== "utility_line" && featureLabels?.[feature.id])
+        // One label per road name, however many segments the road has.
+        .filter((feature, i, all) => feature.kind !== "road" || all.findIndex((other) => other.kind === "road" && featureLabels![other.id] === featureLabels![feature.id]) === i)
         .map((feature) => mark(feature, featureLabels![feature.id]!, `callout callout-drafting callout-${layerOf(feature)}`, centerOf(feature))),
     ];
+    // No two labels overlap: the less important one hides until there's room again.
+    const labels: PlacedLabel[] = markers.map((marker) => {
+      const element = marker.getElement();
+      return { element, priority: priorityOf(element.className) };
+    });
+    let pending = 0;
+    const run = () => {
+      if (pending) return;
+      pending = requestAnimationFrame(() => {
+        pending = 0;
+        const frame = container.current?.getBoundingClientRect();
+        const panels = [...(container.current?.parentElement?.querySelectorAll(".map-legend, .map-tools") ?? [])].map((panel) => panel.getBoundingClientRect());
+        declutter(
+          labels,
+          frame && frame.width > 0 ? { left: frame.left, top: frame.top, right: frame.right, bottom: frame.bottom } : undefined,
+          panels.filter((r) => r.width > 0).map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })),
+        );
+      });
+    };
+    run();
+    instance.on("render", run);
     return () => {
+      instance.off("render", run);
+      if (pending) cancelAnimationFrame(pending);
       for (const marker of markers) marker.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -27,6 +27,10 @@ const fake = vi.hoisted(() => {
       (this.handlers[event] ??= []).push(handler);
       return this;
     }
+    off(event: string, handler: (e: unknown) => void) {
+      this.handlers[event] = (this.handlers[event] ?? []).filter((h) => h !== handler);
+      return this;
+    }
     fire(event: string, payload: unknown = {}) {
       for (const handler of this.handlers[event] ?? []) handler(payload);
     }
@@ -77,6 +81,9 @@ const fake = vi.hoisted(() => {
     }
     setLngLat() {
       return this;
+    }
+    getElement() {
+      return this.el;
     }
     addTo() {
       document.body.append(this.el);
