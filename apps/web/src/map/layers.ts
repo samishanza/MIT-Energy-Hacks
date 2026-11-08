@@ -77,7 +77,7 @@ export function layerOf(feature: MapFeature): LayerKey {
     case "property_line":
       return "lot";
     case "candidate_area":
-      if ((feature.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value === "feasible_bess") return "feasible";
+      if (String((feature.attributes?.["zone_kind"] as { value?: unknown } | undefined)?.value ?? "").startsWith("feasible_bess")) return "feasible";
       return `zone_${zoneTier(feature)}`;
     case "utility_line":
       return "utility";

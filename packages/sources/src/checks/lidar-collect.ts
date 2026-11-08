@@ -42,7 +42,8 @@ export async function collectLidarEquipment(
   const lonLat = ([x, y]: Point): Point => [center[0] + x / perLon, center[1] + y / 111320];
   // The buildings and 60 m around them, which reaches the poles on the road in front and their neighbors.
   const half = Math.min(220, Math.max(...vertices.map(local).map(([x, y]) => Math.max(Math.abs(x), Math.abs(y)))) + 60);
-  const query = `points within ${Math.round(half)} m of ${center[0].toFixed(5)},${center[1].toFixed(5)}`;
+  // Named by the site only, so a later run with a different read radius answers the same question.
+  const query = `lidar around the buildings at ${center[0].toFixed(5)},${center[1].toFixed(5)}`;
   const origin = (retrievedAt: string) => ({ source, query, retrievedAt });
   const missing = (reason: string): LidarCollection => ({
     observations: [observe(origin(ctx.now()), ctx, { field: "detected_grid_equipment", kind: "no_value", value: null, reason })],
@@ -189,6 +190,18 @@ export async function collectLidarEquipment(
         sourceDate: config.sourceDate,
         grade: "reference",
         reason: `${why} Detected in public lidar, not field verified; the utility confirms the service.`,
+      }),
+    );
+  }
+  else {
+    // A run that looked and found no drop says so, which takes back a drop an earlier run reported.
+    observations.push(
+      observe(origin(retrievedAt), ctx, {
+        field: "grid_service_path",
+        kind: "no_value",
+        value: null,
+        attribute: "service drop detected in lidar",
+        reason: "No overhead service drop found in lidar; the service is likely underground. The utility confirms the service.",
       }),
     );
   }

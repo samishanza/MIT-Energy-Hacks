@@ -100,3 +100,26 @@ describe("a later run of a source", () => {
     expect(deriveValue(definition("serving_utility"), [photo("p1", "A", "2026-11-07T10:00:00Z"), photo("p2", "B", "2026-11-07T12:00:00Z")]).state).toBe("conflicting");
   });
 });
+
+describe("a later run that looked and found nothing", () => {
+  const drop = (id: string, kind: "reading" | "no_value", retrievedAt: string, query: string, attribute?: string): Observation => ({
+    ...reading(id, "grid_service_path", "Likely fed overhead"),
+    kind,
+    value: kind === "reading" ? { type: "text", value: "Likely fed overhead" } : null,
+    retrievedAt,
+    locator: { query, attribute },
+    identity: { sourceId: "source", query, contentHash: id },
+    ...(kind === "no_value" ? { reason: "No overhead service drop found" } : {}),
+  });
+  const path: FieldDefinition = { field: "grid_service_path", label: "Service path", owner: "utility", grade: "reference" };
+
+  it("takes back an earlier reading of the same attribute, even from a differently worded query", () => {
+    const value = deriveValue(path, [drop("old", "reading", "2026-11-07T10:00:00Z", "points within 115 m", "service drop detected in lidar"), drop("new", "no_value", "2026-11-08T10:00:00Z", "lidar around the buildings", "service drop detected in lidar")]);
+    expect(value).toMatchObject({ state: "missing", current: null, reason: "No overhead service drop found" });
+  });
+
+  it("keeps the reading when the later no-value names no attribute, as when the source failed", () => {
+    const value = deriveValue(path, [drop("old", "reading", "2026-11-07T10:00:00Z", "q", "service drop detected in lidar"), drop("outage", "no_value", "2026-11-08T10:00:00Z", "q")]);
+    expect(value.state).toBe("inferred");
+  });
+});

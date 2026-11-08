@@ -130,7 +130,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
     .filter((e) => inside(e.at, view, 20));
   const wetlands = record.features.filter((f) => f.kind === 'constraint' && f.field === 'wetlands_nearby' && f.geometry.type !== 'Point');
-  const isFeasible = (f: MapFeature) => attributeText(f, 'zone_kind') === 'FEASIBLE_BESS';
+  const isFeasible = (f: MapFeature) => (attributeText(f, 'zone_kind') ?? '').startsWith('FEASIBLE_BESS');
   const feasible = record.features.filter((f) => f.kind === 'candidate_area' && isFeasible(f));
   const open = record.features.filter((f) => f.kind === 'candidate_area' && !isFeasible(f));
   const dims = record.features.filter((f) => f.kind === 'dimension_line');
@@ -181,7 +181,8 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   for (const z of feasible) {
     const pts = polygonsOfFeature(z, frame).flatMap((p) => p.outer.map(toSheet));
     const at = firstInside(pts, view, 0.2);
-    if (at) callouts.push({ anchor: at, lines: ['(N) FEASIBLE BESS ZONE', `WITHIN ${attributeText(z, 'max_run_ft') ?? "150'"} OF THE SERVICE`.replace("150 FT'", "150'")], color: NEW });
+    const remote = attributeText(z, 'zone_kind') === 'FEASIBLE_BESS_REMOTE';
+    if (at) callouts.push({ anchor: at, lines: remote ? ["(N) BESS ZONE, OVER 100' FROM EXPOSURES"] : ['(N) FEASIBLE BESS ZONE', `WITHIN ${attributeText(z, 'max_run_ft') ?? "250'"} OF THE SERVICE`], color: NEW });
   }
 
   const substations = record.features

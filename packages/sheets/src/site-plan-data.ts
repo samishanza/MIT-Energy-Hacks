@@ -313,7 +313,10 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
         if (f.field === 'wetlands_nearby') labels[f.id] = `(E) WETLAND: ${attributeText(f, 'wetland_type') ?? 'MAPPED'}`;
         break;
       case 'candidate_area':
-        labels[f.id] = (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value === 'feasible_bess' ? '(N) FEASIBLE BESS ZONE' : 'OPEN GROUND';
+        {
+          const kind = (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value;
+          labels[f.id] = kind === 'feasible_bess' ? '(N) FEASIBLE BESS ZONE' : kind === 'feasible_bess_remote' ? '(N) BESS ZONE, OVER 100 FT FROM EXPOSURES' : 'OPEN GROUND';
+        }
         break;
       default:
         break;
@@ -371,6 +374,7 @@ export function workArea(features: MapFeature[], padM = 25): [number, number, nu
   for (const f of drawnEquipment(features)) {
     const electrical = f.kind === 'existing_equipment' || /service|drop|trench|conductor/i.test(String((f.attributes?.['line_class'] as { value?: unknown } | undefined)?.value ?? ''));
     const zone = f.kind === 'candidate_area' && (f.attributes?.['zone_kind'] as { value?: unknown } | undefined)?.value === 'feasible_bess';
+    // The remote area can sit far out on the lot; it's shown but doesn't widen the frame.
     if (electrical || zone) pts.push(...coords(f).filter(near));
   }
   const xs = pts.map((p) => p[0]!);
