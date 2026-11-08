@@ -129,6 +129,9 @@ export function App({ api }: { api: EngineerApi }) {
   const [record, setRecord] = useState<RecordVersion | null>(null);
   const [report, setReport] = useState<ReadinessReport | null>(null);
   const [selected, setSelected] = useState<Selection>(NOTHING);
+  // The details dock folds to a rail when the map is moved or on request, and opens on a new pick.
+  const [dockCollapsed, setDockCollapsed] = useState(false);
+  useEffect(() => setDockCollapsed(false), [selected]);
   const [actorName, setActorName] = useState(loadActor);
   const [placingField, setPlacingField] = useState<string | null>(null);
   const [focusField, setFocusField] = useState<string | null>(null);
@@ -344,9 +347,8 @@ export function App({ api }: { api: EngineerApi }) {
             </div>
           </div>
         ) : null}
+        <StatusStrip record={live ? null : record} progress={progress} running={running} />
       </header>
-
-      <StatusStrip record={live ? null : record} progress={progress} running={running} />
 
       {record?.snapshot && !live ? (
         <div role="status" aria-label="Snapshot" className="snapshot-banner">
@@ -400,7 +402,7 @@ export function App({ api }: { api: EngineerApi }) {
 
       {mapSite ? (
         <main className="workspace">
-          <div className={`map-region${dockOpen ? " dock-open" : ""}`}>
+          <div className={`map-region${dockOpen ? (dockCollapsed ? " dock-collapsed" : " dock-open") : ""}`}>
             <div className="view-tabs" role="tablist" aria-label="Site view">
               <button type="button" role="tab" aria-selected={view === "map"} className={view === "map" ? "on" : ""} onClick={() => setView("map")}>
                 Map
@@ -432,7 +434,8 @@ export function App({ api }: { api: EngineerApi }) {
                 selectedFields={live ? [] : selected.fields}
                 selectedFeatureId={live ? null : selected.featureId}
                 onSelect={select}
-                dockOpen={dockOpen}
+                dockOpen={dockOpen && !dockCollapsed}
+                onUserMove={() => setDockCollapsed(true)}
                 placingField={placingField}
                 onPlace={(field, longitude, latitude) => void place(field, longitude, latitude)}
                 onCancelPlace={() => setPlacingField(null)}
@@ -452,6 +455,9 @@ export function App({ api }: { api: EngineerApi }) {
                 onRecord={(next) => void afterAction(next)}
                 onClose={() => setSelected(NOTHING)}
                 onPlace={setPlacingField}
+                collapsed={dockCollapsed}
+                onCollapse={() => setDockCollapsed(true)}
+                onExpand={() => setDockCollapsed(false)}
               />
             ) : null}
           </div>

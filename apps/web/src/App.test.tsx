@@ -79,13 +79,14 @@ describe("running a site", () => {
     expect(screen.getByTestId("site-map")).toBeTruthy();
   });
 
-  it("labels real data as real", async () => {
+  it("shows no status strip for real public data, the normal case", async () => {
     const record = sampleRecord();
     record.synthetic = false;
     for (const value of record.values) value.synthetic = false;
     await runAddress(fakeApi({ runSite: vi.fn().mockResolvedValue({ status: "ok", record }) }));
     await screen.findByTestId("site-map");
-    expect(strip().getByText("Real public data")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Site status" })).toBeNull();
+    expect(screen.queryByText("Real public data")).toBeNull();
   });
 
   it("banners a snapshot with its date", async () => {
