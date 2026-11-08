@@ -1,5 +1,6 @@
 import type { RecordVersion, Value } from "@eqore/contract";
 import { PLAN_SET_250KW_760KWH, type Configuration } from "./catalog.ts";
+import { jurisdictionFor, type Jurisdiction } from "./codes.ts";
 import { shortestRun } from "./layout.ts";
 import { BUSBAR_FACTOR, CONTINUOUS_FACTOR, SIZES, ampacity, groundingConductor, label, nextStandardOcpd, resistancePerKft, type Material, type Size } from "./nec.ts";
 
@@ -36,6 +37,7 @@ export type ElectricalDesign = {
   note: string;
   configuration: { name: string; provenance: string };
   site: { address: string; recordVersionId: string; version: number };
+  jurisdiction: Jurisdiction;
   inputs: {
     utility: SiteInput<string>;
     feeder: SiteInput<string>;
@@ -330,6 +332,7 @@ export function designFromRecord(record: RecordVersion, config: Configuration = 
     note: CONCEPT_NOTE,
     configuration: { name: config.name, provenance: config.provenance },
     site: { address: record.site.address, recordVersionId: record.id, version: record.version },
+    jurisdiction: jurisdictionFor(record),
     inputs,
     designs: services.map((service) => designFor(service, inputs.serviceVoltage.state, inputs, config)),
   };
