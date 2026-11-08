@@ -101,6 +101,7 @@ vi.mock("./maplibre", () => ({
   Map: fake.FakeMap,
   Marker: fake.FakeMarker,
   ScaleControl: fake.FakeControl,
+  NavigationControl: fake.FakeControl,
 }));
 
 import { SiteMap, type SiteMapProps } from "./SiteMap";

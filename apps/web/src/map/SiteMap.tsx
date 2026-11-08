@@ -1,6 +1,6 @@
 import type { BaseMap, MapFeature, Site, Value } from "@eqore/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { plainLabel, workArea } from "@eqore/sheets";
+import { plainLabel, workArea, workPoints } from "@eqore/sheets";
 import { equipmentSolids, equipmentTag, polePoints, solidsCollection } from "./equipment3d";
 import { gridPath } from "../app/gridPath";
 import { Google3DView } from "./Google3DView";
@@ -24,7 +24,7 @@ import {
   type LayerKey,
   ZONE_TIERS,
 } from "./layers";
-import { Map as MapLibre, Marker, ScaleControl } from "./maplibre";
+import { Map as MapLibre, Marker, NavigationControl, ScaleControl } from "./maplibre";
 
 export interface SiteMapProps {
   site: Site;
@@ -46,6 +46,29 @@ export interface SiteMapProps {
 }
 
 const HIT_RADIUS = 6;
+
+// The map bearing that puts the building's long axis across the screen, the quarter turn nearest north-up.
+function squareBearing(ring: number[][]): number {
+  if (ring.length < 3) return 0;
+  const lat = ring.reduce((s, p) => s + p[1]!, 0) / ring.length;
+  const k = Math.cos((lat * Math.PI) / 180);
+  const pts = ring.map((p) => [p[0]! * k, p[1]!] as const);
+  let best = { area: Infinity, azimuth: 0 };
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]!, b = pts[(i + 1) % pts.length]!;
+    const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const c = Math.cos(-angle), s = Math.sin(-angle);
+    const us = pts.map(([x, y]) => x * c - y * s), vs = pts.map(([x, y]) => x * s + y * c);
+    const area = (Math.max(...us) - Math.min(...us)) * (Math.max(...vs) - Math.min(...vs));
+    // The edge's compass azimuth, clockwise from north.
+    if (area < best.area) best = { area, azimuth: 90 - (angle * 180) / Math.PI };
+  }
+  // A bearing of azimuth - 90 lays that edge left to right; take the quarter turn nearest north-up.
+  let bearing = best.azimuth - 90;
+  while (bearing > 45) bearing -= 90;
+  while (bearing <= -45) bearing += 90;
+  return Math.round(bearing * 10) / 10;
+}
 
 const MAY_BE_UNCOLLECTED: { keys: LayerKey[]; words: string }[] = [
   { keys: ["roads"], words: "roads" },
@@ -139,6 +162,8 @@ export function SiteMap(props: SiteMapProps) {
       maxPitch: 70,
     });
     instance.addControl(new ScaleControl({ unit: "imperial" }), "bottom-right");
+    // Orbit like a model view: right-drag or Ctrl-drag turns and tilts, the compass returns to north.
+    instance.addControl(new NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), "top-right");
     instance.on("load", () => {
       instance.addSource(FEATURE_SOURCE, { type: "geojson", data: toFeatureCollection([]), promoteId: "id" });
       for (const layer of FEATURE_LAYERS) instance.addLayer(layer);
@@ -259,8 +284,10 @@ export function SiteMap(props: SiteMapProps) {
     const bounds = area ? ([[area[0], area[1]], [area[2], area[3]]] as [[number, number], [number, number]]) : boundsOf([parcel]);
     if (!bounds) return;
     fitted.current = frameKey;
-    map.current?.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 20 });
-    // The work area is already tight (zone, building, and nearby service), so no extra step in.
+    // Open turned so the main building runs across the screen, as the site plan draws it. The work area is
+    // already tight (zone, building, and nearby service), so no extra step in.
+    const building = workPoints(features)?.building ?? [];
+    map.current?.fitBounds(bounds, { padding: 40, duration: 0, maxZoom: 20, bearing: squareBearing(building) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameKey, loaded]);
 
