@@ -227,13 +227,16 @@ describe("the site view", () => {
     expect(await screen.findByRole("tab", { name: "Site plan" })).toBeTruthy();
   });
 
-  it("shows the single line with its calculations, marked for the engineer of record to verify", async () => {
+  it("shows the single line sheet and its calculations sheet, marked for the engineer of record to verify", async () => {
     await runAddress(fakeApi());
     fireEvent.click(await screen.findByRole("tab", { name: "Single line" }));
-    const calcs = await screen.findByRole("region", { name: "Calculations" });
-    expect(within(calcs).getAllByRole("listitem").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("img", { name: "E-100 single line diagram" })).toBeTruthy();
     expect(screen.getAllByText(/THE ENGINEER OF RECORD VERIFIES/).length).toBeGreaterThan(0);
-    expect(screen.getByRole("region", { name: "Site inputs" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /E-200/ }));
+    expect(await screen.findByRole("img", { name: "E-200 electrical calculations" })).toBeTruthy();
+    // A calculation opens its details: where its inputs came from.
+    fireEvent.click(screen.getByRole("button", { name: /BUSBAR/ }));
+    expect(within(screen.getByRole("complementary", { name: "Details" })).getByText("Busbar rating")).toBeTruthy();
   });
 });
 
