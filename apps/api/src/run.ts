@@ -165,7 +165,10 @@ async function collectAndRecord(
   deps.store.appendObservations(collection.observations);
 
   setProgress(deps, progressKey, { status: "done", site: collection.site, sourceRuns: collection.sourceRuns, features: collection.features });
-  const pins = (deps.store.readVersion(siteId, "latest")?.features ?? []).filter((feature) => feature.kind === "capture_pin" || feature.kind === "existing_equipment");
+  // Only what a person placed carries over. Equipment the collector inferred has a basis and is inferred again by this run.
+  const pins = (deps.store.readVersion(siteId, "latest")?.features ?? []).filter(
+    (feature) => (feature.kind === "capture_pin" || feature.kind === "existing_equipment") && !feature.attributes?.["basis"],
+  );
   const sourceRuns = deps.snapshot
     ? collection.sourceRuns.map((run) => (run.status === "done" ? { ...run, status: "snapshot" as const } : run))
     : collection.sourceRuns;

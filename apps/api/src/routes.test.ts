@@ -454,6 +454,15 @@ describe("the engineer API", () => {
     expect(entrance).toMatchObject({ kind: "existing_equipment", label: expect.stringContaining("INFERRED, NOT FIELD VERIFIED") });
   });
 
+  it("infers the service equipment again on a re-run instead of carrying the old copy", async () => {
+    const { run } = setup();
+    await run();
+    const again = await run();
+    const ids = again.features.map((feature) => feature.id);
+    expect(ids.filter((id) => id === "service-tap")).toHaveLength(1);
+    expect(ids.filter((id) => id === "service-entrance")).toHaveLength(1);
+  });
+
   it("puts cross-check results on the record's values", async () => {
     const { run, value } = setup();
     const record = await run();

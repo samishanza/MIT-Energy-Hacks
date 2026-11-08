@@ -24,6 +24,8 @@ import {
   siteDataRows,
   attributeText,
   nearest,
+  lineClassOf,
+  feederIdOf,
 } from './site-plan-data.ts';
 
 // Sheet units: 100 per inch on a 36 x 24 in sheet.
@@ -35,6 +37,7 @@ const STRIP = { x: 3260, w: 300 };
 const FONT = 'Arial, Helvetica, sans-serif';
 const INK = '#111';
 const UTILITY = '#b5121b';
+const TRANSMISSION = '#6b0f1a';
 const WATER = '#1f5f86';
 
 type Pt = { x: number; y: number };
@@ -111,7 +114,15 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     .map((poly) => ({ poly, area: polygonAreaSqft(poly), sheet: poly.outer.map(toSheet) }))
     .sort((a, b) => b.area - a.area);
   const roads = record.features.filter((f) => f.kind === 'road');
-  const feeders = record.features.filter((f) => f.kind === 'utility_line');
+  const utilityLines = record.features.filter((f) => f.kind === 'utility_line');
+  const feeders = utilityLines.filter((f) => lineClassOf(f) === 'feeder');
+  const segments = utilityLines.filter((f) => lineClassOf(f) === 'segment');
+  const transmission = utilityLines.filter((f) => lineClassOf(f) === 'transmission');
+  const servicePaths = utilityLines.filter((f) => lineClassOf(f) === 'service');
+  const equipment = record.features
+    .filter((f) => f.kind === 'existing_equipment' && f.geometry.type === 'Point')
+    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), type: attributeText(f, 'equipment_type') ?? '' }))
+    .filter((e) => inside(e.at, view, 20));
   const wetlands = record.features.filter((f) => f.kind === 'constraint' && f.field === 'wetlands_nearby' && f.geometry.type !== 'Point');
   const open = record.features.filter((f) => f.kind === 'candidate_area');
   const dims = record.features.filter((f) => f.kind === 'dimension_line');
@@ -136,7 +147,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
     callouts.push({ anchor: centroid(b.sheet), lines });
   });
   for (const f of feeders) {
-    const id = (f.label ?? '').replace(/^Nearby line:\s*/i, '');
+    const id = feederIdOf(f);
     const s = feederSummary(record, id);
     const at = firstInside(linesOf(f).flatMap(sheetLine), view);
     if (!at) continue;
@@ -162,27 +173,61 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
   const substations = record.features
     .filter((f) => f.kind === 'substation' && f.geometry.type === 'Point')
-    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)) }))
+    .map((f) => ({ f, at: toSheet(toLocal(frame, f.geometry.coordinates as Pos)), proposed: f.field === 'proposed_substations_nearby' }))
     .filter((s) => inside(s.at, view, 40));
   for (const s of substations) {
     const type = attributeText(s.f, 'substation_type');
-    callouts.push({ anchor: s.at, lines: [`(E) SUBSTATION ${(s.f.label ?? '').toUpperCase()}`, `${type ? `${type}, ` : ''}UTILITY MAP, LOCATION APPROX.`], color: UTILITY });
+    callouts.push({
+      anchor: s.at,
+      lines: s.proposed
+        ? [`(F) ${(s.f.label ?? 'PROPOSED SUBSTATION').toUpperCase()}`, 'UTILITY PLAN, NOT BUILT, LOCATION APPROX.']
+        : [`(E) SUBSTATION ${(s.f.label ?? '').toUpperCase()}`, `${type ? `${type}, ` : ''}UTILITY MAP, LOCATION APPROX.`],
+      color: UTILITY,
+    });
+  }
+
+  // How the building likely connects: inferred from the nearest mapped line, never field verified.
+  for (const e of equipment) {
+    const words = (e.f.label ?? '').toUpperCase().replace(/, INFERRED, NOT FIELD VERIFIED$/, '');
+    callouts.push({ anchor: e.at, lines: [words, 'INFERRED FROM PUBLIC DATA, NOT FIELD VERIFIED'], color: UTILITY });
+  }
+  for (const s of servicePaths) {
+    const at = firstInside(linesOf(s).flatMap(sheetLine), view, 0.5);
+    if (at) callouts.push({ anchor: at, lines: [`(E) LIKELY SERVICE PATH, ±${attributeText(s, 'distance_ft') ?? '?'}`, 'INFERRED, NOT FIELD VERIFIED'], color: UTILITY });
+  }
+  const shownTransmission = transmission
+    .map((t) => ({ t, at: firstInside(linesOf(t).flatMap(sheetLine), view) }))
+    .filter((x): x is { t: MapFeature; at: Pt } => x.at !== null);
+  for (const { t, at } of shownTransmission.slice(0, 2)) {
+    const kv = attributeText(t, 'line_voltage');
+    callouts.push({ anchor: at, lines: [`(E) ${kv ? `${kv} ` : ''}TRANSMISSION LINE (HIFLD, C. 2015)`, `${attributeText(t, 'line_owner') ?? 'OWNER NOT STATED'}, LOCATION APPROX.`], color: TRANSMISSION });
   }
 
   const placed = placeCallouts(callouts, view);
 
   // Off-sheet references: things the reviewer needs that fall outside the plan.
   const references: Reference[] = [];
-  const substation = nearest(record, 'substation');
+  const substation = nearest(record, 'substation', 'substations_nearby');
   const fire = nearest(record, 'constraint', 'fire_stations_nearby');
   const wetlandNear = nearest(record, 'constraint', 'wetlands_nearby');
   const refFor = (f: MapFeature | null, text: string, color = INK) => {
     if (!f) return;
-    const p = f.geometry.type === 'Point' ? toSheet(toLocal(frame, f.geometry.coordinates as Pos)) : centroid(polygonsOfFeature(f, frame).flatMap((q) => q.outer.map(toSheet)));
+    const p =
+      f.geometry.type === 'Point'
+        ? toSheet(toLocal(frame, f.geometry.coordinates as Pos))
+        : f.kind === 'utility_line'
+          ? centroid(linesOf(f).flatMap(sheetLine))
+          : centroid(polygonsOfFeature(f, frame).flatMap((q) => q.outer.map(toSheet)));
     if (inside(p, view)) return;
     references.push({ target: p, text, color });
   };
-  if (substation && !substations.some((s) => s.f === substation)) refFor(substation, `(E) SUBSTATION ${(substation?.label ?? '').toUpperCase()}, ±${attributeText(substation, 'distance_ft') ?? '?'}`, UTILITY);
+  if (substation && substation.field !== 'proposed_substations_nearby' && !substations.some((s) => s.f === substation)) refFor(substation, `(E) SUBSTATION ${(substation?.label ?? '').toUpperCase()}, ±${attributeText(substation, 'distance_ft') ?? '?'}`, UTILITY);
+  const nearestTransmission = nearest(record, 'utility_line', 'transmission_nearby');
+  if (nearestTransmission && shownTransmission.length === 0)
+    refFor(nearestTransmission, `(E) ${attributeText(nearestTransmission, 'line_voltage') ?? ''} TRANSMISSION LINE, ±${attributeText(nearestTransmission, 'distance_ft') ?? '?'}`.replace('  ', ' '), TRANSMISSION);
+  const proposed = nearest(record, 'substation', 'proposed_substations_nearby');
+  if (proposed && !substations.some((s) => s.f === proposed))
+    refFor(proposed, `(F) ${(proposed.label ?? 'PROPOSED SUBSTATION').toUpperCase()}, NOT BUILT, ±${attributeText(proposed, 'distance_ft') ?? '?'}`, UTILITY);
   refFor(fire, `NEAREST FIRE STATION: ${(fire?.label ?? '').toUpperCase()}, ±${attributeText(fire, 'distance_ft') ?? '?'}`);
   refFor(wetlandNear, `NEAREST MAPPED WETLAND, ±${attributeText(wetlandNear, 'distance_ft') ?? '?'}`, WATER);
 
@@ -192,6 +237,8 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
   const rows = siteDataRows(record);
   const notes = sheetNotes(record);
   const tiles = aerial && record.baseMap ? aerialTiles(record, drawing) : [];
+  const offY = 70 + dataTableHeight(rows, RIGHT.w) + 24;
+  const legendY = offY + (references.length ? 44 + references.length * 40 + 24 : 0);
 
   return (
     <figure className="sheet sheet--engineering">
@@ -287,9 +334,54 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
             }),
           )}
 
+          {transmission.map((t, i) =>
+            linesOf(t).map((line, j) => {
+              const pts = sheetLine(line);
+              const ordered = pts[0]!.x <= pts.at(-1)!.x ? pts : [...pts].reverse();
+              const id = `tx-${i}-${j}`;
+              const kv = attributeText(t, 'line_voltage') ?? 'T';
+              const marks = Array.from({ length: Math.max(1, Math.ceil(lengthOf(ordered) / 420)) }, () => kv).join('\u2003'.repeat(12));
+              return (
+                <g key={id}>
+                  <path id={id} d={path(ordered, false)} fill="none" stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" />
+                  <text fontSize={19} fontWeight={700} fill={TRANSMISSION} stroke="#fff" strokeWidth={7} paintOrder="stroke" dy={-9}>
+                    <textPath href={`#${id}`}>{marks}</textPath>
+                  </text>
+                </g>
+              );
+            }),
+          )}
+
+          {segments.map((sgm, i) =>
+            linesOf(sgm).map((line, j) => {
+              const pts = sheetLine(line);
+              const ordered = pts[0]!.x <= pts.at(-1)!.x ? pts : [...pts].reverse();
+              const id = `seg-${i}-${j}`;
+              const underground = /UNDERGROUND/.test(attributeText(sgm, 'construction') ?? '');
+              const token = underground ? 'UGE' : 'OHE';
+              const marks = Array.from({ length: Math.max(1, Math.ceil(lengthOf(ordered) / 220)) }, () => token).join('\u2003'.repeat(9));
+              return (
+                <g key={id}>
+                  <path id={id} d={path(ordered, false)} fill="none" stroke={UTILITY} strokeWidth={1.8} strokeDasharray={underground ? '30 10' : undefined} />
+                  <text fontSize={15} fontWeight={700} fill={UTILITY} stroke="#fff" strokeWidth={6} paintOrder="stroke" dy={5}>
+                    <textPath href={`#${id}`}>{marks}</textPath>
+                  </text>
+                </g>
+              );
+            }),
+          )}
+
+          {servicePaths.map((sp, i) =>
+            linesOf(sp).map((line, j) => (
+              <path key={`svc-${i}-${j}`} d={path(sheetLine(line), false)} fill="none" stroke={UTILITY} strokeWidth={3.5} strokeDasharray="14 10" />
+            )),
+          )}
+
           {substations.map((s, i) => (
-            <SubstationSymbol key={`sub-${i}`} at={s.at} />
+            <SubstationSymbol key={`sub-${i}`} at={s.at} proposed={s.proposed} />
           ))}
+
+          {equipment.map((e, i) => (e.type === 'SERVICE_TAP' ? <TransformerSymbol key={`eq-${i}`} at={e.at} inferred /> : <SwitchgearSymbol key={`eq-${i}`} at={e.at} inferred />))}
 
           {buildings.map((b, i) => (
             <path key={`bldg-${i}`} d={path(b.sheet)} fill="#fff" fillOpacity={0.35} stroke={INK} strokeWidth={3} />
@@ -312,7 +404,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
         {placed.map((c, i) => (
           <CalloutBox key={`callout-${i}`} callout={c} />
         ))}
-        <OffSheetTable x={RIGHT.x} y={1330} w={RIGHT.w} view={view} references={references} />
+        <OffSheetTable x={RIGHT.x} y={offY} w={RIGHT.w} view={view} references={references} />
         <rect x={view.x} y={view.y} width={view.w} height={view.h} fill="none" stroke={INK} strokeWidth={2} />
 
         {/* below the plan: notes, north arrow, drawing title and scale */}
@@ -322,7 +414,7 @@ export function EngineeringSitePlan({ record, aerial = true }: EngineeringSitePl
 
         {/* right column: data table and legend */}
         <DataTable x={RIGHT.x} y={70} w={RIGHT.w} rows={rows} />
-        <Legend x={RIGHT.x} y={1530} w={RIGHT.w} inMassachusetts={inMassachusetts} />
+        <Legend x={RIGHT.x} y={legendY} w={RIGHT.w} inMassachusetts={inMassachusetts} />
 
         <TitleStrip record={record} />
       </svg>
@@ -544,9 +636,28 @@ function FallArrow({ at, degrees, text }: { at: Pt; degrees: number; text: strin
   );
 }
 
-function SubstationSymbol({ at }: { at: Pt }) {
+function TransformerSymbol({ at, inferred = false }: { at: Pt; inferred?: boolean }) {
+  // Pad-mounted transformer, as the samples' legend draws it: a box with a smaller box on top.
   return (
-    <g>
+    <g strokeDasharray={inferred ? '7 5' : undefined}>
+      <rect x={at.x - 20} y={at.y - 14} width={40} height={32} fill="#fff" stroke={UTILITY} strokeWidth={3} />
+      <rect x={at.x - 9} y={at.y - 26} width={18} height={12} fill="#fff" stroke={UTILITY} strokeWidth={2.5} />
+    </g>
+  );
+}
+
+function SwitchgearSymbol({ at, inferred = false }: { at: Pt; inferred?: boolean }) {
+  return (
+    <g strokeDasharray={inferred ? '7 5' : undefined}>
+      <rect x={at.x - 26} y={at.y - 12} width={52} height={24} fill="#fff" stroke={UTILITY} strokeWidth={3} />
+      <line x1={at.x - 26} y1={at.y + 12} x2={at.x + 26} y2={at.y - 12} stroke={UTILITY} strokeWidth={2} />
+    </g>
+  );
+}
+
+function SubstationSymbol({ at, proposed = false }: { at: Pt; proposed?: boolean }) {
+  return (
+    <g strokeDasharray={proposed ? '8 6' : undefined}>
       <rect x={at.x - 22} y={at.y - 22} width={44} height={44} fill="#fff" stroke={UTILITY} strokeWidth={3} />
       <rect x={at.x - 12} y={at.y - 12} width={24} height={24} fill="none" stroke={UTILITY} strokeWidth={3} />
       <path d={`M${at.x + 3} ${at.y - 10} L${at.x - 5} ${at.y + 2} L${at.x + 3} ${at.y + 2} L${at.x - 3} ${at.y + 12}`} fill="none" stroke={UTILITY} strokeWidth={2.5} />
@@ -648,6 +759,18 @@ function SheetNotes({ x, y, w, notes }: { x: number; y: number; w: number; notes
   );
 }
 
+function dataTableHeight(rows: ReturnType<typeof siteDataRows>, w: number): number {
+  const labelW = 300;
+  return (
+    44 +
+    rows.reduce((sum, r) => {
+      const v = wrap(r.value, w - labelW - 24, 17).length;
+      const s = r.source ? wrap(r.source, w - labelW - 24, 13).length : 0;
+      return sum + Math.max(30, v * 21 + s * 16 + 12);
+    }, 0)
+  );
+}
+
 function DataTable({ x, y, w, rows }: { x: number; y: number; w: number; rows: ReturnType<typeof siteDataRows> }) {
   const labelW = 300;
   const size = 17;
@@ -690,7 +813,7 @@ function DataTable({ x, y, w, rows }: { x: number; y: number; w: number; rows: R
 }
 
 function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number; inMassachusetts: boolean }) {
-  const rowH = 36;
+  const rowH = 33;
   const symW = 220;
   const items: { label: string; symbol: (sx: number, sy: number) => ReactNode }[] = [
     { label: 'PROPERTY LINE (ASSESSOR, NOT SURVEYED)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={INK} strokeWidth={5} strokeDasharray="60 10 10 10 10 10" /> },
@@ -706,6 +829,32 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
           </text>
         </g>
       ),
+    },
+    {
+      label: '(E) OVERHEAD ELECTRIC LINE (OHE), AS MAPPED',
+      symbol: (sx, sy) => (
+        <g>
+          <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={1.8} />
+          <text x={sx + 90} y={sy + 5} fontSize={15} fontWeight={700} textAnchor="middle" fill={UTILITY} stroke="#fff" strokeWidth={6} paintOrder="stroke">OHE</text>
+        </g>
+      ),
+    },
+    {
+      label: '(E) UNDERGROUND ELECTRIC LINE (UGE), AS MAPPED',
+      symbol: (sx, sy) => (
+        <g>
+          <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={1.8} strokeDasharray="30 10" />
+          <text x={sx + 90} y={sy + 5} fontSize={15} fontWeight={700} textAnchor="middle" fill={UTILITY} stroke="#fff" strokeWidth={6} paintOrder="stroke">UGE</text>
+        </g>
+      ),
+    },
+    { label: '(E) TRANSMISSION LINE, KV (HIFLD, C. 2015)', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={TRANSMISSION} strokeWidth={5} strokeDasharray="70 14 14 14" /> },
+    { label: '(E) LIKELY SERVICE PATH, INFERRED', symbol: (sx, sy) => <line x1={sx} y1={sy} x2={sx + 180} y2={sy} stroke={UTILITY} strokeWidth={3.5} strokeDasharray="14 10" /> },
+    { label: '(E) TRANSFORMER, DASHED WHERE INFERRED', symbol: (sx, sy) => <TransformerSymbol at={{ x: sx + 90, y: sy + 2 }} inferred /> },
+    { label: '(E) SERVICE ENTRANCE / SWITCHGEAR, DASHED WHERE INFERRED', symbol: (sx, sy) => <SwitchgearSymbol at={{ x: sx + 90, y: sy }} inferred /> },
+    {
+      label: '(F) PROPOSED SUBSTATION (UTILITY PLAN, NOT BUILT)',
+      symbol: (sx, sy) => <SubstationSymbol at={{ x: sx + 90, y: sy }} proposed />,
     },
     {
       label: '(E) SUBSTATION, APPROX. (UTILITY MAP)',
@@ -746,7 +895,7 @@ function Legend({ x, y, w, inMassachusetts }: { x: number; y: number; w: number;
           <g key={item.label}>
             <line x1={x} y1={top} x2={x + w} y2={top} stroke={INK} strokeWidth={1} />
             {item.symbol(x + 20, top + rowH / 2)}
-            <text x={x + symW + 12} y={top + 24} fontSize={16} fill={INK}>
+            <text x={x + symW + 12} y={top + 22} fontSize={15} fill={INK}>
               {item.label}
             </text>
           </g>

@@ -129,6 +129,23 @@ export function attributeText(feature: MapFeature | null, key: string): string |
   return formatReading(a ?? null);
 }
 
+export type LineClass = 'feeder' | 'segment' | 'transmission' | 'service' | 'other';
+
+/** What kind of electric line a utility_line feature is. */
+export function lineClassOf(f: MapFeature): LineClass {
+  const cls = attributeText(f, 'line_class');
+  if (f.field === 'transmission_nearby') return 'transmission';
+  if (cls === 'FEEDER CANDIDATE') return 'feeder';
+  if (cls === 'DISTRIBUTION SEGMENT') return 'segment';
+  if (cls === 'INFERRED SERVICE PATH') return 'service';
+  if (/^Nearby line:/i.test(f.label ?? '')) return 'feeder';
+  return 'other';
+}
+
+/** The feeder a feeder-candidate line belongs to. */
+export const feederIdOf = (f: MapFeature): string =>
+  (f.attributes?.['feeder_id'] as { value?: string } | undefined)?.value ?? (f.label ?? '').replace(/^Nearby line:\s*/i, '');
+
 /** The site data table, in the order a reviewer reads it. */
 export function siteDataRows(record: RecordVersion): DataRow[] {
   const rows: DataRow[] = [
@@ -165,7 +182,21 @@ export function siteDataRows(record: RecordVersion): DataRow[] {
     rows.push({ label: 'NEAREST MAPPED FEEDER', value: 'NONE PUBLISHED NEAR THE SITE' });
   }
 
-  const substation = nearest(record, 'substation');
+  const path = valueOf(record, 'grid_service_path');
+  rows.push({
+    label: 'LIKELY SERVICE PATH (INFERRED)',
+    value: path?.current ? `${formatReading(path.current)}. NOT FIELD VERIFIED.` : 'NOT INFERRED: NO MAPPED LINE NEAR THE BUILDING',
+    source: sourceOf(record, 'grid_service_path'),
+  });
+  const transmission = nearest(record, 'utility_line', 'transmission_nearby');
+  rows.push({
+    label: 'NEAREST TRANSMISSION LINE',
+    value: transmission
+      ? [attributeText(transmission, 'line_voltage'), attributeText(transmission, 'line_owner'), `±${attributeText(transmission, 'distance_ft') ?? '?'}`].filter(Boolean).join(', ')
+      : 'NONE MAPPED NEARBY',
+  });
+
+  const substation = nearest(record, 'substation', 'substations_nearby') ?? nearest(record, 'substation');
   rows.push({
     label: 'NEAREST SUBSTATION',
     value: substation ? `${(substation.label ?? '').toUpperCase()}, ±${attributeText(substation, 'distance_ft') ?? '?'}` : NOT_FOUND,
@@ -244,10 +275,17 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
         labels[f.id] = `(E) BUILDING${buildings.length > 1 ? ` ${buildings.indexOf(f) + 1}` : ''}${buildings.indexOf(f) === 0 && stories ? `, ${stories}` : ''}`;
         break;
       case 'utility_line': {
-        const id = (f.label ?? '').replace(/^Nearby line:\s*/i, '');
-        const s = feederSummary(record, id);
-        const hosting = feederDetails(record).get(id)?.get('feeder_hosting_capacity');
-        labels[f.id] = `(E) FEEDER ${s.line}${hosting ? `, ${formatReading(hosting)} HC` : ''}`;
+        const cls = lineClassOf(f);
+        if (cls === 'feeder') {
+          const id = feederIdOf(f);
+          const s = feederSummary(record, id);
+          const hosting = feederDetails(record).get(id)?.get('feeder_hosting_capacity');
+          labels[f.id] = `(E) FEEDER ${s.line}${hosting ? `, ${formatReading(hosting)} HC` : ''}`;
+        } else if (cls === 'transmission') {
+          labels[f.id] = `(E) ${attributeText(f, 'line_voltage') ?? ''} TRANSMISSION`.replace('  ', ' ');
+        } else if (cls === 'service') {
+          labels[f.id] = '(E) LIKELY SERVICE PATH, INFERRED';
+        }
         break;
       }
       case 'road':
