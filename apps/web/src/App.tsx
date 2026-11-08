@@ -186,6 +186,30 @@ export function App({ api }: { api: EngineerApi }) {
 
   const failed = (failure: unknown) => setError(failure instanceof Error ? failure.message : "That didn't work.");
 
+  // A link can open a site directly: ?site=<siteId> shows its latest saved version, and ?address=<address>
+  // runs the address. Read once, when the page loads.
+  const linked = useRef(false);
+  useEffect(() => {
+    if (linked.current) return;
+    linked.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const siteId = params.get("site");
+    const linkedAddress = params.get("address");
+    if (siteId) {
+      api
+        .readVersion(siteId, "latest")
+        .then((next) => {
+          setAddress(next.site.address);
+          return show(next);
+        })
+        .catch(() => setError(`No saved site ${siteId}. Run its address instead.`));
+    } else if (linkedAddress) {
+      setAddress(linkedAddress);
+      void run({ address: linkedAddress });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function run(request: RunSiteRequest) {
     setRunning(true);
     setProgress(null);
