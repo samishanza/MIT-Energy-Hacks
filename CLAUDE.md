@@ -60,6 +60,15 @@ The brief does not establish that sizing, financial analysis, or equipment selec
 - Ask before pushing or deploying.
 - After a solved, verified problem, offer once to invoke the `ce-compound` skill at the completion checkpoint only when the work produced durable project reasoning that is not readily recoverable from the final code, tests, types, comments, or existing documentation, and losing it would plausibly cause recurrence, material risk, or substantial rediscovery. Apply this counterfactual: if the learning document disappeared, would a future engineer reading the final implementation still be likely to repeat the mistake or redo substantial investigation? If not, do not offer. Completion, effort, and diff size alone are not enough. Offer at the checkpoint so a qualifying learning can ship in the PR that produced it, and only where the repository treats captured learnings as tracked, committed knowledge.
 
+## Build speed over process (team decision, 2026-11-07)
+
+Collecting and parsing site data is the priority. Process that slows building it gets cut:
+
+- No security review, adversarial review, or threat-model step per feature. Skip review passes unless the user asks for one.
+- Tests cover data parsing, inference, and calculations: the things that can be quietly wrong. UI work and glue code need a quick check in the browser, not new tests for every change.
+- Don't stop to ask before reasonable additions inside your lane. Report what you did.
+- Still required, because they are cheap and their absence is expensive: keep keys and `.env` out of git, keep customer details out of git, read a new source's terms before using it, and keep the domain rules above (label synthetic, inferred, and concept-grade data, and never invent values).
+
 ## Parallel work on Windows
 
 This project runs natively on Windows, not in WSL.
