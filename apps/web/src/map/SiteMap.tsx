@@ -345,7 +345,9 @@ export function SiteMap(props: SiteMapProps) {
       pending = requestAnimationFrame(() => {
         pending = 0;
         const frame = container.current?.getBoundingClientRect();
-        const panels = [...(container.current?.parentElement?.querySelectorAll(".map-legend, .map-tools") ?? [])].map((panel) => panel.getBoundingClientRect());
+        // Anything drawn over the map counts as taken: the legend, the tools, the zoom control, the details
+        // dock, the header, and prompts. Labels never sit under or over them.
+        const panels = [...document.querySelectorAll(".map-legend, .map-tools, .maplibregl-ctrl-group, .dock, .header, .place-prompt, .equipment-specs")].map((panel) => panel.getBoundingClientRect());
         declutter(
           labels,
           frame && frame.width > 0 ? { left: frame.left, top: frame.top, right: frame.right, bottom: frame.bottom } : undefined,
@@ -355,7 +357,10 @@ export function SiteMap(props: SiteMapProps) {
     };
     run();
     instance.on("render", run);
+    // Panels open and close without the map redrawing, so check again a few times a second.
+    const recheck = window.setInterval(run, 400);
     return () => {
+      window.clearInterval(recheck);
       instance.off("render", run);
       if (pending) cancelAnimationFrame(pending);
       for (const marker of markers) marker.remove();

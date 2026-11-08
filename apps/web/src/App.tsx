@@ -1,5 +1,5 @@
-import type { ReadinessReport, RecordVersion, RunProgress } from "@eqore/contract";
-import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
+import type { MapFeature, ReadinessReport, RecordVersion, RunProgress } from "@eqore/contract";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { EngineerApi, ExportFormat, RunSiteRequest, RunSiteResponse } from "./api";
 import { attentionItems, factsFound } from "./app/facts";
 import { SiteMap } from "./map/SiteMap";
@@ -11,6 +11,7 @@ import { EvidencePanel } from "./panels/EvidencePanel";
 import { FactsPanel } from "./panels/FactsPanel";
 import { EngineeringSitePlan, featureLabels } from "@eqore/sheets";
 import { conceptSiteLayout } from "@eqore/electrical";
+import { loadPlanFeatures, planMapFeatures, withPlanSet } from "./app/planFeatures";
 import { Menu } from "./ui/Menu";
 import { RecordSummary, StatusStrip } from "./ui/StatusStrip";
 
@@ -268,7 +269,21 @@ export function App({ api }: { api: EngineerApi }) {
   const mapSite = live?.site ?? record?.site;
   const dockOpen = !live && selected.fields.length > 0;
   // The concept layout is drawn from the record each time, never stored, so a re-run can't carry a stale one.
-  const drawn = useMemo(() => (record ? { ...record, features: [...withVerifiedDimensions(record), ...conceptSiteLayout(record)] } : null), [record]);
+  // A site with a traced engineered plan set draws from it; the rest come from public data.
+  const [plan, setPlan] = useState<MapFeature[]>([]);
+  const siteId = record?.site.id;
+  useEffect(() => {
+    let current = true;
+    setPlan([]);
+    if (siteId) void loadPlanFeatures(siteId).then((data) => current && data && setPlan(planMapFeatures(data)));
+    return () => {
+      current = false;
+    };
+  }, [siteId]);
+  const drawn = useMemo(
+    () => (record ? { ...record, features: withPlanSet([...withVerifiedDimensions(record), ...conceptSiteLayout(record)], plan) } : null),
+    [record, plan],
+  );
   const labels = useMemo(() => (drawn && !live ? featureLabels(drawn) : undefined), [drawn, live]);
   const pick = (close: () => void) => (field: string) => {
     select(field);

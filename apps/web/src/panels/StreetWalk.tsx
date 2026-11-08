@@ -1,6 +1,7 @@
 import type { MapFeature, RecordVersion } from "@eqore/contract";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BASIS_WORDS, closestOn, gridPath, metersBetween, type GridStep } from "../app/gridPath";
+import { labelWidth, placeLabels } from "../app/labelPlacement";
 import { inFront, projectPoint, type StreetCamera } from "../app/streetProjection";
 import { loadGoogle, onGoogleAuthFailure } from "../map/googleMaps";
 import { itemsInPhoto } from "./StreetViewPanel";
@@ -110,6 +111,12 @@ async function stillPanorama(at: LonLat, targetOf: (pano: LonLat) => LonLat): Pr
 
 function Overlay({ camera, features, trace }: { camera: StreetCamera; features: MapFeature[]; trace: GridStep[] }) {
   const drawn = useMemo(() => itemsInPhoto(features, camera), [features, camera]);
+  // Labels go where there's room, on leaders, so none sit on another label or object.
+  const textOf = (m: { name: string; distanceFt: number }) => `${m.name.replace(/, (AT|ON) .*$/, "").slice(0, 30)} · ${m.distanceFt} ft`;
+  const labels = useMemo(
+    () => placeLabels(drawn.items.map((m) => ({ id: m.featureId, anchor: m.anchor, width: labelWidth(textOf(m), 12), height: 20 })), { width: camera.width, height: camera.height }),
+    [drawn, camera],
+  );
   const path = useMemo(
     () =>
       trace.flatMap((step) =>
@@ -139,11 +146,23 @@ function Overlay({ camera, features, trace }: { camera: StreetCamera; features: 
           {m.outline.map((d, i) => (
             <path key={`c${i}`} d={d} fill="none" stroke={m.isNew ? "#3d8bff" : "#ff3b30"} strokeWidth={2} />
           ))}
-          <text x={Math.min(m.anchor.x + 6, camera.width - 150)} y={Math.max(14, m.anchor.y - 4)} fontSize={12} fontWeight={700} fill="#fff" stroke="#1c2326" strokeWidth={3} paintOrder="stroke" fontFamily="Arial, sans-serif">
-            {m.name.replace(/, (AT|ON) .*$/, "").slice(0, 30)} · {m.distanceFt} ft
-          </text>
         </g>
       ))}
+      {labels.map((l) => {
+        const m = drawn.items.find((item) => item.featureId === l.id)!;
+        const color = m.isNew ? "#3d8bff" : "#ff3b30";
+        return (
+          <g key={`l-${l.id}`}>
+            <line x1={l.leader.x1} y1={l.leader.y1} x2={l.leader.x2} y2={l.leader.y2} stroke="#fff" strokeWidth={3.5} opacity={0.85} />
+            <line x1={l.leader.x1} y1={l.leader.y1} x2={l.leader.x2} y2={l.leader.y2} stroke={color} strokeWidth={1.6} />
+            <circle cx={l.leader.x1} cy={l.leader.y1} r={3} fill={color} stroke="#fff" strokeWidth={1} />
+            <rect x={l.x} y={l.y} width={l.width} height={l.height} rx={3} fill="rgba(20,24,28,0.82)" stroke={color} strokeWidth={1.2} />
+            <text x={l.x + 5} y={l.y + 14} fontSize={12} fontWeight={700} fill="#fff" fontFamily="Arial, sans-serif">
+              {textOf(m)}
+            </text>
+          </g>
+        );
+      })}
     </svg>
   );
 }

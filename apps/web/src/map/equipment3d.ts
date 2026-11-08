@@ -82,6 +82,18 @@ export function equipmentTag(f: MapFeature): { tag: string; name: string } | nul
       return { tag: "DS", name: "AC disconnect" };
     case "new_breaker":
       return { tag: "CB", name: "New breaker" };
+    case "light_pole":
+      return { tag: "LP", name: "Light pole" };
+    case "hydrant":
+      return { tag: "HYD", name: "Fire hydrant" };
+    case "pad_mount_transformer":
+      return { tag: "T", name: "Pad-mount transformer" };
+    case "catch_basin":
+      return { tag: "CB", name: "Catch basin" };
+    case "manhole":
+      return { tag: "MH", name: "Manhole" };
+    case "meter":
+      return { tag: "M", name: "Utility meter" };
     default:
       return f.kind === "substation" ? { tag: "SUB", name: "Substation" } : null;
   }
@@ -147,6 +159,30 @@ export function equipmentSolids(all: MapFeature[]): Solid[] {
           break;
         case "new_breaker":
           add(f, "brk", { color: "#0b5cad", base: 0.9, top: 1.5, ring: box(offset(at, 0.6, 0), 0.4, 0.3) });
+          break;
+        // Site features traced from an engineered plan set, at typical sizes.
+        case "light_pole":
+          // A 25 ft parking-lot pole with a luminaire head.
+          add(f, "pole", { color: "#9aa0a6", base: 0, top: 7.6, ring: octagon(at, 0.09) });
+          add(f, "head", { color: "#5f6368", base: 7.4, top: 7.65, ring: box(offset(at, 0.45, 0), 0.9, 0.35) });
+          break;
+        case "hydrant":
+          add(f, "body", { color: "#c62828", base: 0, top: 0.8, ring: octagon(at, 0.16) });
+          add(f, "cap", { color: "#b71c1c", base: 0.8, top: 0.92, ring: octagon(at, 0.11) });
+          break;
+        case "pad_mount_transformer":
+          // A three-phase pad-mount: about 6 x 6 ft on a pad, 5 ft tall, utility green.
+          add(f, "pad", { color: "#c8c4bb", base: 0, top: 0.1, ring: box(at, 2.2, 2.2) });
+          add(f, "box", { color: "#2f6b45", base: 0.1, top: 1.6, ring: box(at, 1.8, 1.8) });
+          break;
+        case "catch_basin":
+          add(f, "grate", { color: "#3c4043", base: 0, top: 0.04, ring: box(at, 0.7, 0.7) });
+          break;
+        case "manhole":
+          add(f, "lid", { color: "#3c4043", base: 0, top: 0.04, ring: octagon(at, 0.4) });
+          break;
+        case "meter":
+          add(f, "meter", { color: "#9aa3ab", base: 1.2, top: 1.7, ring: box(at, 0.35, 0.25) });
           break;
       }
     }

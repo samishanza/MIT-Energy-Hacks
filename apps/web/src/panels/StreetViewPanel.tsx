@@ -2,6 +2,7 @@ import type { MapFeature, RecordVersion, StreetView } from "@eqore/contract";
 import { plainLabel } from "@eqore/sheets";
 import { useEffect, useMemo, useState } from "react";
 import type { EngineerApi } from "../api";
+import { labelWidth, placeLabels } from "../app/labelPlacement";
 import { inFront, onImage, projectPoint, type StreetCamera } from "../app/streetProjection";
 import { equipmentSolids, equipmentTag, overheadWires, type Solid } from "../map/equipment3d";
 import { StreetWalk } from "./StreetWalk";
@@ -125,19 +126,19 @@ function StreetPhoto({ api, record }: { api: EngineerApi; record: RecordVersion 
 
   const { width, height } = view.camera;
   const inside = view.markers.filter((m) => m.hidden && m.inFrame);
-  // Labels stack in a column on each side, each on a leader to the top of its item, as a drawing does.
-  const BOX_W = 170;
+  // Each label goes in the nearest free spot around its item, on a leader, so none overlap.
   const BOX_H = 18;
+  const FONT = 9;
   // One label per kind, as a drawing does: "(E) UTILITY POLE, TYP. OF 4".
   const kinds = new Map<string, Item[]>();
   for (const m of drawn.items) kinds.set(m.name, [...(kinds.get(m.name) ?? []), m]);
   const labelled = [...kinds.values()].map((group) => ({ ...group[0]!, name: group.length > 1 ? `${group[0]!.name}, TYP. OF ${group.length}` : group[0]!.name }));
-  const placed = (["left", "right"] as const).flatMap((side) =>
-    labelled
-      .filter((m) => (side === "left" ? m.anchor.x < width / 2 : m.anchor.x >= width / 2))
-      .sort((a, b) => a.anchor.y - b.anchor.y)
-      .map((m, i) => ({ m, x: side === "left" ? 6 : width - BOX_W - 6, y: 8 + i * (BOX_H + 5), side })),
+  const textOf = (m: Item) => m.name.replace(/, (AT|ON) .*$/, "").slice(0, 40);
+  const spots = placeLabels(
+    labelled.map((m) => ({ id: m.featureId, anchor: m.anchor, width: labelWidth(textOf(m), FONT), height: BOX_H })),
+    { width, height },
   );
+  const placed = spots.map((s) => ({ m: labelled.find((m) => m.featureId === s.id)!, ...s }));
   return (
     <div className="street-photo">
       <p className="street-caption">
@@ -162,14 +163,16 @@ function StreetPhoto({ api, record }: { api: EngineerApi; record: RecordVersion 
           {inside.map((m) => (
             <circle key={m.id} cx={m.x} cy={m.y} r={9} fill="rgba(255,255,255,0.5)" stroke={RED} strokeWidth={2} strokeDasharray="3 2" />
           ))}
-          {placed.map(({ m, x, y, side }) => {
+          {placed.map(({ m, x, y, width: w, leader }) => {
             const color = m.isNew ? BLUE : RED;
             return (
               <g key={`l-${m.featureId}`} style={{ cursor: "pointer" }} onClick={() => setPicked(m)}>
-                <line x1={side === "left" ? x + BOX_W : x} y1={y + BOX_H / 2} x2={m.anchor.x} y2={m.anchor.y} stroke={color} strokeWidth={1.2} />
-                <rect x={x} y={y} width={BOX_W} height={BOX_H} fill="rgba(255,255,255,0.93)" stroke={color} strokeWidth={1} />
-                <text x={x + 5} y={y + 12.5} fontSize={8.5} fontWeight={700} fill={color} fontFamily="Arial, sans-serif">
-                  {m.name.replace(/, (AT|ON) .*$/, "").slice(0, 36)}
+                <line x1={leader.x1} y1={leader.y1} x2={leader.x2} y2={leader.y2} stroke="#fff" strokeWidth={3} opacity={0.8} />
+                <line x1={leader.x1} y1={leader.y1} x2={leader.x2} y2={leader.y2} stroke={color} strokeWidth={1.3} />
+                <circle cx={leader.x1} cy={leader.y1} r={2.5} fill={color} stroke="#fff" strokeWidth={1} />
+                <rect x={x} y={y} width={w} height={BOX_H} rx={2} fill="rgba(255,255,255,0.95)" stroke={color} strokeWidth={1} />
+                <text x={x + 5} y={y + 12.5} fontSize={FONT} fontWeight={700} fill={color} fontFamily="Arial, sans-serif">
+                  {textOf(m)}
                 </text>
               </g>
             );
