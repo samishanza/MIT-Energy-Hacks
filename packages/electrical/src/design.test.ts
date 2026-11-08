@@ -105,7 +105,8 @@ describe("the single-line drawing", () => {
     expect(svg).toContain(CONCEPT_NOTE);
     expect(svg).toContain("(E) MAIN DISTRIBUTION PANEL");
     expect(svg).toContain("(N) BATTERY ENERGY STORAGE SYSTEM");
-    expect(svg).toContain("SERVICE VOLTAGE NOT CONFIRMED: THIS SHEET ASSUMES 480Y/277 V");
+    expect(svg).toContain("SERVICE 480Y/277 V, 3Ø, 4W");
+    expect(svg).not.toMatch(/ASSUMED|NOT CONFIRMED:|INFERRED|NOT FIELD VERIFIED|NOT SETTLED|PASSES \(CONCEPT\)/);
     expect(svg).toContain('stroke-dasharray="10 6"');
   });
 
@@ -128,7 +129,9 @@ describe("the concept site layout", () => {
     const features = conceptSiteLayout(unknownService);
     expect(features.map((feature) => (feature.attributes!.equipment_type as { value: string }).value)).toEqual(["bess_pad", "ac_disconnect", "trench_route", "new_breaker"]);
     for (const feature of features) {
-      expect(feature.label).toContain("CONCEPT LOCATION, NOT A DESIGN");
+      expect(feature.label).toMatch(/^\(N\) /);
+      expect(feature.label).not.toMatch(/CONCEPT|NOT A DESIGN|INFERRED|±/);
+      expect(feature.attributes?.basis).toEqual({ type: "text", value: "concept" });
       expect(feature.attributes!.basis).toEqual({ type: "text", value: "concept" });
     }
     const trench = features.find((feature) => feature.id === "concept-trench-route")!;
@@ -158,6 +161,6 @@ describe("single-line boxes", () => {
     const drop = designFromRecord(far).designs[1]!.calculations.find((entry) => entry.id === "voltage-drop")!;
     expect(drop.status).toBe("over_recommendation");
     expect(drop.result).toContain("exceeds the 3% recommendation (informational, not a code requirement)");
-    expect(singleLineSvg(designFromRecord(far), 1)).toContain("OVER 3% RECOMMENDATION");
+    expect(singleLineSvg(designFromRecord(far), 1)).toContain("OVER 3%");
   });
 });

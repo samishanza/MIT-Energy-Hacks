@@ -78,7 +78,7 @@ export async function collectLidarEquipment(
       kind: "existing_equipment",
       field: "detected_grid_equipment",
       geometry: { type: "Point", coordinates: lonLat(pole.at) },
-      label: `(E) UTILITY POLE, DETECTED IN LIDAR, NOT FIELD VERIFIED`,
+      label: "(E) UTILITY POLE",
       attributes: {
         ...shared("utility_pole", `A column of returns ${pole.low.toFixed(1)} to ${pole.high.toFixed(1)} m above ground, half a metre wide, with open air around it, ${pole.roadFeet} ft from ${pole.road}.`),
         height_ft: { type: "quantity", value: Math.round(pole.high * FEET), unit: "ft" },
@@ -91,7 +91,7 @@ export async function collectLidarEquipment(
       kind: "utility_line",
       field: "detected_grid_equipment",
       geometry: { type: "LineString", coordinates: [lonLat(span.from), lonLat(span.to)] },
-      label: `(E) OVERHEAD CONDUCTOR, DETECTED IN LIDAR, NOT FIELD VERIFIED`,
+      label: "(E) OVERHEAD CONDUCTOR",
       attributes: {
         ...shared("overhead_conductor", `${span.returns} returns about ${span.heightM.toFixed(1)} m up, covering ${Math.round(span.coverage * 100)}% of the ${Math.round(span.lengthM * FEET)} ft between two detected poles.`),
         line_class: text("detected overhead conductor"),
@@ -103,7 +103,7 @@ export async function collectLidarEquipment(
     kind: "existing_equipment",
     field: "detected_grid_equipment",
     geometry: { type: "Point", coordinates: lonLat(pad.at) },
-    label: `(E) POSSIBLE PAD-MOUNT TRANSFORMER, DETECTED IN LIDAR, NOT FIELD VERIFIED`,
+    label: "(E) EQUIPMENT BOX",
     attributes: shared(
       "pad_mount_transformer_candidate",
       `A box about ${pad.widthM} by ${pad.depthM} m and ${pad.heightM.toFixed(1)} m tall, ${Math.round(pad.wallM * FEET)} ft from the building. It could also be other equipment, a dumpster, or a vehicle.`,
@@ -144,7 +144,7 @@ export async function collectLidarEquipment(
         kind: "utility_line",
         field: "grid_service_path",
         geometry: { type: "LineString", coordinates: [lonLat(drop.from), lonLat(drop.wall)] },
-        label: `(E) LIKELY OVERHEAD SERVICE DROP, ±${feet} FT, DETECTED IN LIDAR, NOT FIELD VERIFIED`,
+        label: `(E) OVERHEAD SERVICE DROP, ${feet} FT`,
         attributes: { ...shared("service_drop", why), line_class: text("detected service drop"), distance_ft: { type: "quantity", value: feet, unit: "ft" } },
       },
       {
@@ -152,7 +152,7 @@ export async function collectLidarEquipment(
         kind: "existing_equipment",
         field: "grid_service_path",
         geometry: { type: "Point", coordinates: lonLat(drop.from) },
-        label: `(E) LIKELY SERVICE POLE AND POLE-MOUNTED TRANSFORMER, DETECTED IN LIDAR, NOT FIELD VERIFIED`,
+        label: "(E) SERVICE POLE",
         attributes: shared("service_tap", `${why} An overhead service is usually fed through a pole-mounted transformer on this pole.`),
       },
       {
@@ -160,7 +160,7 @@ export async function collectLidarEquipment(
         kind: "existing_equipment",
         field: "grid_service_path",
         geometry: { type: "Point", coordinates: lonLat(drop.wall) },
-        label: `(E) LIKELY SERVICE ENTRANCE, ${side.toUpperCase()} SIDE, DETECTED IN LIDAR, NOT FIELD VERIFIED`,
+        label: "(E) SERVICE ENTRANCE",
         attributes: shared("service_entrance", `${why} The main switchgear is usually just inside where the service enters.`),
       },
     );

@@ -31,7 +31,8 @@ describe("how the building is likely fed", () => {
     const inferred = collection.features.filter((feature) => feature.attributes?.basis);
     expect(inferred.map((feature) => (feature.attributes!.equipment_type as { value: string }).value).sort()).toEqual(["service_entrance", "service_path", "service_tap"]);
     for (const feature of inferred) {
-      expect(feature.label).toMatch(/^\(E\) .*INFERRED, NOT FIELD VERIFIED$/);
+      expect(feature.label).toMatch(/^\(E\) SERVICE (FROM|TAP ON|ENTRANCE)/);
+      expect(feature.label).not.toMatch(/LIKELY|INFERRED|VERIFIED/);
       expect(feature.attributes).toMatchObject({ basis: { value: "inferred" }, confidence_reason: { type: "text" } });
     }
     expect((inferred.find((feature) => feature.id === "service-tap")!.attributes!.confidence_reason as { value: string }).value).toContain("pad-mounted transformer");

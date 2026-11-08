@@ -447,11 +447,11 @@ describe("the engineer API", () => {
     expect(checkReadiness(await run()).share).not.toBeNull();
   });
 
-  it("keeps the label on equipment the collector inferred, which says it isn't field verified", async () => {
+  it("keeps the collector's own label and basis on equipment it inferred", async () => {
     const { run } = setup();
     const record = await run();
     const entrance = record.features.find((feature) => feature.id === "service-entrance")!;
-    expect(entrance).toMatchObject({ kind: "existing_equipment", label: expect.stringContaining("INFERRED, NOT FIELD VERIFIED") });
+    expect(entrance).toMatchObject({ kind: "existing_equipment", label: "(E) SERVICE ENTRANCE", attributes: { basis: { type: "text", value: "inferred" } } });
   });
 
   it("infers the service equipment again on a re-run instead of carrying the old copy", async () => {

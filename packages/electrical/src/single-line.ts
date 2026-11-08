@@ -1,4 +1,4 @@
-import { CONCEPT_GRADE_NOTE } from "@eqore/contract";
+import { CALCULATION_EDITION } from "./codes.ts";
 import type { ElectricalDesign, LineItem, ServiceDesign } from "./design.ts";
 
 // Drafting conventions shared with the site plan sheet: Arial capitals, (E) and (N), dashed where inferred or unknown.
@@ -103,7 +103,7 @@ function schedule(design: ServiceDesign, x: number, y: number): { svg: string; h
   return { svg: parts.join(""), height: row - y };
 }
 
-const STATUS_WORDS = { passes: "PASSES (CONCEPT)", fails: "DOES NOT PASS", needs_input: "NEEDS INPUT", over_recommendation: "OVER 3% RECOMMENDATION" };
+const STATUS_WORDS = { passes: "PASS", fails: "FAIL", needs_input: "INPUT NEEDED", over_recommendation: "OVER 3%" };
 const STATUS_COLOR = { passes: "#1d6b2c", fails: UTILITY, needs_input: "#9a6700", over_recommendation: "#9a6700" };
 
 function calculations(design: ServiceDesign, x: number, y: number, bottom: number): string {
@@ -113,7 +113,7 @@ function calculations(design: ServiceDesign, x: number, y: number, bottom: numbe
     if (row > bottom - 40) break;
     parts.push(text(x, row, calc.title, 12.5, "bold"), text(x + 830, row, STATUS_WORDS[calc.status], 12, "bold", STATUS_COLOR[calc.status]));
     row += 15;
-    for (const line of wrap(`${calc.result}. ${calc.citation}.${calc.note ? ` ${calc.note}` : ""}`, 120).slice(0, 2)) {
+    for (const line of wrap(`${calc.result}. ${calc.citation}.`, 120).slice(0, 2)) {
       parts.push(text(x + 12, row, line, 11, "normal", MUTED));
       row += 14;
     }
@@ -127,36 +127,37 @@ export function singleLineSvg(design: ElectricalDesign, index = 0): string {
   const variant = design.designs[index]!;
   const parts: string[] = [];
   parts.push(`<rect x="0" y="0" width="${WIDTH}" height="${HEIGHT}" fill="#fff"/>`, `<rect x="20" y="20" width="${WIDTH - 40}" height="${HEIGHT - 40}" fill="none" stroke="${INK}" stroke-width="3"/>`);
-  parts.push(text(70, 62, "SINGLE-LINE DIAGRAM (CONCEPT)", 22, "bold"));
-  parts.push(text(70, 84, variant.serviceState === "missing" ? `SERVICE VOLTAGE NOT CONFIRMED: THIS SHEET ASSUMES ${variant.serviceLabel}` : `SERVICE ${variant.serviceLabel}`, 13, "bold", variant.serviceState === "missing" ? UTILITY : INK));
+  parts.push(text(70, 62, "SINGLE-LINE DIAGRAM", 22, "bold"));
+  parts.push(text(70, 84, `SERVICE ${variant.serviceLabel}`, 13, "bold"));
   parts.push(chain(variant, 110));
 
   const right = 660;
   const table = schedule(variant, right, 70);
   parts.push(table.svg);
-  parts.push(calculations(variant, right, 70 + table.height + 40, 900));
+  parts.push(calculations(variant, right, 70 + table.height + 40, 740));
 
   // Notes and the title block.
   const notes = [
-    design.note,
-    "(E) EXISTING, (N) NEW. DASHED: INFERRED OR UNKNOWN, NOT FIELD VERIFIED.",
-    `CONFIGURATION: ${design.configuration.name.toUpperCase()}. ${design.configuration.provenance.toUpperCase()}`,
-    `EQUIPMENT RATINGS ARE THE MANUFACTURERS' PUBLISHED VALUES. ${(design.jurisdiction.calculationNote ?? "NEC references are to the 2023 edition.").toUpperCase()}`,
-    ...(design.jurisdiction.ahj ? [`AHJ: ${design.jurisdiction.ahj.toUpperCase()}. CODES: ${design.jurisdiction.codes.map((entry) => entry.short).join("; ").toUpperCase()}.`] : []),
+    "(E) EXISTING, (N) NEW. DASHED: NOT CONFIRMED.",
+    `CONFIGURATION: ${design.configuration.name.toUpperCase()}.`,
+    ...(design.jurisdiction.ahj ? [`AHJ: ${design.jurisdiction.ahj.toUpperCase()}.`] : []),
+    ...(design.jurisdiction.codes.length ? [`CODES: ${design.jurisdiction.codes.map((entry) => entry.short).join("; ").toUpperCase()}. CALCULATIONS: ${CALCULATION_EDITION.toUpperCase()} TABLES.`] : [`CALCULATIONS: ${CALCULATION_EDITION.toUpperCase()} TABLES.`]),
   ];
-  let y = 930;
-  parts.push(`<line x1="20" y1="${y - 22}" x2="${WIDTH - 20}" y2="${y - 22}" stroke="${INK}" stroke-width="2"/>`, text(70, y, "NOTES", 13, "bold"));
+  // Under the calculations, right of the auxiliary disconnect and above the title block.
+  const notesX = 930;
+  let y = 760;
+  parts.push(text(notesX, y, "NOTES", 13, "bold"));
   for (const note of notes) {
-    for (const line of wrap(note, 120)) {
+    for (const line of wrap(note, 68)) {
       y += 17;
-      parts.push(text(70, y, line, 11.5));
+      parts.push(text(notesX, y, line, 11.5));
     }
   }
   const blockX = WIDTH - 470;
   parts.push(`<rect x="${blockX}" y="${HEIGHT - 190}" width="450" height="170" fill="#fff" stroke="${INK}" stroke-width="2"/>`);
   wrap(design.site.address.toUpperCase(), 52).slice(0, 2).forEach((line, lineIndex) => parts.push(text(blockX + 14, HEIGHT - 164 + lineIndex * 18, line, 13, "bold")));
   parts.push(text(blockX + 14, HEIGHT - 122, `RECORD ${design.site.recordVersionId}, VERSION ${design.site.version}`, 11.5));
-  parts.push(text(blockX + 14, HEIGHT - 102, CONCEPT_GRADE_NOTE.toUpperCase(), 11, "normal", MUTED));
+  parts.push(text(blockX + 14, HEIGHT - 102, design.note, 9.5, "normal", MUTED));
   parts.push(text(blockX + 14, HEIGHT - 72, "SHEET E-002, SINGLE-LINE (CONCEPT)", 13, "bold"));
   parts.push(text(blockX + 14, HEIGHT - 40, "NOT FOR CONSTRUCTION", 16, "bold", UTILITY));
 

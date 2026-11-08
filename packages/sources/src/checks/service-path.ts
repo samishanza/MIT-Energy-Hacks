@@ -6,7 +6,6 @@ import type { NearbySegment } from "./grid.ts";
 export type ServicePath = { observations: Observation[]; features: MapFeature[] };
 
 const FIELD = "grid_service_path";
-const INFERRED = "INFERRED, NOT FIELD VERIFIED";
 
 function sideOf(center: Point, point: Point): string {
   const degrees = (Math.atan2(point[0] - center[0], point[1] - center[1]) * 180) / Math.PI;
@@ -56,7 +55,7 @@ export function inferServicePath(building: PolygonGeometry | null, segments: Nea
       kind: "utility_line",
       field: FIELD,
       geometry: { type: "LineString", coordinates: [tap, entrance] },
-      label: `(E) LIKELY SERVICE PATH FROM ${segment.feeder}, ${INFERRED}`,
+      label: `(E) SERVICE FROM ${segment.feeder}`,
       attributes: { ...shared("service_path", why), line_class: { type: "text", value: "inferred service path" }, distance_ft: { type: "quantity", value: feet, unit: "ft" } },
     },
     {
@@ -64,7 +63,7 @@ export function inferServicePath(building: PolygonGeometry | null, segments: Nea
       kind: "existing_equipment",
       field: FIELD,
       geometry: { type: "Point", coordinates: tap },
-      label: `(E) LIKELY SERVICE TAP ON ${segment.feeder}, ${INFERRED}`,
+      label: `(E) SERVICE TAP ON ${segment.feeder}`,
       attributes: { ...shared("service_tap", `${why} ${transformerFor(segment.construction)}`), construction: { type: "text", value: segment.construction } },
     },
     {
@@ -72,7 +71,7 @@ export function inferServicePath(building: PolygonGeometry | null, segments: Nea
       kind: "existing_equipment",
       field: FIELD,
       geometry: { type: "Point", coordinates: entrance },
-      label: `(E) LIKELY SERVICE ENTRANCE, ${side.toUpperCase()} SIDE, ${INFERRED}`,
+      label: "(E) SERVICE ENTRANCE",
       attributes: shared("service_entrance", `${why} The service usually enters on the side facing its supply, and the main switchgear is usually just inside it.`),
     },
   ];

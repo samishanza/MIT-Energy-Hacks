@@ -77,7 +77,6 @@ export function shortestRun(record: RecordVersion): ShortestRun | null {
 }
 
 const text = (value: string) => ({ type: "text" as const, value });
-const CONCEPT = "CONCEPT LOCATION, NOT A DESIGN";
 
 // Where the new equipment could go and how it could connect, for the site plan to draw. These are concept
 // locations from public geometry: the engineer sets the real pad, clearances, and route.
@@ -92,7 +91,7 @@ export function conceptSiteLayout(record: RecordVersion, breakerLabel = "NEW BRE
       kind: "existing_equipment",
       field: "pad_zone_x_ft",
       geometry: { type: "Point", coordinates: run.from },
-      label: `(N) BESS PAD, ${CONCEPT}`,
+      label: "(N) BESS PAD",
       attributes: shared("bess_pad", `The point of open ground nearest ${where}. Clearances, setbacks, and the real pad location are the engineer's.`),
     },
     {
@@ -100,7 +99,7 @@ export function conceptSiteLayout(record: RecordVersion, breakerLabel = "NEW BRE
       kind: "existing_equipment",
       field: "electrical_poi",
       geometry: { type: "Point", coordinates: run.from },
-      label: `(N) AC DISCONNECT AT THE PAD, ${CONCEPT}`,
+      label: "(N) AC DISCONNECT",
       attributes: shared("ac_disconnect", "The disconnect stands at the pad, as in the source plan set."),
     },
     {
@@ -108,7 +107,7 @@ export function conceptSiteLayout(record: RecordVersion, breakerLabel = "NEW BRE
       kind: "utility_line",
       field: "electrical_poi",
       geometry: { type: "LineString", coordinates: [run.from, run.to] },
-      label: `(N) PROPOSED TRENCH ROUTE, ±${run.feet} FT, ${CONCEPT}`,
+      label: `(N) TRENCH ROUTE, ${run.feet} FT`,
       attributes: { ...shared("trench_route", `The shortest plausible run, straight line, from the open ground to ${where}. The real route is longer.`), line_class: text("proposed trench route, concept"), distance_ft: { type: "quantity", value: run.feet, unit: "ft" } },
     },
     {
@@ -116,7 +115,7 @@ export function conceptSiteLayout(record: RecordVersion, breakerLabel = "NEW BRE
       kind: "existing_equipment",
       field: "electrical_poi",
       geometry: { type: "Point", coordinates: run.to },
-      label: `(N) ${breakerLabel}, AT ${run.target === "inferred service entrance" ? "THE INFERRED SERVICE ENTRANCE" : "THE NEAREST WALL"}, ${CONCEPT}`,
+      label: `(N) ${breakerLabel}`,
       attributes: shared("new_breaker", "The panel is assumed to sit just inside where the service enters. A site visit finds it."),
     },
   ];
