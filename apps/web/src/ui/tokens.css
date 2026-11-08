@@ -1500,7 +1500,9 @@ legend {
 .grid-tour-title { flex: 1 1 0; min-width: 0; }
 
 /* ---- Details dock (redesign): one header, folding sections, one type scale ---- */
-.map-region .maplibregl-ctrl-top-left { top: 46px; }
+.map-region .maplibregl-ctrl-top-left, .map-region .maplibregl-ctrl-top-right { top: 46px; }
+.map-region.dock-open .maplibregl-ctrl-top-right { right: 400px; }
+.map-region.dock-collapsed .maplibregl-ctrl-top-right { right: 40px; }
 .dock {
   display: flex;
   flex-direction: column;

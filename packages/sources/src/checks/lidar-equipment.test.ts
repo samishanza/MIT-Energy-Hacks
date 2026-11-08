@@ -217,3 +217,24 @@ describe("placing poles and rejecting what isn't one", () => {
     expect(["S1780", "S1730", "S1740", "S1640", "S1710"].map(followsStreet)).toEqual([false, false, false, false, false]);
   });
 });
+
+describe("equipment boxes by shape", () => {
+  it("finds a solid flat cabinet labelled low vegetation beside a taller generator, and not a bush", () => {
+    const found = detectEquipment(
+      scene((add) => {
+        // A 2 x 2 m cabinet 1.4 m tall, which 3DEP labels low vegetation, single returns.
+        for (let x = 120; x <= 122; x += 0.25) for (let y = 40; y <= 42; y += 0.25) add(x, y, 1.4, 3, 1);
+        // A generator 2.3 m tall right beside it, which shouldn't merge with it.
+        for (let x = 122.5; x <= 125.5; x += 0.25) for (let y = 40; y <= 41.5; y += 0.25) add(x, y, 2.3, 4, 1);
+        // A bush: uneven top, several returns per pulse.
+        for (let x = 140; x <= 142; x += 0.25) for (let y = 40; y <= 42; y += 0.25) add(x, y, 1 + 0.8 * Math.abs(Math.sin(x * 3 + y * 5)), 4, 3);
+      }),
+      [building],
+      [road],
+    );
+    const cabinet = found.padMounts.find((pad) => Math.abs(pad.at[0] - 121) < 1);
+    expect(cabinet).toMatchObject({ labelledVegetation: true });
+    expect(cabinet!.heightM).toBeCloseTo(1.4, 1);
+    expect(found.padMounts.some((pad) => pad.at[0] > 139)).toBe(false);
+  });
+});

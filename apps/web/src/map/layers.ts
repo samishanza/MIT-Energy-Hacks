@@ -257,11 +257,22 @@ export const FEATURE_LAYERS = [
     paint: { "line-color": ["case", selected, SELECTION_COLOR, "#3d3d3d"], "line-width": 1.2 },
   },
   {
+    // Curbs and pavement edges: a firm dark line, like a drawing's curb line.
+    id: "paved-curbs",
+    type: "line",
+    source: FEATURE_SOURCE,
+    filter: ["all", onLayer("paved"), ["==", ["get", "field"], "paved_curbs"]],
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#2b2b2b"], "line-width": ["interpolate", ["linear"], ["zoom"], 16, 0.8, 18, 1.6, 20, 3] },
+  },
+  {
+    // Painted stall lines: crisp white, thin at site scale and wider up close.
     id: "parking-stripes",
     type: "line",
     source: FEATURE_SOURCE,
-    filter: ["all", onLayer("paved"), ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]]],
-    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#ffffff"], "line-width": 1.5 },
+    filter: ["all", onLayer("paved"), ["!=", ["get", "field"], "paved_curbs"], ["in", ["geometry-type"], ["literal", ["LineString", "MultiLineString"]]]],
+    layout: { "line-cap": "butt" },
+    paint: { "line-color": ["case", selected, SELECTION_COLOR, "#ffffff"], "line-width": ["interpolate", ["linear"], ["zoom"], 16, 0.4, 18, 1, 20, 2.2] },
   },
   {
     id: "constraint-fill",

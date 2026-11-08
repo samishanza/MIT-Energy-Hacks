@@ -94,6 +94,20 @@ export function equipmentTag(f: MapFeature): { tag: string; name: string } | nul
       return { tag: "MH", name: "Manhole" };
     case "meter":
       return { tag: "M", name: "Utility meter" };
+    case "generator":
+      return { tag: "GEN", name: "Generator" };
+    case "panel":
+      return { tag: "PNL", name: "Panel" };
+    case "transfer_switch":
+      return { tag: "TS", name: "Transfer switch" };
+    case "disconnect":
+      return { tag: "DS", name: "Disconnect" };
+    case "annunciator":
+      return { tag: "ANN", name: "Annunciator panel" };
+    case "sign":
+      return { tag: "", name: "Sign" };
+    case "concrete_pad":
+      return { tag: "", name: "Concrete pad" };
     default:
       return f.kind === "substation" ? { tag: "SUB", name: "Substation" } : null;
   }
@@ -183,6 +197,32 @@ export function equipmentSolids(all: MapFeature[]): Solid[] {
           break;
         case "meter":
           add(f, "meter", { color: "#9aa3ab", base: 1.2, top: 1.7, ring: box(at, 0.35, 0.25) });
+          break;
+        case "panel":
+          add(f, "panel", { color: "#a7adb3", base: 0.3, top: 2.0, ring: box(at, 0.6, 0.3) });
+          break;
+        case "transfer_switch":
+          add(f, "ts", { color: "#9aa3ab", base: 0, top: 2.0, ring: box(at, 0.9, 0.6) });
+          break;
+        case "disconnect":
+          add(f, "disc", { color: "#9aa3ab", base: 0.9, top: 1.7, ring: box(at, 0.45, 0.3) });
+          break;
+        case "annunciator":
+          add(f, "ann", { color: "#c62828", base: 1.2, top: 1.6, ring: box(at, 0.35, 0.12) });
+          break;
+        case "sign":
+          add(f, "post", { color: "#7d8287", base: 0, top: 2.1, ring: octagon(at, 0.04) });
+          add(f, "face", { color: "#e8eaed", base: 1.5, top: 2.1, ring: box(at, 0.6, 0.06) });
+          break;
+        case "concrete_pad": {
+          const turn = Number(attr(f, "rotation_deg")) || 0;
+          add(f, "pad", { color: "#c8c4bb", base: 0, top: 0.15, ring: box(at, (Number(attr(f, "width_ft")) || 10) * FT, (Number(attr(f, "depth_ft")) || 8) * FT, turn) });
+          break;
+        }
+        case "generator":
+          // A standby generator in its enclosure on a pad, about 12 x 5 ft and 6 ft tall.
+          add(f, "pad", { color: "#c8c4bb", base: 0, top: 0.12, ring: box(at, 4.2, 1.9) });
+          add(f, "enclosure", { color: "#d8d4c8", base: 0.12, top: 1.95, ring: box(at, 3.7, 1.5) });
           break;
       }
     }

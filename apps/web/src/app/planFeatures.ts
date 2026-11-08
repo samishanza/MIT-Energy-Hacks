@@ -23,6 +23,12 @@ const POINT_TYPES: Record<string, { equipment: string; label: string }> = {
   transformer: { equipment: "pad_mount_transformer", label: "(E) PAD-MOUNT TRANSFORMER" },
   meter: { equipment: "meter", label: "(E) UTILITY METER" },
   main_switchboard: { equipment: "service_entrance", label: "(E) MAIN DISTRIBUTION PANEL" },
+  generator: { equipment: "generator", label: "(E) GENERATOR" },
+  panel: { equipment: "panel", label: "(E) PANEL" },
+  transfer_switch: { equipment: "transfer_switch", label: "(E) TRANSFER SWITCH" },
+  disconnect: { equipment: "disconnect", label: "(E) DISCONNECT" },
+  annunciator: { equipment: "annunciator", label: "(E) ANNUNCIATOR PANEL" },
+  sign: { equipment: "sign", label: "(E) SIGN" },
 };
 
 export async function loadPlanFeatures(siteId: string): Promise<PlanFeatureCollection | null> {
@@ -50,6 +56,24 @@ function padTurn(ring: LonLat[]): number {
   return (Math.atan2(long[1], long[0]) * 180) / Math.PI;
 }
 
+/**
+ * The drawing's own wording, shortened for a callout: "(N) 60 kW diesel generator, 60 kW/75 kVA, ..." becomes
+ * "(N) 60 KW DIESEL GENERATOR". The full note stays on the feature for its details.
+ */
+export function shortLabel(label: string | undefined, fallback: string): string {
+  if (!label) return fallback;
+  const status = /^\((E|N|R)\)/i.exec(label)?.[0]?.toUpperCase() ?? /^\([EN]\)/.exec(fallback)?.[0] ?? "(E)";
+  const body = label.replace(/^\([A-Z]\)\s*/i, "").split(/[,;(]/)[0]!.trim();
+  return `${status} ${body}`.toUpperCase().slice(0, 48);
+}
+
+/** A polygon's centre and its sides in feet, for a solid model sized to the drawing. */
+function sizeOf(ring: LonLat[]): { at: LonLat; widthFt: number; depthFt: number; turn: number } {
+  const k = Math.cos((ring[0]![1] * Math.PI) / 180);
+  const ft = (a: LonLat, b: LonLat) => (Math.hypot((b[0] - a[0]) * k, b[1] - a[1]) * 111_320) / 0.3048;
+  return { at: centroid(ring), widthFt: ft(ring[0]!, ring[1]!), depthFt: ft(ring[1]!, ring[2]!), turn: padTurn(ring) };
+}
+
 export function planMapFeatures(collection: PlanFeatureCollection): MapFeature[] {
   const out: MapFeature[] = [];
   const evidence = (p: PlanFeature["properties"]) => ({
@@ -69,8 +93,8 @@ export function planMapFeatures(collection: PlanFeatureCollection): MapFeature[]
         kind: "existing_equipment",
         field: "detected_grid_equipment",
         geometry: { type: "Point", coordinates: f.geometry.coordinates as LonLat },
-        label: point.label,
-        attributes: { equipment_type: text(point.equipment), ...evidence(p), ...(p.mark ? { plan_mark: text(p.mark) } : {}) },
+        label: shortLabel(p.label, point.label),
+        attributes: { equipment_type: text(point.equipment), ...evidence(p), ...(p.label ? { drawing_note: text(p.label) } : {}), ...(p.mark ? { plan_mark: text(p.mark) } : {}) },
       });
       continue;
     }
@@ -82,6 +106,26 @@ export function planMapFeatures(collection: PlanFeatureCollection): MapFeature[]
       case "curb":
         if (f.geometry.type === "LineString") curbs.push(f.geometry.coordinates as LonLat[]);
         if (f.geometry.type === "MultiLineString") curbs.push(...(f.geometry.coordinates as LonLat[][]));
+        break;
+      case "concrete_pad":
+        if (f.geometry.type === "Polygon") {
+          const s = sizeOf((f.geometry.coordinates as LonLat[][])[0]!);
+          out.push({
+            id,
+            kind: "existing_equipment",
+            field: "detected_grid_equipment",
+            geometry: { type: "Point", coordinates: s.at },
+            label: shortLabel(p.label, "(E) CONCRETE PAD"),
+            attributes: {
+              equipment_type: text("concrete_pad"),
+              width_ft: { type: "quantity", value: Math.round(s.widthFt), unit: "ft" },
+              depth_ft: { type: "quantity", value: Math.round(s.depthFt), unit: "ft" },
+              rotation_deg: { type: "quantity", value: s.turn, unit: "deg" },
+              ...(p.label ? { drawing_note: text(p.label) } : {}),
+              ...evidence(p),
+            },
+          });
+        }
         break;
       case "pavement":
         if (f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon")
@@ -102,7 +146,14 @@ export function planMapFeatures(collection: PlanFeatureCollection): MapFeature[]
         break;
       case "conduit":
         if (f.geometry.type === "LineString")
-          out.push({ id, kind: "utility_line", field: "candidate_areas", geometry: { type: "LineString", coordinates: f.geometry.coordinates as LonLat[] }, label: "(N) CONDUIT TO BESS", attributes: { line_class: text("proposed trench route"), ...evidence(p) } });
+          out.push({
+            id,
+            kind: "utility_line",
+            field: "candidate_areas",
+            geometry: { type: "LineString", coordinates: f.geometry.coordinates as LonLat[] },
+            label: shortLabel(p.label, "(N) CONDUIT"),
+            attributes: { line_class: text(/^\(E\)/i.test(p.label ?? "") ? "existing conduit" : "proposed trench route"), ...(p.label ? { drawing_note: text(p.label) } : {}), ...evidence(p) },
+          });
         break;
     }
   }

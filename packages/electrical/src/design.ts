@@ -46,6 +46,7 @@ export type ElectricalDesign = {
     mainBreakerA: SiteInput<number>;
     busRatingA: SiteInput<number>;
     faultCurrentA: SiteInput<number>;
+    transformerKva: SiteInput<number>;
     meterNumber: SiteInput<string>;
     runLengthFt: SiteInput<number>;
   };
@@ -80,6 +81,12 @@ function textInput(value: Value | undefined, label: string, missing: string): Si
 function ampsInput(value: Value | undefined, label: string, missing: string): SiteInput<number> {
   if (value?.current?.type === "quantity" && value.current.unit === "A") return { label, value: value.current.value, state: stateOf(value), source: value.label };
   return { label, value: null, state: "missing", source: value?.label ?? label, reason: value?.reason ?? missing };
+}
+
+function kvaInput(value: Value | undefined): SiteInput<number> {
+  const label = "Utility transformer rating";
+  if (value?.current?.type === "quantity" && /kva/i.test(value.current.unit)) return { label, value: value.current.value, state: stateOf(value), source: value.label };
+  return { label, value: null, state: "missing", source: value?.label ?? label, reason: value?.reason ?? "The utility states the transformer's size on request." };
 }
 
 // The main breaker from its nameplate, or else the service size on a city permit, which usually matches it.
@@ -309,8 +316,8 @@ function designFor(service: { volts: number; label: string }, state: InputState,
       id: "service-transformer",
       status: "E",
       title: "UTILITY SERVICE TRANSFORMER",
-      lines: ["KVA AND IMPEDANCE BY UTILITY"],
-      known: false,
+      lines: [inputs.transformerKva.value !== null ? `${inputs.transformerKva.value} KVA, IMPEDANCE BY UTILITY` : "KVA AND IMPEDANCE BY UTILITY"],
+      known: inputs.transformerKva.value !== null,
       inferred: Boolean(inputs.servicePath.value),
     },
     { id: "meter", status: "E", title: "REVENUE METER", lines: [inputs.meterNumber.value ? `METER NO. ${inputs.meterNumber.value}` : "METER NO. BY UTILITY"], known: Boolean(inputs.meterNumber.value) },
@@ -348,6 +355,7 @@ export function designFromRecord(record: RecordVersion, config: Configuration = 
     mainBreakerA: mainBreaker(values.get("main_device_rating"), values.get("service_size_a")),
     busRatingA: ampsInput(values.get("bus_rating"), "Busbar rating", "From the main distribution panel's nameplate, read by a qualified person."),
     faultCurrentA: ampsInput(values.get("available_fault_current_a"), "Available fault current", "The utility states it on request."),
+    transformerKva: kvaInput(values.get("transformer_kva")),
     meterNumber: textInput(values.get("meter_number"), "Meter number", "The utility bill shows it."),
     runLengthFt: runLength(record),
   };

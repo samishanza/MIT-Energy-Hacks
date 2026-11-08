@@ -246,9 +246,13 @@ export function fallDirection(record: RecordVersion): number | null {
 export function sheetNotes(record: RecordVersion): string[] {
   const utility = printed(record, 'serving_utility');
   const imagery = record.baseMap ? `${record.baseMap.attribution.toUpperCase()}${record.baseMap.sourceDate ? ` (${record.baseMap.sourceDate})` : ''}` : 'NONE';
+  // Items traced from a supplied plan set say so, since they come from a drawing, not from public records.
+  const traced = record.features.filter((f) => /^plan set$/i.test(String((f.attributes?.['basis'] as { value?: unknown } | undefined)?.value ?? '')));
+  const tracedKinds = [...new Set(traced.map((f) => (f.field === 'parking_stalls' ? 'parking striping' : f.field === 'paved_area_sqft' ? 'pavement' : equipmentTypeOf(f).replace(/_/g, ' ')).toUpperCase()).filter(Boolean))];
   return [
     'DIMENSIONS SHOWN ARE BASED ON AERIAL IMAGERY AND PUBLICLY AVAILABLE PROPERTY BOUNDARY DATA ONLY. FOR REFERENCE ONLY. NOT SURVEYED.',
     `EXISTING ELECTRIC LINES PER ${utility ?? 'THE UTILITY'} SYSTEM DATA. CALL 811 BEFORE ANY EXCAVATION.`,
+    ...(tracedKinds.length ? [`TRACED FROM THE SUPPLIED PLAN SET, AS DRAWN THERE AND NOT FIELD VERIFIED: ${tracedKinds.join(', ')}.`] : []),
     `AERIAL UNDERLAY: ${imagery}.`,
     `SOURCE AND BASIS OF EACH ITEM: RECORD ${record.id.toUpperCase()}.`,
   ];
@@ -336,7 +340,10 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
   return labels;
 }
 
-const equipmentTypeOf = (f: MapFeature) => String((f.attributes?.['equipment_type'] as { value?: unknown } | undefined)?.value ?? '');
+/** Site items traced from a plan set that aren't part of the electrical work, so they don't widen the frame. */
+const SITE_FURNITURE = new Set(['light_pole', 'hydrant', 'catch_basin', 'manhole', 'sign']);
+
+const equipmentTypeOf = (f: MapFeature) =>String((f.attributes?.['equipment_type'] as { value?: unknown } | undefined)?.value ?? '');
 
 /**
  * The equipment both the map and the site plan draw, so they always show the same items.
@@ -409,7 +416,7 @@ export function workPoints(features: MapFeature[]): { pts: number[][]; building:
   const [x0, x1] = [Math.min(...pts.map((p) => p[0]!)) - reach * 1.4, Math.max(...pts.map((p) => p[0]!)) + reach * 1.4];
   const [y0, y1] = [Math.min(...pts.map((p) => p[1]!)) - reach, Math.max(...pts.map((p) => p[1]!)) + reach];
   for (const f of drawnEquipment(features)) {
-    const electrical = f.kind === 'existing_equipment' || /service|drop|trench|conductor/i.test(String((f.attributes?.['line_class'] as { value?: unknown } | undefined)?.value ?? ''));
+    const electrical = (f.kind === 'existing_equipment' && !SITE_FURNITURE.has(equipmentTypeOf(f))) || /service|drop|trench|conductor/i.test(String((f.attributes?.['line_class'] as { value?: unknown } | undefined)?.value ?? ''));
     if (electrical) pts.push(...coords(f).filter((p) => p[0]! >= x0 && p[0]! <= x1 && p[1]! >= y0 && p[1]! <= y1));
   }
   return { pts, building: outer(main) };
