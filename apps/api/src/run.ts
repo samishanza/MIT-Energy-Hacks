@@ -41,6 +41,8 @@ export type ApiDeps = {
   runDeadlineMs?: number;
   resolveDeadlineMs?: number;
   progress?: Map<string, RunProgress>;
+  // Called with each new collected version, for the review agent to audit every step in the background.
+  afterRun?: (record: RecordVersion) => void;
 };
 
 type VersionParts = Pick<RecordVersion, "site" | "features" | "baseMap" | "sourceRuns" | "trigger">;
@@ -187,6 +189,7 @@ async function collectAndRecord(
     sourceRuns,
     trigger: "run",
   });
+  deps.afterRun?.(record);
   return { status: "ok" as const, record };
 }
 

@@ -8,6 +8,7 @@ import { createCaptureApp } from "./capture-server.ts";
 import { createClaudeExtractor } from "./extract.ts";
 import { createEngineerApp } from "./routes.ts";
 import { CloudMirror, cloudConfigFromEnv } from "./cloud-mirror.ts";
+import { reviewSite } from "./site-agent.ts";
 import { Store } from "./store.ts";
 import { decodeJpeg, liveEarthEngine, readLidarAround } from "@eqore/sources";
 
@@ -53,6 +54,15 @@ const deps: CaptureDeps = {
   decodeImage: decodeJpeg,
   evidenceManifest: loadEvidenceManifest(inRepo("fixtures/evidence/manifest.json")),
 };
+
+// With a Claude key, every collection run is followed by the review agent auditing each step, in the background.
+if (process.env.ANTHROPIC_API_KEY) {
+  deps.afterRun = (record) => {
+    void reviewSite(deps, record.site.id)
+      .then((result) => console.log(`Review agent: ${record.site.id} v${record.version} ${result.status}, ${result.proposals.length} proposals.`))
+      .catch((error) => console.log(`Review agent: ${record.site.id} failed: ${(error as Error).message}`));
+  };
+}
 
 serve({ fetch: createEngineerApp(deps).fetch, hostname: LOOPBACK_HOST, port: ENGINEER_PORT }, ({ address, port }) => {
   console.log(`Engineer API on http://${address}:${port}`);
