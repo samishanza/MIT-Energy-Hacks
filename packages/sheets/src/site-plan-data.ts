@@ -129,7 +129,7 @@ export function attributeText(feature: MapFeature | null, key: string): string |
   return formatReading(a ?? null);
 }
 
-export type LineClass = 'feeder' | 'segment' | 'transmission' | 'service' | 'other';
+export type LineClass = 'feeder' | 'segment' | 'transmission' | 'service' | 'detected' | 'other';
 
 /** What kind of electric line a utility_line feature is. */
 export function lineClassOf(f: MapFeature): LineClass {
@@ -137,7 +137,8 @@ export function lineClassOf(f: MapFeature): LineClass {
   if (f.field === 'transmission_nearby') return 'transmission';
   if (cls === 'FEEDER CANDIDATE') return 'feeder';
   if (cls === 'DISTRIBUTION SEGMENT') return 'segment';
-  if (cls === 'INFERRED SERVICE PATH') return 'service';
+  if (cls === 'INFERRED SERVICE PATH' || cls === 'DETECTED SERVICE DROP') return 'service';
+  if (cls === 'DETECTED OVERHEAD CONDUCTOR') return 'detected';
   if (/^Nearby line:/i.test(f.label ?? '')) return 'feeder';
   return 'other';
 }
@@ -284,7 +285,9 @@ export function featureLabels(record: RecordVersion): Record<string, string> {
         } else if (cls === 'transmission') {
           labels[f.id] = `(E) ${attributeText(f, 'line_voltage') ?? ''} TRANSMISSION`.replace('  ', ' ');
         } else if (cls === 'service') {
-          labels[f.id] = '(E) LIKELY SERVICE PATH, INFERRED';
+          labels[f.id] = attributeText(f, 'line_class') === 'DETECTED SERVICE DROP' ? '(E) SERVICE DROP, DETECTED IN LIDAR' : '(E) LIKELY SERVICE PATH, INFERRED';
+        } else if (cls === 'detected') {
+          labels[f.id] = '(E) OVERHEAD LINE, DETECTED IN LIDAR';
         } else if (attributeText(f, 'basis') === 'CONCEPT') {
           labels[f.id] = `(N) TRENCH ROUTE, CONCEPT, ±${attributeText(f, 'distance_ft') ?? '?'}`;
         }

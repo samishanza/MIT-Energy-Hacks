@@ -28,7 +28,7 @@ export const METHODS = [
 export const MethodSchema = z.enum(METHODS);
 export type Method = z.infer<typeof MethodSchema>;
 
-export const SOURCE_KINDS = ["arcgis_rest", "json_api", "earth_engine", "geocoder", "human_evidence"] as const;
+export const SOURCE_KINDS = ["arcgis_rest", "json_api", "earth_engine", "geocoder", "point_cloud", "human_evidence"] as const;
 export const SourceKindSchema = z.enum(SOURCE_KINDS);
 
 const nonBlank = z.string().trim().min(1);
