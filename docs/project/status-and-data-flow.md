@@ -1,5 +1,7 @@
 # Status and how data is pulled
 
+For every feature and value we map and its source, see [mapped-features.md](mapped-features.md).
+
 One place for what exists, how data gets in, and what's left. Written 2026-11-07. The plan is `docs/plans/2026-11-07-0954-feat-site-data-collection-plan.md`, and it's still being corrected after review.
 
 ## How data is pulled today
