@@ -199,13 +199,6 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
           return result;
         })
       : Promise.resolve(null);
-  // Lidar needs the buildings and roads first, then runs alongside the rest.
-  const lidarRead = Promise.all([outlinesRead, roadsRead]).then(([found, roadResult]) =>
-    region.lidarPoints && ctx.readLidar && found && region.roads
-      ? collectLidarEquipment(region.lidarPoints, ctx.readLidar, found.measurable.features.map((feature) => feature.geometry), roadResult?.features ?? [], region.roads.nameAttribute, address, ctx).then((part) => (part ? landed(part) : null))
-      : null,
-  );
-
   // Paved parking and drives need the buildings and roads too, to take them out of the impervious cover.
   const pavedRead = Promise.all([outlinesRead, roadsRead]).then(([found, roadResult]) =>
     region.pavedSurfaces && physical.parcelGeometry
@@ -221,6 +214,14 @@ async function collectWithin(address: string, region: RegionConfig, anchor: Site
           }),
           ctx,
         ).then(landed)
+      : null,
+  );
+
+  // Lidar needs the buildings, roads, and paved areas first (a box well inside a paved lot is a parked car), then
+  // runs alongside the rest.
+  const lidarRead = Promise.all([outlinesRead, roadsRead, pavedRead]).then(([found, roadResult, pavedPart]) =>
+    region.lidarPoints && ctx.readLidar && found && region.roads
+      ? collectLidarEquipment(region.lidarPoints, ctx.readLidar, found.measurable.features.map((feature) => feature.geometry), roadResult?.features ?? [], region.roads.nameAttribute, address, ctx, pavedPart?.features ?? []).then((part) => (part ? landed(part) : null))
       : null,
   );
 

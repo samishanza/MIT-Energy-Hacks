@@ -106,6 +106,26 @@ describe("where the battery should go", () => {
     expect(Math.hypot(x - 380, y - 250)).toBeLessThan(60);
   });
 
+  it("without a known entrance, measures from the wall nearest the likeliest transformer box, ahead of the pole", () => {
+    // The lidar's likeliest transformer is 20 ft south of the building's west end; the pole is by the road.
+    const box1 = feature("box-1", "existing_equipment", "detected_grid_equipment", { type: "Point", coordinates: ll([220, 130]) }, {
+      equipment_type: { type: "text", value: "pad_mount_transformer_candidate" },
+      candidate_rank: { type: "quantity", value: 1, unit: "rank" },
+    });
+    const { preferred, target } = feasibleBessZone(site([pole(380, 300), box1]));
+    expect(target).toBe("building wall nearest the likeliest transformer");
+    expect(String((preferred!.attributes!["confidence_reason"] as { value: string }).value)).toMatch(/likeliest to be the transformer/);
+    for (const [x, y] of pointsOf(preferred!)) expect(Math.hypot(x - 220, y - 150)).toBeLessThanOrEqual(PREFERRED_STRAIGHT_FT + 4);
+  });
+
+  it("ignores a transformer box too far from the building to say where the service enters", () => {
+    const far = feature("box-1", "existing_equipment", "detected_grid_equipment", { type: "Point", coordinates: ll([220, 60]) }, {
+      equipment_type: { type: "text", value: "pad_mount_transformer_candidate" },
+      candidate_rank: { type: "quantity", value: 1, unit: "rank" },
+    });
+    expect(feasibleBessZone(site([pole(380, 300), far])).target).toBe("building wall nearest the utility supply");
+  });
+
   it("measures from a main switchboard a person placed, ahead of the assumed wall", () => {
     const placed = feature("pin", "capture_pin", "switchboard_location", { type: "Point", coordinates: ll([210, 160]) });
     const { preferred, target } = feasibleBessZone(site([pole(380, 300), placed]));

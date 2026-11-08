@@ -23,7 +23,9 @@ Each feature has a `kind`, a `field` that ties it to a record value, and a label
 | Utility poles | `existing_equipment` | USGS 3DEP lidar, by shape | detected (lidar) |
 | Overhead conductors between poles | `utility_line` | USGS 3DEP lidar, by shape | detected (lidar) |
 | Service drop, service pole, service entrance | `utility_line`, `existing_equipment` | USGS 3DEP lidar, by shape | detected (lidar) |
-| Equipment boxes (solid, flat-topped, 1 to 2.4 m tall, possible pad-mount transformers) | `existing_equipment` | USGS 3DEP lidar, by shape | detected (lidar) |
+| Equipment boxes (flat-topped, 0.8 to 2.5 m tall, not car-sized or deep in a paved lot), ranked; the first is labelled the likeliest transformer | `existing_equipment` | USGS 3DEP lidar, by shape | detected (lidar) |
+| Light poles | `existing_equipment` | USGS 3DEP lidar, by shape | detected (lidar) |
+| Possible fire hydrants (weak: one or two lidar returns each) | `existing_equipment` | USGS 3DEP lidar, by shape | inferred |
 | Service path from the nearest mapped line, when lidar finds no drop | `utility_line`, `existing_equipment` | Computed from the National Grid line segments and the building | inferred |
 | Concept battery pad, AC disconnect, trench route, new breaker | `candidate_area`, `existing_equipment`, `utility_line` | Computed by `@eqore/electrical` from the record | concept |
 | Photo pins | `capture_pin` | Equipment located from a person's photo through the capture link, until someone verifies it | human evidence |
@@ -110,6 +112,8 @@ The product shows each value's state (verified, inferred, missing, conflicting, 
 - **Utility maps** show the utility's published view of feeders and capacity. They're updated on the utility's schedule, not live, and they don't say which line serves a given building.
 - **The nearest mapped line** is a guess about which line feeds the building. The nearest line isn't always the serving one.
 - **Lidar detection** finds equipment by shape, since the lidar doesn't label poles or wires. A pole can be a lamp post or a sign, a pad-mount can be an HVAC unit or a dumpster, and a drop can be a tree branch. The 3DEP collections here are from 2021.
+  - Measured against traced plan sets (2021 lidar, 2026-11-07): at 79 Lowland St, 5 of 5 utility poles, 7 of 11 light poles (the 4 missed stand under tree crowns), and 1 of 2 hydrants (the other is under trees), with 4 unconfirmed light-pole and 1 unconfirmed hydrant detections outside the drawn features. At 71 McKeon Rd the box ranked first is 1.5 m from the drawn pad-mount transformer. Lowland's transformer is hidden by a shrub and is not found, and no box is reported there.
+  - Without a placed switchboard or a known entrance, the battery zone measures from the wall nearest the first-ranked box when that box is within 50 ft of the building, and otherwise from the wall nearest the utility supply. Both are marked assumed.
 - **Permits** record work when it was issued. The service may have changed since, and a permit's service fields can describe a sub-service. Somerville's values are read from free text.
 - **Service territories** often overlap at the edges, so a site can show several candidate utilities.
 - **Concept outputs** (design, layout, run length, draft request) use one equipment configuration taken from one supplied plan set, which isn't confirmed as EQORE's standard. The run length is a straight-line lower bound. The engineer of record decides everything that is built or submitted.
