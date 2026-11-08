@@ -133,7 +133,17 @@ export function subjects(record: RecordVersion): { subjects: Subject[]; target: 
     }
   }
   const pick = (...types: string[]) => types.map((t) => out.find((s) => features.find((f) => f.id === s.id && typeOf(f) === t))).find(Boolean) ?? null;
-  return { subjects: out, target: pick("service_tap", "service_entrance", "bess_pad") };
+  // Face the service connection; without one, the utility pole nearest the building, which
+  // is where an overhead service usually comes from; the concept pad only as a last resort.
+  const building = record.features
+    .filter((f) => f.kind === "building_outline" && f.geometry.type === "Polygon")
+    .map((f) => (f.geometry.coordinates as LonLat[][])[0]!)
+    .sort((a, b) => b.length - a.length)[0];
+  const centre: LonLat | null = building ? [building.reduce((s, p) => s + p[0], 0) / building.length, building.reduce((s, p) => s + p[1], 0) / building.length] : null;
+  const poles = out.filter((s) => features.find((f) => f.id === s.id && typeOf(f) === "utility_pole"));
+  const nearestPole = centre && poles.length ? [...poles].sort((a, b) => distanceM(a.at, centre) - distanceM(b.at, centre))[0]! : null;
+  const target = pick("service_tap", "service_entrance") ?? nearestPole ?? pick("bess_pad");
+  return { subjects: out, target };
 }
 
 function roadLines(record: RecordVersion): LonLat[][] {
@@ -143,10 +153,11 @@ function roadLines(record: RecordVersion): LonLat[][] {
 }
 
 /** The closest point along any mapped road, not just its vertices, so the camera stands beside the target. */
-export function nearestOnRoads(target: LonLat, lines: LonLat[][]): LonLat | null {
+export function nearestOnRoads(target: LonLat, lines: LonLat[][], alongM = 0): LonLat | null {
   const k = Math.cos(target[1] * (Math.PI / 180));
   let best: LonLat | null = null;
   let bestD = Infinity;
+  let bestDir: [number, number] = [0, 0];
   for (const line of lines) {
     for (let i = 1; i < line.length; i++) {
       const a = line[i - 1]!;
@@ -160,10 +171,15 @@ export function nearestOnRoads(target: LonLat, lines: LonLat[][]): LonLat | null
       if (d < bestD) {
         bestD = d;
         best = [target[0] + px / k, target[1] + py];
+        const len = Math.hypot(dx, dy) || 1;
+        bestDir = [dx / len, dy / len];
       }
     }
   }
-  return best;
+  if (!best || !alongM) return best;
+  // Step along the road, so the camera sees the target from the side rather than standing on it.
+  const step = alongM / M_PER_DEG_LAT;
+  return [best[0] + (bestDir[0] * step) / k, best[1] + bestDir[1] * step];
 }
 
 export async function streetView(record: RecordVersion, fetchImpl: FetchLike, key: string | null): Promise<StreetViewResult> {
@@ -171,10 +187,10 @@ export async function streetView(record: RecordVersion, fetchImpl: FetchLike, ke
   if (!target) return { status: "unavailable", reason: "Nothing on this site is located well enough to face: no detected or inferred service, and no open ground for a concept pad.", markers: [] };
   if (!key) return { status: "unavailable", reason: "No Google Maps key is configured. Set GOOGLE_MAPS_API_KEY_FILE in .env.", markers: [] };
 
-  const from = nearestOnRoads(target.at, roadLines(record)) ?? target.at;
+  const from = nearestOnRoads(target.at, roadLines(record), 25) ?? target.at;
   const meta = new URL("https://maps.googleapis.com/maps/api/streetview/metadata");
   meta.searchParams.set("location", `${from[1]},${from[0]}`);
-  meta.searchParams.set("radius", "50");
+  meta.searchParams.set("radius", "20");
   meta.searchParams.set("source", "outdoor");
   meta.searchParams.set("key", key);
   let body: { status?: string; date?: string; location?: { lat: number; lng: number }; error_message?: string };

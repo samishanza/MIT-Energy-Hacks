@@ -1,0 +1,442 @@
+[
+  {
+    "id": "fire.remote_outdoor_100ft",
+    "rule": "An outdoor ESS more than 100 ft from buildings, lot lines that can be built upon, public ways, stored combustibles, hazardous materials, high-piled stock, and other exposure hazards not associated with electrical grid infrastructure is a 'remote' location. Everything else is 'near exposures'.",
+    "distance_ft": 100,
+    "kind": "preference",
+    "layer": "building footprints; parcel lines; public road right-of-way",
+    "citation": "NFPA 855 (2020) 4.4.3.1, adopted by 527 CMR 1.00 ch. 52 (NFPA 1 2021); equivalent IFC 2021 1207.8.1",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED (quoted in two Massachusetts code reports: Worthington HMA 2026 and Code Red's Pembroke report, Dec 2025). Remote locations are exempt from the 50 kWh grouping (4.6) and the 600 kWh limit (4.8). Score as a bonus, because a remote spot is at least 100 ft from the building and so lengthens the run."
+  },
+  {
+    "id": "fire.exposure_buildings_10ft",
+    "rule": "Keep the ESS at least 10 ft from buildings.",
+    "distance_ft": 10,
+    "kind": "exclusion",
+    "layer": "building footprints",
+    "citation": "NFPA 855 (2020) 4.4.3.3 via 527 CMR 1.00 ch. 52; IFC 2021 1207.8.3",
+    "url": "https://www.pembroke-ma.gov/DocumentCenter/View/7662/Palmer-Capital---Pembroke-ESS-Code-Complaince-Report",
+    "notes": "CONFIRMED. The distance can drop to 3 ft for buildings with any one of these: a 1-hour free-standing fire barrier extending 5 ft above and 5 ft beyond the ESS; a 2-hour noncombustible wall with no openings or combustible overhangs; a 2-hour-rated ESS enclosure; or fire and explosion testing (UL 9540A) showing the exposure won't ignite. See fire.exposure_absolute_3ft. Footprints come from aerial outlines, so eaves and overhangs may extend past the polygon."
+  },
+  {
+    "id": "fire.exposure_lot_lines_10ft",
+    "rule": "Keep the ESS at least 10 ft from lot lines.",
+    "distance_ft": 10,
+    "kind": "exclusion",
+    "layer": "parcel polygons (MassGIS L3 assessor parcels)",
+    "citation": "NFPA 855 (2020) 4.4.3.3 via 527 CMR 1.00 ch. 52; IFC 2021 1207.8.3",
+    "url": "https://www.pembroke-ma.gov/DocumentCenter/View/7662/Palmer-Capital---Pembroke-ESS-Code-Complaince-Report",
+    "notes": "CONFIRMED. Assessor parcels are not survey boundaries. Add a positional-error margin (INFERENCE: about 5 ft) and flag any zone within 15 ft of a parcel line for a surveyor."
+  },
+  {
+    "id": "fire.exposure_public_ways_10ft",
+    "rule": "Keep the ESS at least 10 ft from public ways.",
+    "distance_ft": 10,
+    "kind": "exclusion",
+    "layer": "public road right-of-way (MassDOT roads, with frontage parcel lines as the ROW edge)",
+    "citation": "NFPA 855 (2020) 4.4.3.3 via 527 CMR 1.00 ch. 52; IFC 2021 1207.8.3",
+    "url": "https://www.pembroke-ma.gov/DocumentCenter/View/7662/Palmer-Capital---Pembroke-ESS-Code-Complaince-Report",
+    "notes": "CONFIRMED for the distance. INFERENCE: measure from the right-of-way line, which on most frontage is the parcel line, not the pavement edge. A private driveway is not a public way, though it may be a fire access road (see fire.access_road_keep_clear)."
+  },
+  {
+    "id": "fire.exposure_other_hazards_10ft",
+    "rule": "Keep the ESS at least 10 ft from stored combustible materials, hazardous materials, high-piled stock, and other exposure hazards not associated with electrical grid infrastructure.",
+    "distance_ft": 10,
+    "kind": "exclusion",
+    "layer": "imagery (dumpsters, pallet storage, fuel tanks, propane cages), marked by a person",
+    "citation": "NFPA 855 (2020) 4.4.3.3 via 527 CMR 1.00 ch. 52",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED for the list and distance. INFERENCE: treating dumpsters and pallet stacks as stored combustibles. Grid equipment such as the utility transformer is excluded from this list. It has its own utility clearances (util.*)."
+  },
+  {
+    "id": "fire.exposure_absolute_3ft",
+    "rule": "Even when a 10 ft exposure exception applies, keep at least 3 ft. The 3 to 10 ft band is usable only with a documented exception.",
+    "distance_ft": 3,
+    "kind": "exclusion",
+    "layer": "building footprints; parcel lines; public ways",
+    "citation": "NFPA 855 (2020) 4.4.3.3 exceptions; IFC 2021 1207.8.3 Exceptions 1-3",
+    "url": "https://gocodebook.com/library/us/ca/ca-fire-code/chapter-12-energy-systems/section-1207-electrical-energy-storage-systems-ess",
+    "notes": "CONFIRMED (Pembroke report lists the NFPA 855 exceptions; gocodebook shows the 2022 CFC text based on IFC 2021). Draw the 3 to 10 ft band as a separate 'conditional' zone. Never use it by default."
+  },
+  {
+    "id": "fire.egress_10ft",
+    "rule": "Separate the ESS from any means of egress as the fire code official requires, but by no less than 10 ft. The official may approve as little as 3 ft where large-scale fire testing shows egress isn't affected.",
+    "distance_ft": 10,
+    "kind": "exclusion",
+    "layer": "building doors and egress paths to the public way (not in public data; from Street View or imagery, marked by a person)",
+    "citation": "NFPA 855 (2020) 4.4.3.4 via 527 CMR 1.00 ch. 52; IFC 2021 1207.5.8",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED (Worthington HMA quotes 4.4.3.4; gocodebook gives the IFC 1207.5.8 wording). Door locations are not public, so with no door data, report 'egress unchecked'. Sidewalks from doors to the street count as egress paths (INFERENCE)."
+  },
+  {
+    "id": "fire.vegetation_10ft",
+    "rule": "Clear combustible vegetation and other growth within 10 ft on each side of an outdoor ESS.",
+    "distance_ft": 10,
+    "kind": "preference",
+    "layer": "land cover / tree canopy (MassGIS 2016 land cover, imagery)",
+    "citation": "NFPA 855 (2020) 4.4.3.6 via 527 CMR 1.00 ch. 52",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED. Pavement or gravel already meets it. Lawn needs a gravel or concrete apron (small cost). Trees within 10 ft must come down (larger cost, and the owner may say no). Score only; never excluded."
+  },
+  {
+    "id": "fire.combustible_storage_3ft",
+    "rule": "Don't store combustible materials within 3 ft of the ESS.",
+    "distance_ft": 3,
+    "kind": "exclusion",
+    "layer": "imagery, marked by a person",
+    "citation": "NFPA 855 (2020) 4.1.6 via 527 CMR 1.00 ch. 52",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED. The 10 ft exposure rule for stored combustibles already covers it, so it matters only where an exception reduced that distance."
+  },
+  {
+    "id": "fire.max_stored_energy_600kwh",
+    "rule": "At locations near exposures, lithium-ion ESS may not exceed the maximum stored energy (600 kWh) unless the AHJ approves more, based on a hazard mitigation analysis and large-scale fire testing.",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "configuration (kWh) combined with the remote / near-exposure classification",
+    "citation": "NFPA 855 (2020) 4.8 and Table 4.8 via 527 CMR 1.00 ch. 52; IFC 2021 1207.5.2 and Table 1207.5",
+    "url": "https://www.pembroke-ma.gov/DocumentCenter/View/7662/Palmer-Capital---Pembroke-ESS-Code-Complaince-Report",
+    "notes": "CONFIRMED (Pembroke report: 'stored energy capacity beyond the 600-kWh threshold and therefore requires a Hazard Mitigation Analysis'). The 760 kWh EDGE760 exceeds it, so every near-exposure zone is 'needs HMA + UL 9540A + AHJ approval'. A remote zone avoids that. This is a permitting flag, not a geometric exclusion."
+  },
+  {
+    "id": "fire.group_50kwh_3ft",
+    "rule": "Near exposures, electrochemical ESS form groups of at most 50 kWh, spaced 3 ft apart, unless large-scale fire testing supports larger groups or closer spacing.",
+    "distance_ft": 3,
+    "kind": "preference",
+    "layer": "configuration",
+    "citation": "NFPA 855 (2020) 4.6 via 527 CMR 1.00 ch. 52; IFC 2021 1207.5.1",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED. A single 760 kWh cabinet relies on its UL 9540A unit-level results for this. Spacing between multiple cabinets comes from the product's 9540A report, never assumed."
+  },
+  {
+    "id": "fire.max_cabinet_size",
+    "rule": "Outdoor ESS cabinets may not exceed 53 x 8.5 x 9.5 ft, not counting HVAC and other bolt-on equipment.",
+    "distance_ft": null,
+    "kind": "exclusion",
+    "layer": "configuration (equipment datasheet)",
+    "citation": "NFPA 855 (2020) 4.4.3.2 via 527 CMR 1.00 ch. 52",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED. This is a product check, not a site check. A datasheet aggregator lists the Gotion 760 kWh cabinet at 2400 x 1400 x 2500 mm (about 7.9 x 4.6 x 8.2 ft), within the limit (SECONDARY: https://www.enfsolar.com/pv/storage-system-datasheet/17280)."
+  },
+  {
+    "id": "fire.access_road_150ft",
+    "rule": "A fire apparatus access road must reach within 150 ft of all portions of the facility, measured along an approved route. NFPA 855 requires access roads to outdoor ESS under the local fire code.",
+    "distance_ft": 150,
+    "kind": "exclusion",
+    "layer": "drivable surfaces at least 20 ft wide (roads, driveways, parking aisles from imagery or OSM)",
+    "citation": "NFPA 855 (2020) 4.4.3.8; NFPA 1 (2021) 18.2.3.2.2 as adopted by 527 CMR 1.00",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED (Worthington HMA quotes both). The Massachusetts amendment allowing 250 ft (18.2.3.2.2.1) applies to fully sprinklered buildings, not an ESS (Braintree memo, 2015 base). INFERENCE: use straight-line distance as a screen and route distance for the final check. Rarely binding on a C&I lot."
+  },
+  {
+    "id": "fire.access_road_keep_clear",
+    "rule": "Neither the pad nor its bollards may sit in a fire apparatus access road or narrow it below 20 ft of unobstructed width or 13 ft 6 in of vertical clearance.",
+    "distance_ft": 20,
+    "kind": "exclusion",
+    "layer": "fire lanes, drive aisles, and driveways (imagery or OSM service roads); local fire lane plans when available",
+    "citation": "NFPA 1 (2021) 18.2.3.5.1.1 and 18.2.3.5.1.2 as adopted by 527 CMR 1.00",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED for the 20 ft and 13 ft 6 in values. INFERENCE: treat every drive aisle that the fire department could use as an access road, because the designated fire lane isn't public. Pembroke's report flagged parking-lot aisles under 20 ft."
+  },
+  {
+    "id": "fire.water_supply",
+    "rule": "Provide a permanent water source for fire protection, or get AHJ approval to omit it. Fire hydrants must be accessible.",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "fire hydrants (OSM emergency=fire_hydrant, municipal water GIS where public)",
+    "citation": "NFPA 855 (2020) 4.13 (Worthington numbering), 4.9 (Pembroke numbering); 527 CMR 1.00 18.5",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "CONFIRMED that the requirement exists. The two reports give different section numbers. No fixed distance. Pembroke's hydrant was about 500 ft away, and the fire department decided. Report hydrant distance; don't score it."
+  },
+  {
+    "id": "fire.vehicle_impact",
+    "rule": "An ESS that a vehicle could hit must be protected from impact. Bollards are required where the pad is within 10 ft of a traveled way or parking with no curb.",
+    "distance_ft": 10,
+    "kind": "preference",
+    "layer": "parking lots, drive aisles, curbs (imagery)",
+    "citation": "NFPA 855 (2020) 4.3.7; IFC 2021 1207.4.5 -> IFC 312; Eversource C3802 note 2 (transformers); National Grid ESB 759B sec. 11",
+    "url": "https://www.eversource.com/Content/docs/default-source/ema---pdfs/c3802.pdf?sfvrsn=0",
+    "notes": "CONFIRMED that protection is required (NFPA 855 4.3.7, quoted in the Worthington HMA). The 10 ft trigger is CONFIRMED for utility transformers in Eversource C3802; applying it to a BESS is an INFERENCE. Utility bollard specs: Eversource uses 4 in concrete-filled steel, 42 in above and below grade. National Grid uses 6 in minimum, 5 ft above and 4 ft below grade, 6 ft from the pad front. Score as cost plus added footprint (about 3 ft around exposed sides)."
+  },
+  {
+    "id": "elec.working_space",
+    "rule": "Keep NEC working space in front of every inverter, disconnect, and transformer door on the pad: depth 3 ft (Condition 1), 3.5 ft (Condition 2), or 4 ft (Condition 3) at 151-600 V to ground; width the greater of 30 in or the equipment width; doors opening at least 90 degrees.",
+    "distance_ft": 4,
+    "kind": "exclusion",
+    "layer": "configuration (door sides of the pad layout)",
+    "citation": "NFPA 70 (NEC) 110.26(A)(1)-(3), via 527 CMR 12.00 (NEC 2023 with MA amendments)",
+    "url": "https://iaeimagazine.org/2013/julyaugust-2013/working-space-for-electrical-equipment/",
+    "notes": "SECONDARY (IAEI and study guides; the NFPA text wasn't read). A 480Y/277 V system is 277 V to ground, the 151-600 V row. INFERENCE: use 4 ft on door sides, since the condition depends on what ends up facing the doors. Add this envelope to the 11.5 x 14 ft pad unless the pad already includes it. Check the pad drawing."
+  },
+  {
+    "id": "elec.run_preferred_150ft",
+    "rule": "Prefer a conduit run of 150 ft or less from the point of interconnection (main distribution panel or service entrance) to the pad.",
+    "distance_ft": 150,
+    "kind": "preference",
+    "layer": "inferred main panel / service entrance location; candidate pad centroid",
+    "citation": "Project inference; reference plan set (about 80 ft); voltage-drop computation in elec.voltage_drop",
+    "url": "",
+    "notes": "INFERENCE. Below about 250 ft, cost decides run length, not voltage drop. Cost grows with conductor length, trench length, and pavement cut and patch. 150 ft is about twice the reference project's 80 ft. Score cost linearly with routed length. INFERENCE: routed length = 1.25 x straight-line + 20 ft for risers and terminations. Replace it with a drawn route when an engineer gives one."
+  },
+  {
+    "id": "elec.run_search_cap_250ft",
+    "rule": "Search for pad spots only within 250 ft (straight line) of the point of interconnection. Flag anything farther for an engineer.",
+    "distance_ft": 250,
+    "kind": "exclusion",
+    "layer": "inferred main panel / service entrance location",
+    "citation": "Project inference from NEC Ch. 9 Table 9 resistance values and NEC 215.2(A) informational note",
+    "url": "",
+    "notes": "INFERENCE (computed, not a code limit). At the full 400 A breaker rating, one set of 500 kcmil Cu in PVC (R about 0.027 ohm/kft at unity power factor) drops 1% of 480 V at about 257 ft. Within that radius no conductor upsizing is needed for voltage drop. Past it, an engineer weighs upsizing or a different POI."
+  },
+  {
+    "id": "elec.voltage_drop",
+    "rule": "Feeder voltage drop is recommended at 3% or less (5% total with branch circuits). VD = sqrt(3) x I x Z x L / 1000 (three-phase, line to line).",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "computed from run length and conductor choice",
+    "citation": "NEC 215.2(A) informational note (not mandatory); NEC Chapter 9 Table 9",
+    "url": "",
+    "notes": "The 3%/5% note is well known (NOT RE-READ this session). Table 9 values are recalled, and the 250 kcmil Cu value (0.052) was cross-checked against a Mike Holt sample. Computed: 250 kW at 480 V is 300.7 A. One set of 500 kcmil Cu: 1% at 341 ft, 2% at 683 ft, 3% at 1,024 ft (at 300.7 A); 1% at 257 ft, 3% at 770 ft (at 400 A). Two sets of 250 kcmil Al (0.0425 ohm/kft effective): 1% at 217 ft, 3% at 651 ft (at 300.7 A). The reference project's 80 ft is about 0.23%. Using impedance at 0.85 power factor shortens these by about 35%."
+  },
+  {
+    "id": "elec.poi_120pct",
+    "rule": "A load-side breaker in the main distribution panel is valid only if 125% of the inverter output current plus the main overcurrent device rating is at most 120% of the busbar rating. Otherwise the POI moves to a supply-side connection at the service entrance, which shifts the anchor.",
+    "distance_ft": null,
+    "kind": "exclusion",
+    "layer": "main panel nameplate (busbar and main breaker ratings; site photo, not public)",
+    "citation": "NEC 705.12(B)(3)(2) load-side '120% rule'; NEC 705.11 supply-side connection",
+    "url": "",
+    "notes": "NOT RE-READ this session; from NEC text as commonly applied. Check other 705.12(B) options before moving the POI. For this project, 1.25 x 300.7 A = 376 A, which needs a 400 A breaker. This decides which point anchors the radius. It is not a geometric rule."
+  },
+  {
+    "id": "elec.trench_crossings",
+    "rule": "Penalize each drive aisle, driveway, or paved area the conduit route has to cut and patch, and each obstacle it has to bore under.",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "pavement / impervious surface (MassGIS impervious), drive aisles, sidewalks",
+    "citation": "Project inference",
+    "url": "",
+    "notes": "INFERENCE. The reference project crosses a private driveway, so a crossing is a cost, not an exclusion."
+  },
+  {
+    "id": "util.padmount_front_10ft",
+    "rule": "Keep a 10 ft clear area in front of the utility pad-mount transformer's doors.",
+    "distance_ft": 10,
+    "kind": "exclusion",
+    "layer": "utility transformer location and door orientation (imagery)",
+    "citation": "Eversource (NSTAR) Construction Standard C3802 (2002), Fig. 1; National Grid ESB 759B (July 2010) sec. 10",
+    "url": "https://www.eversource.com/Content/docs/default-source/ema---pdfs/c3802.pdf?sfvrsn=0",
+    "notes": "CONFIRMED in both. National Grid: '10 feet of clear space shall be maintained in front of the equipment doors' for hot-stick work. If the door side is unknown, apply 10 ft on all sides."
+  },
+  {
+    "id": "util.padmount_sides_4ft",
+    "rule": "Keep a 4 ft clear area at the sides and back of the utility pad-mount transformer.",
+    "distance_ft": 4,
+    "kind": "exclusion",
+    "layer": "utility transformer location (imagery)",
+    "citation": "Eversource (NSTAR) Construction Standard C3802 (2002), Fig. 1",
+    "url": "https://www.eversource.com/Content/docs/default-source/ema---pdfs/c3802.pdf?sfvrsn=0",
+    "notes": "CONFIRMED for Eversource EMA (2002, labeled 'recommended minimum'; check for a current edition). The 3 ft side figure the brief suggested is used by other utilities (e.g., a North Carolina university standard), not Eversource MA."
+  },
+  {
+    "id": "util.padmount_objects_10ft",
+    "rule": "Keep the BESS pad at least 10 ft from the utility transformer pad.",
+    "distance_ft": 10,
+    "kind": "exclusion",
+    "layer": "utility transformer location (imagery)",
+    "citation": "National Grid ESB 759B (July 2010) sec. 9A (by analogy)",
+    "url": "https://www.nationalgridus.com/media/pronet/shared_constr_esb759b.pdf",
+    "notes": "CONFIRMED that National Grid keeps 10 ft around the pad clear of buried lines, hydrants, and enclosed generators, and 25 ft from fuel tanks and open-conductor lines. A noncombustible barrier can reduce either to 5 ft. INFERENCE: a BESS isn't listed, so 10 ft is a conservative stand-in. Confirm with the utility."
+  },
+  {
+    "id": "util.overhead_line_10ft",
+    "rule": "Keep the pad at least 10 ft horizontally from overhead power lines up to 50 kV, so a crane or boom truck can set the cabinet without de-energizing the line.",
+    "distance_ft": 10,
+    "kind": "exclusion",
+    "layer": "overhead lines (OSM power=line/minor_line, poles from imagery)",
+    "citation": "29 CFR 1926.1408(a)(2) Option 3 and Table A",
+    "url": "https://www.osha.gov/laws-regs/regulations/standardnumber/1926/1926.1408",
+    "notes": "CONFIRMED: Table A sets 10 ft up to 50 kV and 15 ft over 50 to 200 kV. INFERENCE: Massachusetts distribution lines are under 50 kV, and a horizontal buffer from the line's ground trace is a screen only, since the boom, load, and swing are 3D. NESC Rule 234 clearances from the finished cabinet weren't confirmed (Table 234-1 not read). Leave them to the utility."
+  },
+  {
+    "id": "util.overhead_line_20ft",
+    "rule": "Prefer at least 20 ft from overhead lines. That's the crane clearance when the line voltage hasn't been confirmed.",
+    "distance_ft": 20,
+    "kind": "preference",
+    "layer": "overhead lines",
+    "citation": "29 CFR 1926.1408(a)(2) Option 2",
+    "url": "https://www.osha.gov/laws-regs/regulations/standardnumber/1926/1926.1408",
+    "notes": "CONFIRMED: Option 2 is a flat 20 ft clearance. Penalize the 10 to 20 ft band."
+  },
+  {
+    "id": "env.wetland_resource_area",
+    "rule": "Don't place the pad, apron, or trench in a wetland resource area (bordering vegetated wetland, bank, land under water, and others).",
+    "distance_ft": 0,
+    "kind": "exclusion",
+    "layer": "MassDEP Wetlands (MassGIS); MassDEP hydrography",
+    "citation": "M.G.L. c.131 s.40; 310 CMR 10.02(1)",
+    "url": "https://www.law.cornell.edu/regulations/massachusetts/310-CMR-10-02",
+    "notes": "SECONDARY (10.02 text not read this session). MassDEP's mapped wetlands are approximate. The flagged delineation governs."
+  },
+  {
+    "id": "env.wetland_buffer_100ft",
+    "rule": "Work within 100 ft of a wetland resource area (the Buffer Zone) needs a filing with the local Conservation Commission (a Request for Determination of Applicability or a Notice of Intent).",
+    "distance_ft": 100,
+    "kind": "preference",
+    "layer": "MassDEP Wetlands buffered 100 ft",
+    "citation": "310 CMR 10.02(1)-(2)(b); local wetland bylaws",
+    "url": "https://www.law.cornell.edu/regulations/massachusetts/310-CMR-10-02",
+    "notes": "SECONDARY (town summaries such as Upton and Barnstable; regulation text not read). Many town bylaws add no-disturb or no-build zones inside the 100 ft (often 25-50 ft). Those come from the town, a person route. Heavy penalty plus a permit flag; not an exclusion."
+  },
+  {
+    "id": "env.riverfront_200ft",
+    "rule": "Avoid the Riverfront Area: 200 ft from a perennial river's mean annual high-water line, or 25 ft in Boston, Brockton, Cambridge, Chelsea, Everett, Fall River, Lawrence, Lowell, Malden, New Bedford, Somerville, Springfield, Winthrop, and Worcester. Work there needs a Notice of Intent and an alternatives analysis.",
+    "distance_ft": 200,
+    "kind": "exclusion",
+    "layer": "MassDEP hydrography (perennial streams); municipality",
+    "citation": "310 CMR 10.58(2)(a)3",
+    "url": "https://www.law.cornell.edu/regulations/massachusetts/310-CMR-10-58",
+    "notes": "CONFIRMED (Cornell LII text, amended eff. 10/24/2014), including the 25 ft city list. Worcester, the demo city, is on that list. Excluded for undeveloped land. For previously developed land, see env.riverfront_previously_developed."
+  },
+  {
+    "id": "env.riverfront_previously_developed",
+    "rule": "Within the Riverfront Area, land degraded before August 7, 1996 by pavement or structures may be redeveloped if the work improves existing conditions. Score it as a heavy penalty with a permit flag, not an exclusion.",
+    "distance_ft": 200,
+    "kind": "preference",
+    "layer": "MassDEP hydrography; impervious surface; historic imagery (pre-1996)",
+    "citation": "310 CMR 10.58(5)",
+    "url": "https://www.law.cornell.edu/regulations/massachusetts/310-CMR-10-58",
+    "notes": "CONFIRMED that the provision exists. Whether a paved spot qualifies is a Conservation Commission decision, a person route."
+  },
+  {
+    "id": "env.flood_v_coastal_a",
+    "rule": "Exclude FEMA V/VE zones and Coastal A Zones (landward of the Limit of Moderate Wave Action).",
+    "distance_ft": null,
+    "kind": "exclusion",
+    "layer": "FEMA National Flood Hazard Layer (zones, LiMWA)",
+    "citation": "780 CMR 10th ed. (flood provisions, ASCE 24); SGH topic brief",
+    "url": "https://sgh.com/wp-content/uploads/2024/10/Topic-Brief-Massachusetts-Flood-Regulations.pdf",
+    "notes": "INFERENCE as an exclusion: equipment isn't barred outright, but the 10th edition treats Coastal A Zones like V Zones (BFE + 2 ft or the 500-year elevation, plus added restrictions; SECONDARY via SGH). Hand the site to an engineer."
+  },
+  {
+    "id": "env.flood_a_zone",
+    "rule": "In A, AE, or AO zones, elevate the equipment to at least BFE + 2 ft (Massachusetts 10th edition, flood design classes 1-3). Score as cost plus a flag.",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "FEMA NFHL zone and BFE; lidar DEM for ground elevation",
+    "citation": "780 CMR 10th ed. ch. 16 via ASCE 24 (flood design class); ASCE 24 Table 7-1 (utilities)",
+    "url": "https://sgh.com/wp-content/uploads/2024/10/Topic-Brief-Massachusetts-Flood-Regulations.pdf",
+    "notes": "SECONDARY. SGH's table gives BFE + 2 ft for non-coastal A Zones in the 10th edition, but its column layout is garbled. FEMA's ASCE 24-05 highlights give BFE + 1 ft or the DFE for utilities (https://FEMA.gov/sites/default/files/2020-07/asce24_highlights_dec2010.pdf). Use the higher. The 0.2% (X-shaded) zone gets a small penalty only (INFERENCE)."
+  },
+  {
+    "id": "env.slope_preference",
+    "rule": "Score the slope across the pad and apron footprint from lidar: 2% or less is best, 2-5% needs minor grading, over 5% needs grading or a retaining edge (flag).",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "MassGIS lidar DEM (1 m)",
+    "citation": "Project inference; industry grading guidance (pad 0.5-1% for drainage)",
+    "url": "https://epcland.com/bess-site-selection-criteria/",
+    "notes": "INFERENCE. No code slope limit was found. The 5% threshold is a heuristic. Pad tolerance comes from the foundation design and the manufacturer's manual. Slope = (max - min DEM elevation over the footprint) / footprint diagonal."
+  },
+  {
+    "id": "env.slope_exclusion_10pct",
+    "rule": "Exclude spots where the footprint slope exceeds 10%.",
+    "distance_ft": null,
+    "kind": "exclusion",
+    "layer": "MassGIS lidar DEM",
+    "citation": "Project inference; by analogy to the fire access road grade limit of 10% (NFPA 1 18.2.3.5.6.1 as amended by 527 CMR)",
+    "url": "https://worthington-ma.us/wp-content/uploads/2026/05/2026-5-12-26-0417-MA-Worthington-Ridge-Rd-BESS-HMA-mjd.pdf",
+    "notes": "INFERENCE. The 10% figure is CONFIRMED only for fire access roads. For a pad it's a screening cut, since steeper ground also defeats crane and truck access. An engineer can override it."
+  },
+  {
+    "id": "env.noise_massdep",
+    "rule": "The predicted BESS sound (cabinet HVAC, inverters, transformer) must not raise the broadband level more than 10 dB(A) above ambient (L90 during operating hours) at the property line or the nearest inhabited residence, and must not create a pure tone (an octave band 3 dB or more above both neighbors).",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "parcel land use (residential abutters from assessor use codes); residence footprints; equipment sound data",
+    "citation": "310 CMR 7.10; MassDEP DAQC Policy 90-001 (1990)",
+    "url": "https://nonoise.org/lawlib/states/mass/mass.htm",
+    "notes": "SECONDARY (policy summaries; mass.gov blocked automated fetch). A 2026 MassDEP proposal would move compliance to receptors instead of property lines (Foley Hoag, Mar 2026); adoption unconfirmed. Deterministic test: Lp(r) = Lp(r0) - 20 log10(r/r0), compared with ambient + 10. INFERENCE example: 75 dBA at 1 m and 35 dBA nighttime ambient reach 45 dBA at about 104 ft. Both inputs are assumptions until the datasheet and an ambient survey supply them. NYSERDA's model law (NY, not MA) uses 60 dBA (1-hour average) at the outside wall of a non-participating occupancy."
+  },
+  {
+    "id": "zoning.setbacks",
+    "rule": "Respect the zoning district's setbacks and height limits for accessory or principal structures (whichever the town applies to BESS).",
+    "distance_ft": null,
+    "kind": "exclusion",
+    "layer": "MassGIS zoning districts where available; town by-law dimensional table (person route)",
+    "citation": "Local zoning by-law; NYSERDA BESS Model Law (Tier 2: setbacks of the underlying district for principal structures); DOER draft BESS model bylaw (Oct 2025)",
+    "url": "https://www.broomecountyny.gov/sites/default/files/dept/planning/pdfs/Training/NYSERDA-BESS-Model-Local-Law-April2022.pdf",
+    "notes": "CONFIRMED for the NYSERDA model (Tier 1 is 600 kWh or less; Tier 2 is over 600 kWh, which includes the EDGE760; Tier 2 uses principal-structure setbacks and a 7 ft fence). The DOER draft couldn't be fetched (mass.gov blocked automated access). SECONDARY: a 2025 Land Court decision (Duxbury) reportedly extended M.G.L. c.40A s.3 solar protection to standalone BESS. Leave the distance null until a person enters the town's number."
+  },
+  {
+    "id": "zoning.screening_front_yard",
+    "rule": "Prefer spots screened from public ways and abutters: behind or beside the building rather than between the building and the street.",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "building footprints; public road centerlines (visibility via line-of-sight from the road across the parcel)",
+    "citation": "NYSERDA BESS Model Law Tier 2 'Screening and visibility'; local by-laws",
+    "url": "https://www.broomecountyny.gov/sites/default/files/dept/planning/pdfs/Training/NYSERDA-BESS-Model-Local-Law-April2022.pdf",
+    "notes": "CONFIRMED in the NYSERDA model ('views minimized from adjacent properties'). INFERENCE: a front-yard penalty, measured as whether the pad lies in the half-plane between the building's street-facing wall and the road."
+  },
+  {
+    "id": "site.parking_stalls",
+    "rule": "Penalize each striped parking stall the pad, apron, working space, and bollards would take.",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "parking stalls / parking lot polygons (imagery, OSM amenity=parking)",
+    "citation": "Project inference",
+    "url": "",
+    "notes": "INFERENCE. Lost stalls can break zoning minimum-parking counts and annoy the owner. An 11.5 x 14 ft pad plus envelope takes about 3-4 stalls (a 9 x 18 ft stall is typical, also INFERENCE)."
+  },
+  {
+    "id": "site.drive_aisles_loading",
+    "rule": "Exclude drive aisles, loading docks and their truck aprons, and dumpster enclosures.",
+    "distance_ft": null,
+    "kind": "exclusion",
+    "layer": "imagery and OSM service roads; loading docks marked by a person",
+    "citation": "Project inference; fire.access_road_keep_clear for aisles used as fire access",
+    "url": "",
+    "notes": "INFERENCE beyond the fire-access part."
+  },
+  {
+    "id": "site.existing_pavement",
+    "rule": "Prefer existing pavement or gravel outside parking stalls and aisles (landscaped islands, striped no-parking areas, pavement edges).",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "MassGIS impervious surface; imagery",
+    "citation": "Project inference; supported by fire.vegetation_10ft",
+    "url": "",
+    "notes": "INFERENCE. Pavement already meets the 10 ft vegetation rule, adds no new impervious area for stormwater review, and usually supports equipment delivery. The pad still needs its own foundation."
+  },
+  {
+    "id": "site.underground_utilities",
+    "rule": "Flag candidates near known buried utilities (water, gas, storm, electric). The pad and trench must avoid them, and Dig Safe marks them before excavation.",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "not public at parcel scale (manholes, catch basins, valve covers visible in imagery); Dig Safe at construction",
+    "citation": "National Grid ESB 759B sec. 9A (10 ft from transformer pads, by analogy); Massachusetts Dig Safe law (M.G.L. c.82 s.40)",
+    "url": "https://www.nationalgridus.com/media/pronet/shared_constr_esb759b.pdf",
+    "notes": "INFERENCE as a scoring rule. Public data can't clear this. Mark structures visible in imagery and leave the rest to an engineer and Dig Safe."
+  },
+  {
+    "id": "site.pad_fit",
+    "rule": "The whole envelope must fit inside the feasible area: the 11.5 x 14 ft pad, plus working space on door sides, plus the bollard ring where needed.",
+    "distance_ft": null,
+    "kind": "exclusion",
+    "layer": "computed from all layers above",
+    "citation": "Project algorithm",
+    "url": "",
+    "notes": "INFERENCE. Test rotations aligned with the nearest building wall and parking grid, then 15 degree steps."
+  },
+  {
+    "id": "site.same_side_as_service",
+    "rule": "Prefer spots on the same side of the building as the electrical room or service entrance, so the conduit doesn't wrap the building.",
+    "distance_ft": null,
+    "kind": "preference",
+    "layer": "building footprint; inferred service entrance (utility pole/transformer, meter from imagery or Street View)",
+    "citation": "Project inference; reference plan set (pad beside the building's electrical room)",
+    "url": "",
+    "notes": "INFERENCE. Routed length already captures most of this. Keep it as a tie-breaker."
+  }
+]

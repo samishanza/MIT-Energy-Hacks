@@ -109,7 +109,8 @@ export function Google3DView({
         labelled.add(s.featureId);
         const c = s.ring.slice(0, -1).reduce(([x, y], [lng, lat]) => [x + lng / (s.ring.length - 1), y + lat / (s.ring.length - 1)], [0, 0]);
         const marker = new lib.Marker3DInteractiveElement!({
-          position: { lat: c[1], lng: c[0], altitude: s.top + 3 },
+          // Just above eye height on the object, so the label sits on it rather than in the sky.
+          position: { lat: c[1], lng: c[0], altitude: Math.min(s.top, 5) + 1 },
           altitudeMode: "RELATIVE_TO_GROUND",
           extruded: true,
           label: `${s.tag} · ${s.name}`,
