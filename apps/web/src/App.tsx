@@ -374,7 +374,7 @@ export function App({ api }: { api: EngineerApi }) {
               </button>
             </div>
             {view === "street" && record && !live ? (
-              <StreetViewPanel api={api} record={record} />
+              <StreetViewPanel api={api} record={drawn ?? record} />
             ) : view === "electrical" && record && !live ? (
               <ElectricalSheet record={record} api={api} actorName={actorName} onActorName={updateActor} onRecord={(next) => void afterAction(next)} prefill={demoSpecsFor(record.site.address)} />
             ) : view === "sheet" && record && !live ? (
