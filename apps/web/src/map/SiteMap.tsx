@@ -444,14 +444,19 @@ export function SiteMap(props: SiteMapProps) {
       ) : null}
       <div className="map-legend">
         <button type="button" className="legend-toggle" aria-expanded={legendOpen} onClick={() => setLegendOpen((open) => !open)}>
-          Layers
+          <span className="is-label">Layers</span>
+          <span className="is-caption">
+            {present.filter((layer) => !hidden.has(layer.key)).length} of {present.length}
+          </span>
         </button>
         <ul className="legend-list" aria-label="Map layers" hidden={!legendOpen}>
           {planOverlay ? (
             <li className="legend-plan">
-              <label>
+              <label className="is-toggle">
                 <input type="checkbox" checked={planShown} onChange={() => setPlanShown((shown) => !shown)} />
-                <span className="key key-plan" aria-hidden="true" /> {planOverlay.label}
+                <span className="is-toggle__sw" aria-hidden="true" />
+                <span className="is-toggle__name">{planOverlay.label}</span>
+                <span className="key key-plan" aria-hidden="true" />
               </label>
               {planShown ? (
                 <input type="range" min={0.2} max={1} step={0.05} value={planOpacity} aria-label="Plan set opacity" onChange={(e) => setPlanOpacity(Number(e.target.value))} />
@@ -460,10 +465,14 @@ export function SiteMap(props: SiteMapProps) {
           ) : null}
           {present.map((layer) => (
             <li key={layer.key}>
-              <label>
+              <label className="is-toggle">
                 <input type="checkbox" checked={!hidden.has(layer.key)} onChange={() => toggle(layer.key)} />
-                <span className={`key key-${layer.key}`} aria-hidden="true" /> {layer.label}
-                <span className="legend-count"> {counts.get(layer.key)}</span>
+                <span className="is-toggle__sw" aria-hidden="true" />
+                <span className="is-toggle__name">
+                  {layer.label}
+                  <span className="legend-count"> {counts.get(layer.key)}</span>
+                </span>
+                <span className={`key key-${layer.key}`} aria-hidden="true" />
               </label>
             </li>
           ))}
