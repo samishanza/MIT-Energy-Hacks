@@ -32,3 +32,6 @@ apps/web/public/private/
 
 # Ground truth read off customer plan sets
 private/
+
+# Vercel local project link
+.vercel/
