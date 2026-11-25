@@ -1,12 +1,18 @@
 # EQORE Track: MIT Energy & Climate Hack 2026
 
-A prototype for one bottleneck in commercial battery deployment. We are still in ideation, so there is no app to run yet.
+A prototype for one bottleneck in commercial battery deployment: gathering the site facts a grid interconnection request needs. Given an address, it collects public records (parcels, imagery, terrain, utility data) into a site record that traces every value to its source.
+
+## Credits
+
+Built at MIT Energy & Climate Hack 2026 for the EQORE track by [Maximo Zhang](https://github.com/maximozhang) and [Shanza Sami](https://github.com/samishanza). This is a public copy of the team's repository. Sponsor-provided plan sets and customer site documents have been left out.
+
+The rest of this README is the team's working guide from the hackathon.
 
 ## Join the workflow
 
 This project runs natively on Windows. Run these commands in PowerShell.
 
-1. **Get the repo:** `git clone https://github.com/maximozhang/MIT-Energy-Hacks.git`
+1. **Get the repo:** `git clone https://github.com/samishanza/MIT-Energy-Hacks.git`
 2. **Install the tools:**
 
    ```powershell
